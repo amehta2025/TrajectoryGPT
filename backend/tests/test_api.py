@@ -75,3 +75,36 @@ def test_frames_are_gzipped(client):
 
 def test_bad_stride_rejected(client):
     assert client.get(f"/frames/{DS}", params={"stride": 0}).status_code == 422
+
+
+def test_compare_refused_on_transition(client):
+    r = client.get(f"/compare/{DS}", params={"group_a": "LID", "group_b": "NMP",
+                                             "a_start": 0, "a_stop": 49, "b_start": 49, "b_stop": 98})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "refused" and "biased" in body["reason"]
+
+
+def test_contact_stats_refused_on_transition(client):
+    r = client.get(f"/contact_stats/{DS}", params={
+        "key_a": "adk_transition:4AKE:158:ASP", "key_b": "adk_transition:4AKE:36:ARG"}).json()
+    assert r["status"] == "refused"
+
+
+def test_native_contacts(client):
+    r = client.get(f"/native_contacts/{DS}").json()
+    assert r["ref_frames"] == [0, 97]
+    assert len(r["q"]) == 2 and len(r["q"][0]) == len(r["frames"]) == 98
+    assert r["q"][0][0] == 1.0 and r["q"][1][-1] == 1.0
+
+
+def test_native_contacts_bad_radius_is_400(client):
+    assert client.get(f"/native_contacts/{DS}", params={"radius": 50}).status_code == 400
+
+
+@pytest.mark.slow
+def test_compare_on_equilibrium(client):
+    r = client.get("/compare/adk_equilibrium", params={"group_a": "NMP", "group_b": "CORE",
+                                                       "a_start": 0, "a_stop": 2093, "b_start": 2093, "b_stop": 4187}).json()
+    assert r["status"] == "ok"
+    assert r["n_tested"] == len(r["rows"]) and r["n_supported"] > 0

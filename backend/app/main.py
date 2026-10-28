@@ -8,9 +8,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import PlainTextResponse, Response
 
 from app.config import dataset_config, load_config
+from app.science.contact_stats import StatsRefused, compare_intervals, contact_statistics
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts
 from app.science.distances import distance_over_time
 from app.science.loader import group_selection, load_universe, pbc_mode
+from app.science.native_contacts import native_contacts
 from app.science.structure import frames_float32, playback_stride, structure_pdb, viewer_atoms
 
 app = FastAPI(title="TrajectoryGPT")
@@ -39,6 +41,14 @@ def _call(fn, *args, **kwargs):
             return fn(*args, **kwargs)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+
+
+def _stats_call(fn, *args, **kwargs):
+    """Like _call, but a refusal (stats on a stats_valid: false dataset) is a normal result for the UI."""
+    try:
+        return {"status": "ok", **_call(fn, *args, **kwargs)}
+    except StatsRefused as e:
+        return {"status": "refused", "reason": str(e)}
 
 
 def _round(a: np.ndarray, nd: int = 4) -> list:
@@ -139,3 +149,46 @@ def frames(dataset: str, start: int = 0, stop: int | None = None, stride: int = 
         media_type="application/octet-stream",
         headers={"X-Frames": ",".join(map(str, idx.tolist())), "X-N-Atoms": str(coords.shape[1])},
     )
+
+
+@app.get("/compare/{dataset}")
+def compare(
+    dataset: str,
+    group_a: str,
+    group_b: str,
+    a_start: int,
+    a_stop: int,
+    b_start: int,
+    b_stop: int,
+    cutoff: float = 4.5,
+    stride: int = 1,
+    sequence_exclusion: int | None = None,
+):
+    _check_dataset(dataset)
+    return _stats_call(compare_intervals, dataset, group_a, group_b, (a_start, a_stop), (b_start, b_stop),
+                       cutoff, stride, sequence_exclusion)
+
+
+@app.get("/contact_stats/{dataset}")
+def contact_stats(dataset: str, key_a: str, key_b: str, cutoff: float = 4.5,
+                  start: int = 0, stop: int | None = None, stride: int = 1):
+    _check_dataset(dataset)
+    r = _stats_call(contact_statistics, dataset, key_a, key_b, cutoff, start, stop, stride)
+    if r["status"] == "ok":
+        r["frames"] = r["frames"].tolist()
+        r["in_contact"] = r["in_contact"].astype(int).tolist()
+    return r
+
+
+@app.get("/native_contacts/{dataset}")
+def native_contacts_endpoint(dataset: str, selection: str = "name CA", radius: float = 8.0,
+                             ref_frames: list[int] = Query([0, -1]),
+                             start: int = 0, stop: int | None = None, stride: int = 1):
+    _check_dataset(dataset)
+    r = _call(native_contacts, dataset, selection, radius, tuple(ref_frames), start, stop, stride)
+    return {
+        **{k: r[k] for k in ("dataset", "selection", "radius", "ref_frames", "n_native", "method", "pbc", "units")},
+        "frames": r["frames"].tolist(),
+        "time_ns": None if r["time_ns"] is None else _round(r["time_ns"]),
+        "q": _round(r["q"].T, 6),  # one list per reference frame
+    }
