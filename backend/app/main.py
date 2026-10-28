@@ -16,13 +16,16 @@ from app.science.loader import group_selection, load_universe, pbc_mode
 from app.science.native_contacts import native_contacts
 from app.science.structure import frames_float32, playback_stride, structure_pdb, viewer_atoms
 
+# Deployed: only the frontend domain(s) in ALLOWED_ORIGINS (comma-separated). Unset: local dev server.
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()] or [
+    "http://localhost:5173", "http://127.0.0.1:5173",
+]
+
 app = FastAPI(title="TrajectoryGPT")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
-    # Local dev plus the deployed frontend (ALLOWED_ORIGINS, comma-separated; set at deploy time).
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"]
-    + [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET"],
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
