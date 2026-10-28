@@ -110,6 +110,7 @@ On `adk_equilibrium`, compute and print contact-frequency summaries for **LID–
 | LLM: agent | Meta Model API, `muse-spark-1.3`, **Responses API** (OpenAI Python SDK) |
 | LLM: verifier | Meta Model API, `muse-wonder-1.0` |
 | LLM: open-weight mode | Baseten, `meta-models/muse-spark-open-1026`, Chat Completions |
+| Speech to text (stretch, §9d) | Meta Model API, `muse-voice-transcribe-1.0`, file endpoint `POST /v1/asr/transcribe` |
 | Reproducibility check | Modal Sandbox |
 | Storage | JSON files + `.npy` caches on a Modal Volume when deployed |
 
@@ -120,8 +121,9 @@ On `adk_equilibrium`, compute and print contact-frequency summaries for **LID–
 **Env vars** (`.env` locally, Modal Secrets when deployed, never in frontend code):
 - `META_API_KEY`
 - `META_API_BASE_URL=https://api.meta.ai/v1`
-- `META_MODEL`: `muse-spark-1.3-contributor` for development, `muse-spark-1.3` for the demo
+- `META_MODEL`: `muse-spark-1.3-contributor` for development, `muse-spark-1.3` for the demo and every deploy (§6b)
 - `META_VERIFIER_MODEL=muse-wonder-1.0`
+- `META_ASR_MODEL=muse-voice-transcribe-1.0` (stretch, §9d)
 - `META_REASONING_EFFORT`: per call type, see §9c
 - `BASETEN_API_KEY`
 - `BASETEN_BASE_URL=https://inference.baseten.co/v1`
@@ -145,11 +147,16 @@ Meta's docs live at dev.meta.ai/docs. The developer saves the needed pages as te
 
 ### 6b. LLM wrapper (`app/agent/llm.py`)
 - There is one interface: `run_turn(input_items, tools, *, schema=None, effort) -> TurnResult` (tool_calls | final_text | parsed), plus usage.
-- **Meta path:** `client.responses.create(...)` with `include=["reasoning.encrypted_content"]`. Append the model's output items, including reasoning, to the next turn's input so reasoning carries across the tool loop.
-- **Baseten path:** Chat Completions with function tools, behind the same interface. Smoke-test tool calling and image input on Day 4 morning. If tool calling is unreliable there, open-weight mode supports only the explain/verify steps, and the UI says so.
+- **Meta path:** `client.responses.create(...)` with `include=["reasoning.encrypted_content"]` and `store=False` on every call. Append the model's output items, including reasoning, to the next turn's input unchanged (keep `phase` on assistant messages) so reasoning carries across the tool loop. `store=False` is the documented setting for stateless replay and avoids 413 errors when a request inlines a figure.
+- **Baseten path:** Chat Completions with function tools, behind the same interface. Model ID `meta-models/muse-spark-open-1026` per the hackathon participant guide (Meta's docs say `meta-models/muse-spark-open`). Smoke-test tool calling and image input on Day 4 morning; if `-1026` fails, try `meta-models/muse-spark-open` and report which one worked. If tool calling is unreliable there, open-weight mode supports only the explain/verify steps, and the UI says so.
 - Pass `api_key` explicitly.
-- Timeouts: 120 s per call. Retry 429 and 5xx with exponential backoff and jitter, honoring `Retry-After`, max 3 tries.
-- Record usage per call: tokens, model, latency, and estimated $.
+- **Reasoning effort is always set explicitly** on every call (§9c). Muse Spark and Muse Wonder reject `none`; Baseten defaults to `xhigh`, which is slow if left unset.
+- **Models by environment:** development may use `muse-spark-1.3-contributor`. Production and every deploy use `muse-spark-1.3` (Standard mode), because users upload figures and Contributor mode lets Meta train on inputs.
+- **Verifier:** one Muse Wonder call per report. Muse Wonder has no Contributor mode, so its cost is logged separately.
+- Timeouts: 120 s per call.
+- **Retries are done by our code only;** SDK auto-retries are disabled (`max_retries=0`). Retry 429, 500, and 503 with exponential backoff and jitter, honoring `Retry-After`, max 3 tries. Never retry 504 (stream the call or lower the reasoning effort instead) or 400–413 (the request must be fixed).
+- Record usage per call: input, cached, output, and reasoning tokens, model, latency, and estimated $.
+- **Model prices live in one config table** (per 1M tokens, Standard and Contributor), used for every $ estimate, the CostMeter, and `DAILY_LLM_BUDGET_USD`.
 
 ## 7. Tools
 
@@ -284,8 +291,14 @@ run_investigation(session, question, approved_plan):
 - Log $ per run. Print the cost of the last run in the CLI.
 
 ### 9d. Stretch (only if ahead, in order)
-1. SAM 3.1 to crop the relevant panel from a multi-panel figure.
-2. Search grounding (`web_search`) for literature-backed hypotheses, shown separately from computed results.
+1. **Push-to-talk voice input.**
+   - Hold **M** (only when focus is not in a text input) or hold the mic button to record; release to stop. Never always-listening.
+   - A visible recording indicator shows while held; hint text "Hold M to ask by voice" sits near the viewer.
+   - The browser sends the audio to our backend. The backend calls Muse Voice Transcribe's file endpoint (`POST /v1/asr/transcribe`) and returns the text into the chat box, where the user reviews it before sending. The API key stays server-side.
+   - The endpoint accepts only mono 16-bit PCM WAV at 16 or 24 kHz, so the browser captures PCM and encodes WAV itself (no new package).
+   - M is free: NGL's default keys are a, i, k, p, r, and Plotly binds no global shortcuts (checked 2026-10-28).
+2. SAM 3.1 to crop the relevant panel from a multi-panel figure.
+3. Search grounding (`web_search`) for literature-backed hypotheses, shown separately from computed results.
 
 ## 10. UI
 

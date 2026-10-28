@@ -30,7 +30,12 @@ Project: **TrajectoryGPT**, an MD research copilot for the Meta Global AI Develo
 - Base URL `https://api.meta.ai/v1`. Agent model `muse-spark-1.3` (dev: `muse-spark-1.3-contributor`). Verifier `muse-wonder-1.0`.
 - Use the OpenAI Python SDK's **Responses API** (`client.responses.create`) with `include=["reasoning.encrypted_content"]`, and pass the output items back in the next turn's input. Read text via `response.output_text`.
 - Images and PDFs are accepted natively. Always pass `api_key` explicitly.
-- Baseten: `https://inference.baseten.co/v1`, model `meta-models/muse-spark-open-1026`, Chat Completions.
+- `store=False` on every Meta call. Always set reasoning effort explicitly (never `none`; Baseten defaults to `xhigh`).
+- Production and every deploy use `muse-spark-1.3` (Standard): users upload figures, and Contributor mode trains on inputs. `-contributor` is dev only.
+- Retries are ours only (SDK `max_retries=0`): retry 429/500/503 honoring `Retry-After`, max 3 tries. Never retry 504 (stream or lower effort instead) or 400–413.
+- Verifier = one Muse Wonder call per report, cost logged separately. Model prices live in one config table.
+- Baseten: `https://inference.baseten.co/v1`, model `meta-models/muse-spark-open-1026` (hackathon guide; keep it), Chat Completions. If `-1026` fails in the smoke test, try `meta-models/muse-spark-open` and tell me.
+- Speech to text (stretch): `muse-voice-transcribe-1.0`, `POST /v1/asr/transcribe`, mono 16-bit PCM WAV at 16 or 24 kHz.
 
 ## Commands (run from the repo root unless noted)
 - Activate venv: PowerShell `.venv\Scripts\Activate.ps1` · Git Bash `source .venv/Scripts/activate`
