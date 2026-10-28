@@ -48,6 +48,7 @@ An AI research copilot for protein simulations. It turns a researcher's question
   - cutoff,
   - frame window and stride,
   - contact definition,
+  - sequence exclusion (pairs with |Δresid| ≤ N are skipped; default `sequence_exclusion: 2` in `config/dataset.yaml`),
   - dataset.
 
   The backend enforces this; it is not left to the prompt.
@@ -95,6 +96,7 @@ The dataset is a parameter on every tool, and the UI shows which dataset is acti
 On `adk_equilibrium`, compute and print contact-frequency summaries for **LID–NMP, LID–CORE, and NMP–CORE** at 4.5 Å. Flag which pairs ever form contacts and how variable they are.
 - If LID–NMP contacts are nearly absent, which is plausible for apo AdK, the demo uses the group pair with the richest behavior.
 - **Do not hard-code any domain pair as "the" story.** Write the findings to `notes/recon.md`. This is the one allowed extra .md file.
+- **Result (Day 1, see `notes/recon.md`):** LID–NMP contacts are nearly absent on `adk_equilibrium` (the top pair is in contact in 1.1% of frames; no pair is variable). The demo story centers on **NMP–CORE** (38 variable pairs), then **LID–CORE** (15). LID–NMP is used only as the closed-vs-open contrast with `adk_transition`. Group names stay parameters in code.
 
 ## 6. Stack and environment
 
@@ -188,7 +190,7 @@ Every tool:
 - **Precompute** `min_dist[frame, resA, resB]` per `(dataset, groupA, groupB, selection)`.
   - Cache it to `cache/<hash>.npy` (gitignored), keyed by a hash of the inputs plus the library versions.
   - Show a progress message the first time. On `adk_equilibrium`, the LID–NMP run is about 4,187 frames × roughly 300 × 230 atoms, which is fine but takes time; measure it and record it in `notes/recon.md`.
-- **PBC:** if a box exists, use minimum-image distances; otherwise record `pbc: "none"`.
+- **PBC:** set per dataset in `config/dataset.yaml` (`pbc: none | minimum-image`), with the reason recorded there. Code never infers it from whether the file has a box. `adk_equilibrium` has a box, but its frames were fit (rotated) to CORE, so minimum-image distances are wrong; the protein is whole, so it uses `pbc: none` (details in `notes/recon.md`). If `minimum-image` is set and a frame has no box, it is an error.
 - **Residue key:** `dataset:segid:resid:resname`. One function builds it and one parses it. The UI-to-NGL mapping uses `resid` (single chain), via one tested function (§10a).
 - **Tests use `adk_transition`** so they run in seconds. One slow test, marked `@pytest.mark.slow`, checks the equilibrium precompute against a direct calculation on a few frames.
 
@@ -396,7 +398,7 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 
 ## 15. Demo video (3 minutes; rough cut Mon Nov 2, final Tue Nov 3)
 
-The demo questions are chosen **after** Day 3 from what the recon actually shows. The skeleton:
+The demo questions are finalized **after** Day 3. Per the recon (§5d), the live investigation (beats 2–3) centers on **NMP–CORE**, with **LID–CORE** as the backup. The skeleton:
 
 1. **0:00–0:25.** Drop in the published figure. The extracted spec appears, our figure appears next to theirs, and the numbers match.
 2. **0:25–1:05.** Ask a real question on the equilibrium data. The plan appears; edit the cutoff and approve. The step log runs, and the chart shows supported pairs vs greyed noise, with the "N tested, FDR 5%" note.

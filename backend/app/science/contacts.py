@@ -15,13 +15,14 @@ import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.lib.distances import distance_array
 
-from app.config import CACHE_DIR, dataset_config
+from app.config import CACHE_DIR, dataset_config, load_config
 from app.science.loader import HEAVY, box_for, dataset_files, group_heavy_atoms, load_universe, pbc_mode
-from app.science.residues import residue_keys
+from app.science.residues import parse_residue_key, residue_keys
 
 log = logging.getLogger(__name__)
 
 CUTOFF_MIN, CUTOFF_MAX = 2.0, 10.0
+SEQ_EXCLUSION_MAX = 10
 CACHE_VERSION = 1  # bump when the precompute algorithm changes
 CONTACT_DEFINITION = "min heavy-atom distance <= cutoff (Å)"
 
@@ -130,6 +131,21 @@ def validate_cutoff(cutoff: float) -> float:
     return float(cutoff)
 
 
+def validate_sequence_exclusion(n: int | None) -> int:
+    """|Δresid| at or below which pairs are excluded; None means the dataset.yaml default."""
+    n = load_config()["sequence_exclusion"] if n is None else n
+    if isinstance(n, bool) or not isinstance(n, int) or not (0 <= n <= SEQ_EXCLUSION_MAX):
+        raise ValueError(f"sequence_exclusion must be an integer 0..{SEQ_EXCLUSION_MAX}, got {n!r}")
+    return n
+
+
+def sequence_local_mask(keys_a: list[str], keys_b: list[str], n: int) -> np.ndarray:
+    """True where |resid_a - resid_b| <= n (0 excludes nothing between disjoint groups)."""
+    ra = np.array([parse_residue_key(k).resid for k in keys_a])
+    rb = np.array([parse_residue_key(k).resid for k in keys_b])
+    return np.abs(ra[:, None] - rb[None, :]) <= n
+
+
 def calculate_contacts(
     dataset: str,
     group_a: str,
@@ -138,12 +154,17 @@ def calculate_contacts(
     start: int = 0,
     stop: int | None = None,
     stride: int = 1,
+    sequence_exclusion: int | None = None,
     *,
     cache_dir: Path = CACHE_DIR,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
-    """Contact frequency matrix freq[i, j] = fraction of window frames with min_dist <= cutoff."""
+    """Contact frequency matrix freq[i, j] = fraction of window frames with min_dist <= cutoff.
+
+    `excluded[i, j]` marks sequence-local pairs; downstream counts and stats must skip them.
+    """
     cutoff = validate_cutoff(cutoff)
+    sequence_exclusion = validate_sequence_exclusion(sequence_exclusion)
     md = precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress)
     frames = validate_window(md.min_dist.shape[0], start, stop, stride)
     window = md.min_dist[frames.start:frames.stop:frames.step]
@@ -156,6 +177,8 @@ def calculate_contacts(
         "keys_a": md.keys_a,
         "keys_b": md.keys_b,
         "frequency": freq,
+        "excluded": sequence_local_mask(md.keys_a, md.keys_b, sequence_exclusion),
+        "sequence_exclusion": sequence_exclusion,
         "frames": np.asarray(frames),
         "n_frames": len(frames),
         "cutoff": cutoff,

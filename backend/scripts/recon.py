@@ -14,8 +14,6 @@ from app.science.loader import load_universe, pbc_mode
 from app.science.residues import parse_residue_key
 
 PAIRS = [("LID", "NMP"), ("LID", "CORE"), ("NMP", "CORE")]
-# Residues i, i+1, i+2 across a domain boundary are close by chain geometry, not by any interaction.
-LOCAL_SEQ = 2
 
 
 def summarize(dataset: str, a: str, b: str, cutoff: float, top: int) -> None:
@@ -26,10 +24,7 @@ def summarize(dataset: str, a: str, b: str, cutoff: float, top: int) -> None:
     freq = res["frequency"]
     series = md.min_dist <= cutoff  # [frame, i, j]
     transitions = np.abs(np.diff(series.astype(np.int8), axis=0)).sum(axis=0)
-
-    resid_a = np.array([parse_residue_key(k).resid for k in md.keys_a])
-    resid_b = np.array([parse_residue_key(k).resid for k in md.keys_b])
-    local = np.abs(resid_a[:, None] - resid_b[None, :]) <= LOCAL_SEQ
+    local = res["excluded"]  # sequence-local pairs, |Δresid| <= sequence_exclusion
 
     ever = (freq > 0) & ~local
     variable = (freq >= 0.05) & (freq <= 0.95) & ~local
@@ -37,7 +32,7 @@ def summarize(dataset: str, a: str, b: str, cutoff: float, top: int) -> None:
     print(f"- precompute: {md.min_dist.shape} in {elapsed:.1f} s "
           f"({'computed' if md.computed else 'loaded from cache'})")
     print(f"- pairs: {freq.size} total; {int(local.sum())} sequence-local "
-          f"(|Δresid| <= {LOCAL_SEQ}, excluded below)")
+          f"(|Δresid| <= {res['sequence_exclusion']}, excluded below)")
     print(f"- ever in contact: {int(ever.sum())}; variable (5-95%): {int(variable.sum())}; "
           f">=50%: {int(((freq >= 0.5) & ~local).sum())}")
     print(f"- median transitions per ever-contacting pair: "

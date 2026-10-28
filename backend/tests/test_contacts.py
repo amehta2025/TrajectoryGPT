@@ -75,7 +75,19 @@ def test_window_and_stride(mindist):
     assert res["units"]["time"] == "path step" and res["units"]["dt_ns"] is None
 
 
-@pytest.mark.parametrize("kwargs", [{"cutoff": 1.0}, {"cutoff": 12.0}, {"start": 50, "stop": 10}, {"stop": 999}, {"stride": 0}])
+def test_sequence_exclusion_default_and_override(mindist):
+    cache = mindist.cache_path.parent
+    res = calculate_contacts(DS, "NMP", "CORE", cache_dir=cache)
+    assert res["sequence_exclusion"] == 2  # dataset.yaml default
+    ra = [int(k.split(":")[2]) for k in res["keys_a"]]
+    rb = [int(k.split(":")[2]) for k in res["keys_b"]]
+    i, j = ra.index(30), rb.index(28)
+    assert res["excluded"][i, j] and not res["excluded"][i, rb.index(27)]
+    assert res["excluded"].sum() == 6  # 28-30, 29-30, 29-31, 59-60, 59-61, 58-60
+    assert not calculate_contacts(DS, "NMP", "CORE", sequence_exclusion=0, cache_dir=cache)["excluded"].any()
+
+
+@pytest.mark.parametrize("kwargs", [{"sequence_exclusion": -1}, {"sequence_exclusion": 11}, {"sequence_exclusion": 1.5}, {"cutoff": 1.0}, {"cutoff": 12.0}, {"start": 50, "stop": 10}, {"stop": 999}, {"stride": 0}])
 def test_rejects_bad_params(mindist, kwargs):
     with pytest.raises(ValueError):
         calculate_contacts(DS, "LID", "NMP", cache_dir=mindist.cache_path.parent, **kwargs)

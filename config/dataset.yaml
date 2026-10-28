@@ -12,6 +12,12 @@ domains_source: &domains_source
   url: https://pmc.ncbi.nlm.nih.gov/articles/PMC2803350/
   checked_on: 2026-10-27
 
+# Default for a consequential parameter (SPEC §4); the plan can change it.
+# Residue pairs with |resid_a - resid_b| <= this value are excluded from contact
+# counts and statistics: residues i, i+1, i+2 across a domain boundary are close
+# because of chain geometry, not because of an interaction (see notes/recon.md).
+sequence_exclusion: 2
+
 # Residue ranges are inclusive [start, end], E. coli AdK numbering.
 domains: &domains
   NMP: [[30, 59]]
