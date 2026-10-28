@@ -1,0 +1,53 @@
+# Datasets preloaded server-side. See SPEC.md §5.
+
+domains_source: &domains_source
+  status: verified
+  citation: >-
+    Beckstein O, Denning EJ, Perilla JR, Woolf TB (2009). Zipping and unzipping
+    of adenylate kinase: atomistic insights into the ensemble of open<->closed
+    transitions. J Mol Biol 394:160-176. doi:10.1016/j.jmb.2009.09.009
+  where: >-
+    Figure 1 legend and Introduction: CORE "AKeco residues 1-29, 60-121, 160-214",
+    NMP "30-59", LID "residues 122-159" (E. coli numbering).
+  url: https://pmc.ncbi.nlm.nih.gov/articles/PMC2803350/
+  checked_on: 2026-10-27
+
+# Residue ranges are inclusive [start, end], E. coli AdK numbering.
+domains: &domains
+  NMP: [[30, 59]]
+  LID: [[122, 159]]
+  CORE: [[1, 29], [60, 121], [160, 214]]
+
+datasets:
+  adk_equilibrium:
+    description: >-
+      1.004 us unbiased equilibrium MD of apo AdK (Anton, CHARMM27, solvent
+      stripped, fit to CORE).
+    loader: mdanalysisdata_adk_equilibrium
+    license: CC-BY 4.0
+    citation: >-
+      Seyler S, Beckstein O (2017). Molecular dynamics trajectory for
+      benchmarking MDAnalysis. figshare. doi:10.6084/m9.figshare.5108170.v1
+    stats_valid: true
+    dt_ns: 0.24
+    time_label: ns
+    domains: *domains
+    domains_source: *domains_source
+
+  adk_transition:
+    description: >-
+      98-frame closed->open transition path of AdK generated with DIMS
+      (biased path sampling). Frames are path steps, not equal time steps.
+    loader: mdanalysistests_psf_dcd
+    license: GPL-2.0 (distributed with MDAnalysisTests)
+    citation: >-
+      Beckstein O, Denning EJ, Perilla JR, Woolf TB (2009). J Mol Biol
+      394:160-176. doi:10.1016/j.jmb.2009.09.009
+    stats_valid: false
+    stats_refusal: >-
+      This is a biased, non-stationary transition path (DIMS), so time-series
+      statistics such as autocorrelation and confidence intervals are not meaningful.
+    dt_ns: null
+    time_label: path step
+    domains: *domains
+    domains_source: *domains_source

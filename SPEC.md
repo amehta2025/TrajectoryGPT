@@ -351,7 +351,7 @@ One shared selection store drives the plots and the viewer. The UI never calls a
 ```
 /backend
   app/main.py  app/config.py
-  app/science/   loader.py contacts.py distances.py stats.py native_contacts.py structure.py
+  app/science/   loader.py residues.py contacts.py distances.py stats.py native_contacts.py structure.py
   app/agent/     llm.py tools.py orchestrator.py prompts.py verifier.py cli.py session.py
   app/provenance/ record.py export.py templates/
   app/safety/    ratelimit.py budget.py replay.py
