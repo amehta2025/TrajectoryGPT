@@ -1,4 +1,5 @@
 """FastAPI app: thin HTTP wrappers around the science functions. No science here."""
+import os
 import threading
 
 import numpy as np
@@ -19,7 +20,9 @@ app = FastAPI(title="TrajectoryGPT")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    # Local dev plus the deployed frontend (ALLOWED_ORIGINS, comma-separated; set at deploy time).
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"]
+    + [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_methods=["GET"],
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
