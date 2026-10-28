@@ -185,8 +185,8 @@ Every tool:
 | Tool | Purpose |
 |---|---|
 | `update_checklist` | `item, status, note`; drives the live step log |
-| `record_finding` | `text_with_placeholders, evidence_ids[]`; rejected unless every placeholder resolves to a stored result and every evidence id exists |
-| `submit_report` | `finding_ids[], caveats[], follow_ups[]`; ends the run |
+| `record_finding` | `text_with_placeholders, evidence_ids[]`; runs its deterministic checks immediately (every evidence id exists, every placeholder resolves) and refuses a bad finding with the reason |
+| `submit_report` | `finding_ids[], caveats[], gaps[], follow_ups[]`; runs the full deterministic check (§9 step 7) before accepting. A failed check returns the specific problems as the tool result so the model can fix and resubmit. Ends the run only when accepted |
 
 **UI-only:** `highlight(residues[], frames[])`.
 
@@ -247,17 +247,22 @@ Every tool:
    - Statistical support (N_eff, CI, q-value, supported or not)
    - Possible explanations (hedged, marked as hypotheses)
    - Caveats (always including single-trajectory and limited-sampling caveats)
+   - Gaps: what the agent could not establish
    - Follow-ups, each a runnable plan step
 
    Placeholders are filled by code.
-7. **Verify:**
-   - **Deterministic check (always runs):**
+7. **Verify.** Verification gates submission (pattern from Meta's Agents 102 workshop). Only deterministic checks run inside the loop; they are fast.
+   - **Deterministic check:**
+     - every evidence id exists;
      - every placeholder resolves;
      - no bare numerals remain except residue numbers and approved params;
      - every "supported/significant/changed" claim cites a result where supported = true;
      - findings citing refused or errored results are flagged.
-   - **Model check (Muse Wonder):** receives the report text, the findings with their resolved values, and one matplotlib PNG per figure. It flags claims that the data or plot doesn't support.
-   - The UI shows ✅ or ⚠️ with the flags. The demo includes one intentionally overclaiming report, triggered by a dev-only toggle, to show the verifier catching it.
+   - **Inside the loop:** `record_finding` runs the first two checks on each finding and refuses a bad one with the reason. `submit_report` runs the full check before accepting; if it fails, the tool result lists the specific problems so the model can fix them and resubmit.
+   - **Refusal limit:** `MAX_REFUSALS = 2` refused `submit_report` calls. After the second refusal, or if the loop reaches `MAX_TURNS` without an accepted report, the run stops with status `needs_review` and the UI lists the unresolved problems.
+   - **Model check (Muse Wonder), once, after acceptance, in the background:** it receives the report text, the findings with their resolved values, and one matplotlib PNG per figure, and flags claims that the data or plot doesn't support. The report shows immediately with a "Verifying…" badge that becomes ✅ verified or ⚠️ flagged (with the flags). The loop never waits on an LLM check.
+   - **Report statuses:** `needs_review` | `awaiting_verification` → `verified` / `flagged`. The user gives the final sign-off.
+   - The demo includes one intentionally overclaiming report, triggered by a dev-only toggle, to show the verifier catching it.
 8. **Follow-ups:** the conversation state (last run, selected pair, approved params) is stored per session server-side. "Does that persist?" resolves to the selected or top supported pair and produces a new plan for approval.
 
 ### 9b. Turn loop (`app/agent/orchestrator.py`)
@@ -270,14 +275,21 @@ run_investigation(session, question, approved_plan):
         resp = llm.run_turn(input, TOOLS, effort=EFFORT["loop"])
         input += resp.output_items        # includes encrypted reasoning
         if no tool call: input += "Call exactly one tool."; continue
-        result = tools.run(call, approved_plan)    # guardrails enforced here
-        input += tool_result(result.summary_for_model)
-        save_progress(run, turn, call, result)     # → step log (SSE)
-        if result.status == "submitted": break
+        result = tools.run(call, approved_plan)    # guardrails + deterministic checks here
+        input += tool_result(result.summary_for_model)   # a refusal lists the problems
+        save_progress(run, turn, call, result)     # → step log (SSE) + timeline
+        if result.status == "submitted": break     # accepted report
+        if call is submit_report and refused: refusals += 1
+        if refusals == MAX_REFUSALS (2): run.status = "needs_review"; break
         if turn == MAX_TURNS - 1: input += "Last turn: call submit_report now."
+        if run.step_through: wait_for_next()       # UI "Next" button
+    if no accepted report: run.status = "needs_review"
+    else: run.status = "awaiting_verification"; start_verifier_in_background(run)
     return run
 ```
 - `resume_run(run_id)` continues from saved progress.
+- Every turn's input (what the model saw) and output (what it called) is saved, for the UI timeline.
+- **Step-through mode:** when the user turns it on, the loop pauses after each turn until the user clicks Next.
 - CLI quick check: `python -m app.agent.cli run --turns 3 "<question>"` prints one line per turn.
 
 ### 9c. Latency and cost budget (measure on Day 4; adjust)
@@ -285,6 +297,7 @@ run_investigation(session, question, approved_plan):
   - `low` for the loop turns
   - `medium` for planning and figure extraction
   - `high` only for the verifier
+- **Deterministic checks are always on; LLM checks run once, async, and never inside the loop.**
 - **Target: a full investigation completes in under 90 s.**
 - Stream the step log so the user always sees progress.
 - If it's too slow, reduce turns, lower effort, and send smaller summaries.
@@ -304,14 +317,18 @@ run_investigation(session, question, approved_plan):
 
 Components:
 - **Chat**
-- **PlanCard**
+- **PlanCard:** the plan checklist shows progress ("3/4 done")
 - **StepLog**
+- **Timeline:** click any turn to see what the model saw and what it called. A **"Step through turns"** toggle pauses the loop after each turn until the user clicks Next (§9b).
 - **Heatmap:** clicking a cell highlights the residues and suggests a follow-up
 - **DistancePlot:** with a cutoff line; clicking a point jumps to that frame
 - **CompareChart:** CI bars; unsupported pairs greyed; shows the "N tested, FDR 5%" note
 - **ReportView:** placeholders rendered with values; hovering a value shows its provenance
+  - Each finding shows a "proven" / "unsupported" badge and an expandable "N citations" list. Clicking a citation highlights it in the chart or 3D view and shows its provenance.
+  - A "Gaps" section lists what the agent could not establish.
+  - A `needs_review` run lists its unresolved problems instead of a finished report.
 - **ReproduceView:** their figure on the left, ours on the right, the spec table, and the match result (exact mode) or the "method applied" label (transfer mode)
-- **VerifierBadge**
+- **VerifierBadge:** "Verifying…" while the background check runs, then ✅ verified or ⚠️ flagged
 - **DatasetBadge**
 - **ModelToggle**
 - **CostMeter:** small, showing $ per run
@@ -321,7 +338,7 @@ One shared selection store drives the plots and the viewer. The UI never calls a
 ### 10a. 3D viewer data path (decided now so Day 2 doesn't stall)
 - The backend serves a **reference structure** as PDB: `GET /structure/{dataset}`.
 - **Coordinates:** `GET /frames/{dataset}?start&stop&stride` returns a compact binary Float32 array of protein heavy atoms (or all 3,341 atoms) for up to about 300 frames. The frontend adds these as an NGL trajectory/frames for playback.
-  - For the equilibrium set, default to stride 14 (about 300 frames); jump-to-frame requests the exact frame.
+  - Playback targets about 150 frames (stride 28 on the equilibrium set; set on Day 2 to keep the payload near 3 MB, which gzip barely shrinks). Jump-to-frame always fetches the exact frame, even if it isn't in the playback set. Responses are gzipped.
 - **Atom order:** the PDB and the coordinate arrays are written by the **same** MDAnalysis AtomGroup, so atom order matches. This has a test.
 - **Selection mapping:** `residueKeyToNglSelection(key)` returns `"<resid> and .CA"` (or the sidechain for licorice), from one function with a test fixture. Verify visually for 5 residues on Day 2.
 
