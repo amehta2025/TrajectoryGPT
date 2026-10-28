@@ -131,3 +131,40 @@ def test_too_few_events_never_supported():
 def test_z_test_p():
     assert stats.z_test_p(0.0, 0.0) == 1.0
     assert stats.z_test_p(1.96, 1.0) == pytest.approx(0.05, abs=1e-3)
+
+
+def slow_drift_distance(n: int, rng: np.random.Generator, cutoff: float = 4.5) -> np.ndarray:
+    """Min distance drifting slowly (AR(1), tau ~ 50 frames) around the cutoff, plus fast thermal noise."""
+    return cutoff + 0.4 * ar1(n, 0.98, rng) + 0.6 * rng.standard_normal(n)
+
+
+def test_slow_drift_distance_widens_block_ci():
+    """The indicator flickers fast while the distance drifts slowly: indicator-tau alone is too short."""
+    d = slow_drift_distance(8000, np.random.default_rng(10))
+    x = (d <= 4.5).astype(float)
+    ind = stats.describe_series(x, np.random.default_rng(stats.SEED))
+    both = stats.describe_series(x, np.random.default_rng(stats.SEED), distance=d)
+    assert ind["transitions"] > 1000  # fast flicker
+    assert both["tau_distance"] > 2 * both["tau_indicator"]
+    assert both["tau"] == both["tau_distance"] and both["block_length"] > ind["block_length"]
+    assert both["n_eff"] < ind["n_eff"]
+    assert (both["ci_high"] - both["ci_low"]) > 1.3 * (ind["ci_high"] - ind["ci_low"])
+
+
+def test_compare_uses_distance_tau():
+    d = slow_drift_distance(4000, np.random.default_rng(11))
+    x = (d <= 4.5).astype(float)
+    ind = stats.compare_series(x[:2000], x[2000:], np.random.default_rng(stats.SEED))
+    both = stats.compare_series(x[:2000], x[2000:], np.random.default_rng(stats.SEED),
+                                distance_a=d[:2000], distance_b=d[2000:])
+    assert both["tau_a"] == max(both["tau_indicator_a"], both["tau_distance_a"])
+    assert both["block_length_a"] >= ind["block_length_a"] and both["block_length_b"] >= ind["block_length_b"]
+    assert both["se"] > ind["se"]
+
+
+def test_too_few_blocks_flagged_and_never_supported():
+    rng = np.random.default_rng(12)
+    x = binary_ar1(400, 0.995, 0.5, rng)  # estimated tau ~ 24 frames: about 8 blocks of 2 tau
+    d = stats.describe_series(x, np.random.default_rng(0))
+    assert d["too_few_blocks"] and stats.TOO_FEW_BLOCKS in d["stats_note"]
+    assert not stats.is_supported(0.0001, 0.2, 0.4, too_few_events=False, too_few_blocks=True)

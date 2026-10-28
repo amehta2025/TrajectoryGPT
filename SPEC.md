@@ -202,12 +202,15 @@ Every tool:
 - **Tests use `adk_transition`** so they run in seconds. One slow test, marked `@pytest.mark.slow`, checks the equilibrium precompute against a direct calculation on a few frames.
 
 ### 8a. Statistics (`app/science/stats.py`)
-- **τ:** integrated autocorrelation time of the per-frame 0/1 contact series, with automatic windowing (Sokal).
-  - Constant series (always or never in contact) return `tau=None` and `stats_note`.
+- **τ:** integrated autocorrelation time with automatic windowing (Sokal, c = 5). It is computed on **both** the per-frame 0/1 contact series (τ_indicator) and the per-frame min-distance series (τ_distance). **τ = max(τ_indicator, τ_distance)** sets the block length and N_eff.
+  - *Why* (changed Day 3, 2026-10-28): a distance that drifts slowly near the cutoff makes the 0/1 series flicker fast. τ_indicator alone then misses the slow memory, and the CIs come out too narrow. On NMP–CORE the median τ_distance is about 3.5× τ_indicator (42.6 vs 11.9 frames, first half).
+  - Constant 0/1 series (always or never in contact) return `tau=None` and `stats_note`.
   - Series with fewer than 5 transitions are flagged "too few events for reliable CI."
+  - A window with fewer than 10 bootstrap blocks (N / block length < 10) is flagged "too few independent blocks." With so few blocks, the moving-block bootstrap itself underestimates the spread.
+  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 50 frames, plus fast noise), nominal 95% CIs cover the truth only about 72–84% of the time with this rule (56–76% with τ_indicator alone). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage to about 80–88%, but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs; the report's limited-sampling caveat must say so.
 - **N_eff** = N / (2τ), reported everywhere. **Show time too:** N_eff × 0.24 ns is "how much independent sampling you really have."
 - **Moving-block bootstrap:**
-  - block length = max(1, ceil(2τ)), 2,000 resamples
+  - block length = max(1, ceil(2·τ_indicator), ceil(2·τ_distance)), 2,000 resamples
   - fixed seed, recorded in provenance
   - applied to frequencies and to between-window differences
   - the two windows are resampled independently
@@ -215,7 +218,7 @@ Every tool:
   - **p-value:** two-sided z-test, z = Δ / SE, where SE is the standard deviation of the block-bootstrap differences. Then apply **Benjamini–Hochberg FDR at q < 0.05**.
     - *Why not a bootstrap-count p-value* (changed Day 3, 2026-10-28): with 2,000 resamples, such a p-value can't go below about 1/1,000. BH's strictest threshold is 0.05/m, which is about 1e-5 for NMP–CORE's 4,374 pairs. So BH could almost never declare anything, and the result would be a false "all noise." The z-test gives continuous p-values. The CI stays a bootstrap percentile CI.
   - **Pre-filter:** test only pairs that are not sequence-local and whose pooled contact frequency across both windows is ≥ 1%. Rare or never-formed contacts carry no testable signal and would only inflate m. The filter doesn't look at the difference between windows, so BH stays valid.
-  - **"Supported"** = BH q < 0.05 **and** the percentile CI excludes 0 **and** the pair is not flagged "too few events" (< 5 transitions across both windows). A flagged pair is never supported, whatever its p or CI.
+  - **"Supported"** = BH q < 0.05 **and** the percentile CI excludes 0 **and** the pair is not flagged "too few events" (< 5 transitions across both windows) **and** neither window is flagged "too few independent blocks" (< 10). A flagged pair is never supported, whatever its p or CI.
   - The UI says "N tested · M filtered out (rare or never in contact)".
 - **Refusal:** if `stats_valid` is false, return `status: refused` with a one-sentence explanation the UI can show.
 - **Validation tests:**
@@ -223,6 +226,8 @@ Every tool:
   - On white noise, the block CI ≈ the naive CI.
   - On a correlated series, the block CI is clearly wider.
   - On 500 pure-noise pairs, BH declares ≤ 5% supported.
+  - On a slow-drift distance hovering at the cutoff (the 0/1 series flickers fast), τ_distance governs, and the block CI is ≥ 1.3× wider than with τ_indicator alone.
+  - A series with fewer than 10 blocks is flagged and can never be supported.
   - On `adk_equilibrium`, a known strong change (SER30–ASP84, NMP–CORE, first vs second half) is supported (slow test), so the method is not "all noise."
 
 ## 9. Agent flow

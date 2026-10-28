@@ -62,3 +62,24 @@ https://userguide.mdanalysis.org/stable/examples/analysis/distances_and_contacts
   when that folder is created.
 
 **Method transfer (secondary):** not chosen yet. It needs a CC-BY paper figure; that's Day 5 scope.
+
+## Statistics check: first half vs second half (Day 3, 2026-10-28)
+
+`compare_intervals` on adk_equilibrium, windows frames 0–2092 vs 2093–4186 (≈ 502 ns each), cutoff 4.5 Å,
+sequence exclusion 2, pooled-frequency filter ≥ 1%, BH-FDR 5%, seed 0, 2,000 resamples. Each run takes ~2 s on cached distances.
+
+| groups | pairs | tested | filtered out | supported, τ from 0/1 only | supported, τ = max(0/1, distance) | too few blocks |
+|---|---|---|---|---|---|---|
+| NMP–CORE | 4,374 | 53 | 4,321 | 27 | **15** | 7 |
+| LID–CORE | 5,542 | 29 | 5,513 | 14 | **14** | 0 |
+
+- **τ from the distance series matters on NMP–CORE:** median τ over tested pairs (first half) is 11.9 frames
+  from the 0/1 series and 42.6 frames from the min distance. Slow drifts near the cutoff look like fast flicker in 0/1.
+  LID–CORE pairs flicker fast either way (median τ 0.9 vs 1.7 frames), so nothing changed there.
+- **SER30–ASP84 is still supported:** frequency 0.461 → 0.148, Δ = −0.313, 95% CI [−0.450, −0.158], q = 7e-4,
+  τ = 41.9 / 57.5 frames (≈ 10 / 14 ns), N_eff = 25 / 18 per window. It is the slow test's known strong change.
+- The 7 "too few blocks" NMP–CORE pairs all had q ≥ 0.05, so the flag did not change the count today.
+- **Coverage is still below nominal for slow pairs** (synthetic test, see SPEC §8a): about 72–84% for a nominal 95% CI.
+  With 4τ blocks the supported counts would be 6 (NMP–CORE) and 13 (LID–CORE), but 24 NMP–CORE pairs,
+  SER30–ASP84 included, would then have < 10 blocks. Not adopted; the limited-sampling caveat covers it.
+- Single trajectory: "supported" means the two halves of *this* run differ, not that the protein's ensemble does.

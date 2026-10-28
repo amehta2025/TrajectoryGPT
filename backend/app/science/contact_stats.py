@@ -65,7 +65,8 @@ def compare_intervals(
     """Per-pair contact-frequency change (window_b - window_a) with block-bootstrap CI and BH q-values.
 
     Tested pairs: not sequence-local and pooled frequency over both windows >= min_pooled_freq.
-    Supported = q < FDR and CI excludes 0 and not too few events.
+    tau (hence block length) is the larger of the 0/1 series' and the min-distance series' tau.
+    Supported = q < FDR and CI excludes 0 and not too few events and not too few blocks.
     """
     cfg = require_stats_valid(dataset)
     cutoff = validate_cutoff(cutoff)
@@ -77,8 +78,9 @@ def compare_intervals(
     if fa.start < fb.stop and fb.start < fa.stop:
         raise ValueError(f"Windows {list(window_a)} and {list(window_b)} overlap; choose disjoint windows.")
 
-    in_a = md.min_dist[fa.start:fa.stop:fa.step] <= cutoff
-    in_b = md.min_dist[fb.start:fb.stop:fb.step] <= cutoff
+    dist_a = md.min_dist[fa.start:fa.stop:fa.step]
+    dist_b = md.min_dist[fb.start:fb.stop:fb.step]
+    in_a, in_b = dist_a <= cutoff, dist_b <= cutoff
     excluded = sequence_local_mask(md.keys_a, md.keys_b, sequence_exclusion)
     pooled = (in_a.sum(axis=0) + in_b.sum(axis=0)) / (len(fa) + len(fb))
     candidates = ~excluded
@@ -87,12 +89,13 @@ def compare_intervals(
     rows = []
     for i, j in zip(*np.nonzero(tested)):
         ka, kb = md.keys_a[i], md.keys_b[j]
-        r = stats.compare_series(in_a[:, i, j], in_b[:, i, j], _pair_rng(seed, ka, kb), n_resamples)
+        r = stats.compare_series(in_a[:, i, j], in_b[:, i, j], _pair_rng(seed, ka, kb), n_resamples,
+                                 dist_a[:, i, j], dist_b[:, i, j])
         rows.append({"key_a": ka, "key_b": kb, **r})
     q = stats.bh_qvalues(np.array([r["p"] for r in rows]))
     for r, qi in zip(rows, q):
         r["q"] = float(qi)
-        r["supported"] = stats.is_supported(r["q"], r["ci_low"], r["ci_high"], r["too_few_events"])
+        r["supported"] = stats.is_supported(r["q"], r["ci_low"], r["ci_high"], r["too_few_events"], r["too_few_blocks"])
         r.update({f"{k}_a": v for k, v in _time(r["n_eff_a"], r["tau_a"], cfg["dt_ns"], stride).items()})
         r.update({f"{k}_b": v for k, v in _time(r["n_eff_b"], r["tau_b"], cfg["dt_ns"], stride).items()})
     rows.sort(key=lambda r: (not r["supported"], r["q"], -abs(r["delta"])))
@@ -114,6 +117,7 @@ def compare_intervals(
         "n_tested": len(rows),
         "n_filtered": int(candidates.sum() - len(rows)),
         "n_supported": sum(r["supported"] for r in rows),
+        "n_too_few_blocks": sum(r["too_few_blocks"] for r in rows),
         "min_pooled_freq": min_pooled_freq,
         "fdr": stats.FDR,
         "ci_level": stats.CI_LEVEL,
@@ -141,7 +145,7 @@ def contact_statistics(
     cutoff = validate_cutoff(cutoff)
     d = distance_over_time(dataset, key_a, key_b, start, stop, stride)
     series = d["distance"] <= cutoff
-    r = stats.describe_series(series, _pair_rng(seed, key_a, key_b), n_resamples)
+    r = stats.describe_series(series, _pair_rng(seed, key_a, key_b), n_resamples, distance=d["distance"])
     return {
         "dataset": dataset,
         "key_a": key_a,

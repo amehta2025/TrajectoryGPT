@@ -2,7 +2,11 @@
 
 - tau: integrated autocorrelation time, tau = 1/2 + sum_t rho(t), Sokal automatic window
   (smallest M with M >= SOKAL_C * tau(M)). White noise gives tau = 0.5, so N_eff = N / (2 tau) = N.
-- Moving-block bootstrap with block length max(1, ceil(2 tau)).
+- tau is taken from both the 0/1 indicator and the underlying min-distance series, and the larger
+  one is used: a distance drifting slowly near the cutoff makes the indicator flicker fast, so
+  indicator-tau alone underestimates the memory and gives CIs that are too narrow.
+- Moving-block bootstrap with block length max(1, ceil(2 tau)). With fewer than MIN_BLOCKS blocks per
+  window the bootstrap itself underestimates the spread, so such series are flagged.
 - Between-window differences: each window resampled independently with its own block length.
   p-value from a two-sided z-test on the bootstrap SE; CI from bootstrap percentiles.
   (A bootstrap-count p-value cannot go below ~1/n_resamples, far above BH thresholds when
@@ -20,7 +24,9 @@ SEED = 0
 MIN_TRANSITIONS = 5
 CI_LEVEL = 0.95
 FDR = 0.05
+MIN_BLOCKS = 10
 TOO_FEW_EVENTS = "too few events for reliable CI"
+TOO_FEW_BLOCKS = f"too few independent blocks (< {MIN_BLOCKS}) for a reliable bootstrap CI"
 
 
 def autocorrelation(x: np.ndarray) -> np.ndarray:
@@ -42,6 +48,18 @@ def autocorr_time(x: np.ndarray) -> float | None:
     window = np.arange(len(taus)) >= SOKAL_C * taus
     m = int(np.argmax(window)) if window.any() else len(taus) - 1
     return float(max(taus[m], 0.5))
+
+
+def series_tau(x: np.ndarray, distance: np.ndarray | None = None) -> dict:
+    """tau of the 0/1 series and of its distance series; the larger one governs (None if x is constant)."""
+    tau_indicator = autocorr_time(x)
+    tau_distance = None if distance is None else autocorr_time(distance)
+    tau = None if tau_indicator is None else max(tau_indicator, tau_distance or 0.0)
+    return {"tau": tau, "tau_indicator": tau_indicator, "tau_distance": tau_distance}
+
+
+def too_few_blocks(n: int, tau: float | None) -> bool:
+    return tau is not None and n / block_length(tau) < MIN_BLOCKS
 
 
 def n_effective(n: int, tau: float | None) -> float | None:
@@ -79,26 +97,32 @@ def _percentile_ci(samples: np.ndarray) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
-def describe_series(x: np.ndarray, rng: np.random.Generator, n_resamples: int = N_RESAMPLES) -> dict:
-    """Frequency, tau, N_eff and block-bootstrap CI for one 0/1 series."""
+def describe_series(
+    x: np.ndarray, rng: np.random.Generator, n_resamples: int = N_RESAMPLES, distance: np.ndarray | None = None
+) -> dict:
+    """Frequency, tau, N_eff and block-bootstrap CI for one 0/1 series (and its distance series, if given)."""
     x = np.asarray(x, dtype=np.float64)
-    tau = autocorr_time(x)
+    taus = series_tau(x, distance)
+    tau = taus["tau"]
     transitions = count_transitions(x)
     blen = block_length(tau)
+    few_events = transitions < MIN_TRANSITIONS
+    few_blocks = too_few_blocks(len(x), tau)
     if tau is None:
         ci = (float(x[0]), float(x[0]))
         note = "constant series (always in contact)" if x[0] else "constant series (never in contact)"
     else:
         ci = _percentile_ci(block_bootstrap_means(x, blen, rng, n_resamples))
-        note = TOO_FEW_EVENTS if transitions < MIN_TRANSITIONS else None
+        note = "; ".join(m for m, flag in ((TOO_FEW_EVENTS, few_events), (TOO_FEW_BLOCKS, few_blocks)) if flag) or None
     return {
         "frequency": float(x.mean()),
         "n": len(x),
-        "tau": tau,
+        **taus,
         "n_eff": n_effective(len(x), tau),
         "block_length": blen,
         "transitions": transitions,
-        "too_few_events": transitions < MIN_TRANSITIONS,
+        "too_few_events": few_events,
+        "too_few_blocks": few_blocks,
         "ci_low": ci[0],
         "ci_high": ci[1],
         "stats_note": note,
@@ -113,10 +137,16 @@ def z_test_p(delta: float, se: float) -> float:
 
 
 def compare_series(
-    x_a: np.ndarray, x_b: np.ndarray, rng: np.random.Generator, n_resamples: int = N_RESAMPLES
+    x_a: np.ndarray,
+    x_b: np.ndarray,
+    rng: np.random.Generator,
+    n_resamples: int = N_RESAMPLES,
+    distance_a: np.ndarray | None = None,
+    distance_b: np.ndarray | None = None,
 ) -> dict:
     """Difference of means (b - a) between two independent windows, block bootstrap each."""
-    tau_a, tau_b = autocorr_time(x_a), autocorr_time(x_b)
+    taus_a, taus_b = series_tau(x_a, distance_a), series_tau(x_b, distance_b)
+    tau_a, tau_b = taus_a["tau"], taus_b["tau"]
     boot_a = block_bootstrap_means(x_a, block_length(tau_a), rng, n_resamples)
     boot_b = block_bootstrap_means(x_b, block_length(tau_b), rng, n_resamples)
     diffs = boot_b - boot_a
@@ -132,12 +162,15 @@ def compare_series(
         "ci_low": lo,
         "ci_high": hi,
         "p": z_test_p(delta, se),
-        "tau_a": tau_a,
-        "tau_b": tau_b,
+        **{f"{k}_a": v for k, v in taus_a.items()},
+        **{f"{k}_b": v for k, v in taus_b.items()},
+        "block_length_a": block_length(tau_a),
+        "block_length_b": block_length(tau_b),
         "n_eff_a": n_effective(len(x_a), tau_a),
         "n_eff_b": n_effective(len(x_b), tau_b),
         "transitions": transitions,
         "too_few_events": transitions < MIN_TRANSITIONS,
+        "too_few_blocks": too_few_blocks(len(x_a), tau_a) or too_few_blocks(len(x_b), tau_b),
     }
 
 
@@ -155,6 +188,6 @@ def bh_qvalues(p: np.ndarray) -> np.ndarray:
     return q
 
 
-def is_supported(q: float, ci_low: float, ci_high: float, too_few_events: bool) -> bool:
-    """Supported = BH q < FDR and percentile CI excludes 0 and enough events (SPEC §8a)."""
-    return bool(q < FDR and (ci_low > 0.0 or ci_high < 0.0) and not too_few_events)
+def is_supported(q: float, ci_low: float, ci_high: float, too_few_events: bool, too_few_blocks: bool = False) -> bool:
+    """Supported = BH q < FDR and percentile CI excludes 0 and enough events and blocks (SPEC §8a)."""
+    return bool(q < FDR and (ci_low > 0.0 or ci_high < 0.0) and not too_few_events and not too_few_blocks)
