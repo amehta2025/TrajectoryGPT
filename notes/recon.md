@@ -79,7 +79,7 @@ sequence exclusion 2, pooled-frequency filter ≥ 1%, BH-FDR 5%, seed 0, 2,000 r
 - **SER30–ASP84 is still supported:** frequency 0.461 → 0.148, Δ = −0.313, 95% CI [−0.450, −0.158], q = 7e-4,
   τ = 41.9 / 57.5 frames (≈ 10 / 14 ns), N_eff = 25 / 18 per window. It is the slow test's known strong change.
 - The 7 "too few blocks" NMP–CORE pairs all had q ≥ 0.05, so the flag did not change the count today.
-- **Coverage is still below nominal for slow pairs** (synthetic test, see SPEC §8a): about 72–84% for a nominal 95% CI.
+- **Coverage is still below nominal for slow pairs** (synthetic test, see SPEC §8a): 61–87% for a nominal 95% CI (see the coverage table below).
   With 4τ blocks the supported counts would be 6 (NMP–CORE) and 13 (LID–CORE), but 24 NMP–CORE pairs,
   SER30–ASP84 included, would then have < 10 blocks. Not adopted; the limited-sampling caveat covers it.
 - Single trajectory: "supported" means the two halves of *this* run differ, not that the protein's ensemble does.
@@ -100,18 +100,19 @@ is in the slowest quartile of the tested pairs. Supported provisional pairs disp
 
 ### CI coverage on synthetic slow-drift series (for README and SPEC §16)
 
-Distance = cutoff + 0.4·AR(1) + fast Gaussian noise; true contact frequency is exactly 0.5. Windows of 2,000 frames.
-Fraction of nominal 95% CIs that contain 0.5 (100–150 replicates per row):
+Distance = cutoff + 0.4·AR(1) + fast Gaussian noise, so the true contact frequency is exactly 0.5.
+Windows of 2,000 frames, 200 replicates per case (Monte Carlo error about ±3 points), data seed 2026,
+1,000 bootstrap resamples. The table gives the fraction of nominal 95% CIs that contain 0.5.
 
-| case | τ from 0/1 only (old) | τ = max(0/1, distance) (current) | 4τ blocks (not adopted) |
-|---|---|---|---|
-| φ = 0.98 (τ_AR ≈ 49), noise 0.6 Å | 0.44–0.56 | 0.56 | 0.65 |
-| φ = 0.98, noise 0.2 Å | 0.72 | 0.72–0.75 | 0.81 |
-| φ = 0.99 (τ_AR ≈ 99), noise 0.2 Å | 0.68 | 0.71 | — |
-| φ = 0.967 (τ_AR ≈ 30), noise 0.1 Å | 0.76–0.78 | 0.82 | 0.86 |
-| white noise | 0.94 | 0.94 | 0.93 |
+| case | τ from 0/1 only (old) | τ = max(0/1, distance) (current) |
+|---|---|---|
+| φ = 0.967 (τ_AR ≈ 30), noise 0.1 Å | 0.82 | 0.87 |
+| φ = 0.98 (τ_AR ≈ 49), noise 0.2 Å | 0.77 | 0.81 |
+| φ = 0.99 (τ_AR ≈ 99), noise 0.2 Å | 0.74 | 0.79 |
+| φ = 0.98 (τ_AR ≈ 49), noise 0.6 Å | 0.49 | 0.61 |
+| white noise (control) | 0.96 | 0.96 |
 
-The headline range quoted in SPEC is 56–76% (old) vs 72–84% (current) for the slow cases. The extreme
-high-noise case (0.6 Å) is worse: about 0.56 even with the current rule. Longer windows don't close the
-gap (coverage levels off around 0.84 with 2τ blocks at 20,000 frames): Sokal's window cuts off small, slow
-autocorrelation tails.
+**Headline: 49–82% (old) → 61–87% (current) on slow cases.** An earlier quick summary (72–84% vs 56–76%)
+came from smaller, mixed runs that left out the high-noise case. It was wrong and is superseded by this table.
+In exploratory runs, 4τ blocks added a few more points, and longer windows didn't close the gap: coverage
+levelled off around 0.84 at 20,000 frames. Sokal's window cuts off small, slow autocorrelation tails.

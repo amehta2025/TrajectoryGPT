@@ -207,7 +207,7 @@ Every tool:
   - Constant 0/1 series (always or never in contact) return `tau=None` and `stats_note`.
   - Series with fewer than 5 transitions are flagged "too few events for reliable CI."
   - A window with fewer than 10 bootstrap blocks (N / block length < 10) is flagged "too few independent blocks." With so few blocks, the moving-block bootstrap itself underestimates the spread.
-  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 50 frames, plus fast noise), nominal 95% CIs cover the truth only about 72–84% of the time with this rule (56–76% with τ_indicator alone). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage to about 80–88%, but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs. These pairs are labelled **provisional** (below), and the report's limited-sampling caveat must say so.
+  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 30–100 frames, plus fast noise; 2,000-frame windows; 200 replicates per case), nominal 95% CIs cover the truth only **61–87%** of the time with this rule, against **49–82%** with τ_indicator alone. White noise covers 96%. The worst case is a slow drift under large fast noise (61% vs 49%). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage by a few more points (exploratory run), but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs. These pairs are labelled **provisional** (below), and the report's limited-sampling caveat must say so.
 - **N_eff** = N / (2τ), reported everywhere, shown next to **τ in ns** (τ × 0.24 ns × stride; path steps on `adk_transition`).
   - *Changed Day 3:* "N_eff × 0.24 ns" was dropped. It read as "6 ns of independent sampling" for SER30–ASP84 in a 502 ns window, which is misleading. τ in ns is the physical memory time.
 - **Moving-block bootstrap:**
@@ -461,8 +461,8 @@ Record with replay mode available as a fallback, but use **real live runs** for 
 - Method-transfer reproductions are not expected to match numerically.
 - Replay runs are recorded real runs, labeled as such.
 - **Confidence intervals are optimistic for slowly varying contacts.**
-  - On synthetic slow-drift series (AR(1), τ ≈ 50 frames, plus fast noise; 2,000-frame windows), nominal 95% block-bootstrap CIs contained the true frequency in only **72–84%** of trials with our rule (τ = max of indicator and distance τ, blocks of 2τ).
-  - With the indicator τ alone it was **56–76%**.
+  - On synthetic slow-drift series (AR(1), τ ≈ 30–100 frames, plus fast noise; 2,000-frame windows; 200 replicates per case), nominal 95% block-bootstrap CIs contained the true frequency in only **61–87%** of trials with our rule (τ = max of indicator and distance τ, blocks of 2τ).
+  - With the indicator τ alone it was **49–82%**. White noise: 96%.
   - Such pairs are labelled "supported (slow — provisional)" (SPEC §8a; numbers in `notes/recon.md`).
 
 ## 17. Out of scope

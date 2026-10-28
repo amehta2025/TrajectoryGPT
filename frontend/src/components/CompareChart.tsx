@@ -27,7 +27,7 @@ function windowLabel(meta: Metadata, [start, stop]: [number, number]): string {
 }
 
 // Coverage of nominal 95% CIs on synthetic slow-drift series (SPEC §8a, notes/recon.md).
-const SLOW_COVERAGE = '72–84%'
+const SLOW_COVERAGE = '61–87%'
 
 /** τ in ns where the dataset has physical time, otherwise in frames (path steps). */
 function tauText(r: CompareRow, side: 'a' | 'b'): string {
