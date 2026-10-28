@@ -1,0 +1,80 @@
+:root {
+  --bg: #0a0d13;
+  --panel: #111520;
+  --panel-2: #151a26;
+  --border: #222938;
+  --text: #d6dbe5;
+  --muted: #7d869a;
+  --accent: #5ac8e8;
+  --ok: #3ecf8e;
+  --no: #ff7a59;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); min-height: 100vh; }
+h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #aeb6c7; }
+button, select, input { font: inherit; color: inherit; }
+select, button {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer;
+}
+button:disabled, select:disabled { opacity: 0.5; cursor: default; }
+select:hover, button:hover:not(:disabled) { border-color: #3a4459; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.warn { color: #ffb347; }
+.error { color: #ffb4a3; background: #2a1414; border: 1px solid #5a2323; border-radius: 6px; padding: 6px 10px; margin: 6px 0; font-size: 12px; }
+.error.banner { margin: 0 16px; }
+
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #0f1420, var(--bg));
+}
+.brand { display: flex; align-items: baseline; gap: 10px; font-weight: 700; font-size: 16px; }
+.logo { color: var(--accent); }
+
+.dataset-badge { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: #b8c0d0; }
+.pill.ok { border-color: #1f5b44; color: var(--ok); }
+.pill.no { border-color: #6a2f22; color: var(--no); }
+
+.layout {
+  flex: 1; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; padding: 12px 16px;
+}
+.col-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.card-sub { margin: 4px 0 6px; font-size: 12px; color: var(--muted); }
+.controls { display: flex; align-items: center; gap: 8px; }
+.controls label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+
+.plot-wrap { position: relative; min-height: 0; }
+.heatmap-wrap { height: 340px; }
+.distance-wrap { height: 260px; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; pointer-events: none; z-index: 1; }
+
+.viewer-card { align-self: start; }
+.legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.viewer { position: relative; flex: 1; display: flex; flex-direction: column; margin-top: 8px; min-height: 0; }
+/* Fixed height: NGL sizes its canvas to this box, so a flexible height would feed back and grow. */
+.viewer-canvas { position: relative; height: max(480px, calc(100vh - 230px)); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.viewer-status { position: absolute; top: 10px; left: 10px; background: #000a; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+.viewer-hud { position: absolute; left: 10px; right: 10px; bottom: 54px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; }
+.pair-chips { display: flex; gap: 6px; }
+.chip { background: #000b; border: 2px solid; border-radius: 6px; padding: 2px 8px; font-weight: 600; font-size: 12px; }
+.frame-readout { background: #000b; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 13px; font-variant-numeric: tabular-nums; margin-left: auto; }
+.viewer-controls { display: flex; align-items: center; gap: 10px; padding-top: 8px; }
+.viewer-controls input[type='range'] { flex: 1; accent-color: var(--accent); }
+
+.loading { padding: 24px 16px; }
+.foot { padding: 8px 16px 14px; line-height: 1.5; }
