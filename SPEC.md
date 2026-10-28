@@ -207,8 +207,9 @@ Every tool:
   - Constant 0/1 series (always or never in contact) return `tau=None` and `stats_note`.
   - Series with fewer than 5 transitions are flagged "too few events for reliable CI."
   - A window with fewer than 10 bootstrap blocks (N / block length < 10) is flagged "too few independent blocks." With so few blocks, the moving-block bootstrap itself underestimates the spread.
-  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 50 frames, plus fast noise), nominal 95% CIs cover the truth only about 72–84% of the time with this rule (56–76% with τ_indicator alone). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage to about 80–88%, but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs; the report's limited-sampling caveat must say so.
-- **N_eff** = N / (2τ), reported everywhere. **Show time too:** N_eff × 0.24 ns is "how much independent sampling you really have."
+  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 50 frames, plus fast noise), nominal 95% CIs cover the truth only about 72–84% of the time with this rule (56–76% with τ_indicator alone). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage to about 80–88%, but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs. These pairs are labelled **provisional** (below), and the report's limited-sampling caveat must say so.
+- **N_eff** = N / (2τ), reported everywhere, shown next to **τ in ns** (τ × 0.24 ns × stride; path steps on `adk_transition`).
+  - *Changed Day 3:* "N_eff × 0.24 ns" was dropped. It read as "6 ns of independent sampling" for SER30–ASP84 in a 502 ns window, which is misleading. τ in ns is the physical memory time.
 - **Moving-block bootstrap:**
   - block length = max(1, ceil(2·τ_indicator), ceil(2·τ_distance)), 2,000 resamples
   - fixed seed, recorded in provenance
@@ -219,6 +220,11 @@ Every tool:
     - *Why not a bootstrap-count p-value* (changed Day 3, 2026-10-28): with 2,000 resamples, such a p-value can't go below about 1/1,000. BH's strictest threshold is 0.05/m, which is about 1e-5 for NMP–CORE's 4,374 pairs. So BH could almost never declare anything, and the result would be a false "all noise." The z-test gives continuous p-values. The CI stays a bootstrap percentile CI.
   - **Pre-filter:** test only pairs that are not sequence-local and whose pooled contact frequency across both windows is ≥ 1%. Rare or never-formed contacts carry no testable signal and would only inflate m. The filter doesn't look at the difference between windows, so BH stays valid.
   - **"Supported"** = BH q < 0.05 **and** the percentile CI excludes 0 **and** the pair is not flagged "too few events" (< 5 transitions across both windows) **and** neither window is flagged "too few independent blocks" (< 10). A flagged pair is never supported, whatever its p or CI.
+  - **Provisional** (added Day 3): a tested pair is provisional if either window has fewer than **20** bootstrap blocks, or its τ_distance (the slower window) is in the **slowest quartile** of the pairs tested in that comparison.
+    - A supported pair that is provisional displays as **"supported (slow — provisional)"**; it still counts as supported.
+    - The summary shows both counts ("15 supported: 11 firm · 4 slow — provisional"). An info tooltip explains the rule and cites the coverage numbers above.
+    - The quartile is relative to the comparison, so about a quarter of tested pairs are always "slow" whatever their absolute τ. On LID–CORE the cutoff is about 1.1 ns.
+    - `contact_statistics` (one pair, no quartile) uses only the < 20-blocks rule.
   - The UI says "N tested · M filtered out (rare or never in contact)".
 - **Refusal:** if `stats_valid` is false, return `status: refused` with a one-sentence explanation the UI can show.
 - **Validation tests:**
@@ -441,7 +447,7 @@ The demo questions are finalized **after** Day 3. Per the recon (§5d), the live
 1. **0:00–0:25.** Drop in the published figure. The extracted spec appears, our figure appears next to theirs, and the numbers match.
 2. **0:25–1:05.** Ask a real question on the equilibrium data. The plan appears; edit the cutoff and approve. The step log runs, and the chart shows supported pairs vs greyed noise, with the "N tested, FDR 5%" note.
 3. **1:05–1:40.** Click a supported pair and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame.
-4. **1:40–2:05.** Show the honesty: N_eff in ns of independent sampling, a stats refusal on the transition set, and the verifier catching a planted overclaim.
+4. **1:40–2:05.** Show the honesty: N_eff with τ in ns, a "supported (slow — provisional)" pair and its tooltip, a stats refusal on the transition set, and the verifier catching a planted overclaim.
 5. **2:05–2:35.** Export the script; the sandbox re-run matches.
 6. **2:35–3:00.** Show the open-weight toggle (if shipped), the cost per investigation, and the built-during-hackathon summary.
 
@@ -454,6 +460,10 @@ Record with replay mode available as a fallback, but use **real live runs** for 
 - Contact definition is fixed (min heavy-atom distance ≤ cutoff).
 - Method-transfer reproductions are not expected to match numerically.
 - Replay runs are recorded real runs, labeled as such.
+- **Confidence intervals are optimistic for slowly varying contacts.**
+  - On synthetic slow-drift series (AR(1), τ ≈ 50 frames, plus fast noise; 2,000-frame windows), nominal 95% block-bootstrap CIs contained the true frequency in only **72–84%** of trials with our rule (τ = max of indicator and distance τ, blocks of 2τ).
+  - With the indicator τ alone it was **56–76%**.
+  - Such pairs are labelled "supported (slow — provisional)" (SPEC §8a; numbers in `notes/recon.md`).
 
 ## 17. Out of scope
 
