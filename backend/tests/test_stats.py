@@ -41,6 +41,34 @@ def test_white_noise_tau_and_n_eff():
     assert stats.block_length(tau) <= 2  # ceil(2 tau) with tau estimated near 0.5
 
 
+def test_tau_se_formula():
+    assert stats.tau_se(0.3, 1000, 0.5) == pytest.approx(np.sqrt(0.3 * 0.7 / 1000))  # white noise = naive SE
+    assert stats.tau_se(0.3, 1000, 8.0) == pytest.approx(np.sqrt(0.3 * 0.7 * 16 / 1000))
+    assert stats.tau_se(1.0, 1000, None) == 0.0
+
+
+def test_compare_se_combines_windows():
+    rng = np.random.default_rng(13)
+    a, b = binary_ar1(2000, 0.9, 0.3, rng), binary_ar1(2000, 0.9, 0.6, rng)
+    r = stats.compare_series(a, b, np.random.default_rng(0), n_resamples=100)
+    se_a = stats.tau_se(a.mean(), len(a), r["tau_a"])
+    se_b = stats.tau_se(b.mean(), len(b), r["tau_b"])
+    assert r["se"] == pytest.approx(np.hypot(se_a, se_b))
+    assert r["ci_low"] == pytest.approx(r["delta"] - stats.Z_CI * r["se"])
+    assert r["n_blocks_a"] == pytest.approx(2000 / (2 * r["tau_a"]))
+
+
+def test_tau_ci_coverage_on_correlated_series():
+    """A small version of scripts/calibrate_ci.py: AR(1) thresholded at 0 has true frequency exactly 0.5."""
+    rng = np.random.default_rng(14)
+    hits = 0
+    for _ in range(300):
+        x = (ar1(2000, 0.9, rng) > 0).astype(float)
+        d = stats.describe_series(x, np.random.default_rng(0), n_resamples=20)
+        hits += d["ci_low"] <= 0.5 <= d["ci_high"]
+    assert hits / 300 >= 0.90
+
+
 def test_white_noise_block_ci_matches_naive():
     x = np.random.default_rng(3).binomial(1, 0.3, 4000).astype(float)
     d = stats.describe_series(x, np.random.default_rng(stats.SEED))

@@ -5,12 +5,15 @@
 - tau is taken from both the 0/1 indicator and the underlying min-distance series, and the larger
   one is used: a distance drifting slowly near the cutoff makes the indicator flicker fast, so
   indicator-tau alone underestimates the memory and gives CIs that are too narrow.
-- Moving-block bootstrap with block length max(1, ceil(2 tau)). With fewer than MIN_BLOCKS blocks per
-  window the bootstrap itself underestimates the spread, so such series are flagged.
-- Between-window differences: each window resampled independently with its own block length.
-  p-value from a two-sided z-test on the bootstrap SE; CI from bootstrap percentiles.
-  (A bootstrap-count p-value cannot go below ~1/n_resamples, far above BH thresholds when
-  thousands of pairs are tested; see SPEC §8a.)
+- CI and p-value come from the autocorrelation-corrected standard error
+  SE = sqrt(p (1 - p) * 2 tau / N): the variance of the mean of a correlated series. A difference
+  between two independent windows has SE = sqrt(SE_a^2 + SE_b^2). CI = estimate +/- 1.96 SE;
+  p-value from a two-sided z-test. Validated by backend/scripts/calibrate_ci.py (notes/calibration/).
+- A moving-block bootstrap (block length max(1, ceil(2 tau))) is kept only as a cross-check field
+  (boot_*). It is not used for "supported": with blocks of 2 tau, neighbouring blocks stay correlated
+  when the autocorrelation has a long, small tail, and its CIs undercover (SPEC §8a).
+- "Chunks" = N / (2 tau) = N_eff, the number of independent pieces of data in a window. Fewer than
+  MIN_BLOCKS: never supported. Fewer than MIN_BLOCKS_FIRM: provisional (coverage < 90% in calibration).
 - Benjamini-Hochberg q-values.
 """
 import math
@@ -24,10 +27,11 @@ SEED = 0
 MIN_TRANSITIONS = 5
 CI_LEVEL = 0.95
 FDR = 0.05
+Z_CI = 1.959963984540054  # two-sided 95%
 MIN_BLOCKS = 10
-PROVISIONAL_MIN_BLOCKS = 20  # below this, a supported result is labelled provisional (SPEC §8a)
+MIN_BLOCKS_FIRM = 40  # calibrated: tau-based CIs cover >= 90% from 40 chunks up (notes/calibration/, SPEC §8a)
 TOO_FEW_EVENTS = "too few events for reliable CI"
-TOO_FEW_BLOCKS = f"too few independent blocks (< {MIN_BLOCKS}) for a reliable bootstrap CI"
+TOO_FEW_BLOCKS = f"too few independent chunks of data (< {MIN_BLOCKS}) for a reliable CI"
 
 
 def autocorrelation(x: np.ndarray) -> np.ndarray:
@@ -60,8 +64,8 @@ def series_tau(x: np.ndarray, distance: np.ndarray | None = None) -> dict:
 
 
 def n_blocks(n: int, tau: float | None) -> float | None:
-    """Bootstrap blocks per window, N / block length (None for a constant series)."""
-    return None if tau is None else n / block_length(tau)
+    """Independent chunks per window, N / (2 tau) (None for a constant series)."""
+    return None if tau is None else n / (2.0 * tau)
 
 
 def too_few_blocks(n: int, tau: float | None) -> bool:
@@ -97,6 +101,15 @@ def block_bootstrap_means(
     return (sums.sum(axis=1) + tail) / n
 
 
+def tau_se(freq: float, n: int, tau: float | None) -> float:
+    """Autocorrelation-corrected SE of a 0/1 mean: sqrt(p (1 - p) * 2 tau / N); 0 for a constant series."""
+    return 0.0 if tau is None else math.sqrt(freq * (1.0 - freq) * 2.0 * tau / n)
+
+
+def _normal_ci(est: float, se: float, lo: float, hi: float) -> tuple[float, float]:
+    return max(lo, est - Z_CI * se), min(hi, est + Z_CI * se)
+
+
 def _percentile_ci(samples: np.ndarray) -> tuple[float, float]:
     alpha = (1.0 - CI_LEVEL) / 2.0
     lo, hi = np.quantile(samples, [alpha, 1.0 - alpha])
@@ -106,7 +119,10 @@ def _percentile_ci(samples: np.ndarray) -> tuple[float, float]:
 def describe_series(
     x: np.ndarray, rng: np.random.Generator, n_resamples: int = N_RESAMPLES, distance: np.ndarray | None = None
 ) -> dict:
-    """Frequency, tau, N_eff and block-bootstrap CI for one 0/1 series (and its distance series, if given)."""
+    """Frequency, tau, N_eff and tau-based CI for one 0/1 series (and its distance series, if given).
+
+    boot_ci_* is the block-bootstrap CI, kept as a cross-check only.
+    """
     x = np.asarray(x, dtype=np.float64)
     taus = series_tau(x, distance)
     tau = taus["tau"]
@@ -114,14 +130,18 @@ def describe_series(
     blen = block_length(tau)
     few_events = transitions < MIN_TRANSITIONS
     few_blocks = too_few_blocks(len(x), tau)
+    freq = float(x.mean())
+    se = tau_se(freq, len(x), tau)
     if tau is None:
-        ci = (float(x[0]), float(x[0]))
+        ci = boot = (freq, freq)
         note = "constant series (always in contact)" if x[0] else "constant series (never in contact)"
     else:
-        ci = _percentile_ci(block_bootstrap_means(x, blen, rng, n_resamples))
+        ci = _normal_ci(freq, se, 0.0, 1.0)
+        boot = _percentile_ci(block_bootstrap_means(x, blen, rng, n_resamples))
         note = "; ".join(m for m, flag in ((TOO_FEW_EVENTS, few_events), (TOO_FEW_BLOCKS, few_blocks)) if flag) or None
     return {
-        "frequency": float(x.mean()),
+        "frequency": freq,
+        "se": se,
         "n": len(x),
         **taus,
         "n_eff": n_effective(len(x), tau),
@@ -132,6 +152,8 @@ def describe_series(
         "too_few_blocks": few_blocks,
         "ci_low": ci[0],
         "ci_high": ci[1],
+        "boot_ci_low": boot[0],
+        "boot_ci_high": boot[1],
         "stats_note": note,
     }
 
@@ -151,24 +173,32 @@ def compare_series(
     distance_a: np.ndarray | None = None,
     distance_b: np.ndarray | None = None,
 ) -> dict:
-    """Difference of means (b - a) between two independent windows, block bootstrap each."""
+    """Difference of means (b - a) between two independent windows.
+
+    SE = sqrt(SE_a^2 + SE_b^2) from each window's tau; CI = delta +/- 1.96 SE; two-sided z-test p.
+    boot_* are block-bootstrap cross-check values (windows resampled independently), not used for support.
+    """
     taus_a, taus_b = series_tau(x_a, distance_a), series_tau(x_b, distance_b)
     tau_a, tau_b = taus_a["tau"], taus_b["tau"]
-    boot_a = block_bootstrap_means(x_a, block_length(tau_a), rng, n_resamples)
-    boot_b = block_bootstrap_means(x_b, block_length(tau_b), rng, n_resamples)
-    diffs = boot_b - boot_a
-    delta = float(np.mean(x_b) - np.mean(x_a))
-    se = float(diffs.std(ddof=1))
-    lo, hi = _percentile_ci(diffs)
+    freq_a, freq_b = float(np.mean(x_a)), float(np.mean(x_b))
+    delta = freq_b - freq_a
+    se = math.hypot(tau_se(freq_a, len(x_a), tau_a), tau_se(freq_b, len(x_b), tau_b))
+    lo, hi = _normal_ci(delta, se, -1.0, 1.0)
+    diffs = (block_bootstrap_means(x_b, block_length(tau_b), rng, n_resamples)
+             - block_bootstrap_means(x_a, block_length(tau_a), rng, n_resamples))
+    boot_lo, boot_hi = _percentile_ci(diffs)
     transitions = count_transitions(x_a) + count_transitions(x_b)
     return {
-        "freq_a": float(np.mean(x_a)),
-        "freq_b": float(np.mean(x_b)),
+        "freq_a": freq_a,
+        "freq_b": freq_b,
         "delta": delta,
         "se": se,
         "ci_low": lo,
         "ci_high": hi,
         "p": z_test_p(delta, se),
+        "boot_se": float(diffs.std(ddof=1)),
+        "boot_ci_low": boot_lo,
+        "boot_ci_high": boot_hi,
         **{f"{k}_a": v for k, v in taus_a.items()},
         **{f"{k}_b": v for k, v in taus_b.items()},
         "block_length_a": block_length(tau_a),
@@ -198,5 +228,5 @@ def bh_qvalues(p: np.ndarray) -> np.ndarray:
 
 
 def is_supported(q: float, ci_low: float, ci_high: float, too_few_events: bool, too_few_blocks: bool = False) -> bool:
-    """Supported = BH q < FDR and percentile CI excludes 0 and enough events and blocks (SPEC §8a)."""
+    """Supported = BH q < FDR and tau-based CI excludes 0 and enough events and chunks (SPEC §8a)."""
     return bool(q < FDR and (ci_low > 0.0 or ci_high < 0.0) and not too_few_events and not too_few_blocks)

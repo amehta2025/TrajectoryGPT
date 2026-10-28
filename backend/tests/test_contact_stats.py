@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 import app.science.contact_stats as cs
+from app.science import stats
 from app.config import dataset_config
 from app.science.residues import make_residue_key
 
@@ -52,16 +53,21 @@ def test_compare_filters_and_counts(pretend_stats_valid, cache):
 
 def test_provisional_rule(pretend_stats_valid, cache):
     r = cs.compare_intervals(DS, "NMP", "CORE", (0, 49), (49, 98), n_resamples=100, cache_dir=cache)
-    thr = r["provisional_rule"]["slow_tau_distance_frames"]
-    assert thr is not None and r["provisional_rule"]["slow_tau_distance_ns"] is None  # path steps, no ns
+    firm = r["min_blocks_firm"]
+    assert firm == stats.MIN_BLOCKS_FIRM
     for row in r["rows"]:
-        few = any(b is not None and b < 20 for b in (row["n_blocks_a"], row["n_blocks_b"]))
-        td = [t for t in (row["tau_distance_a"], row["tau_distance_b"]) if t is not None]
-        slow = bool(td) and max(td) >= thr
-        assert row["provisional"] == (few or slow)
-        assert (cs.PROVISIONAL_FEW_BLOCKS in row["provisional_reasons"]) == few
-        assert (cs.PROVISIONAL_SLOW in row["provisional_reasons"]) == slow
+        few = any(c is not None and c < firm for c in (row["n_blocks_a"], row["n_blocks_b"]))
+        assert row["provisional"] == few
+        if row["tau_a"] is not None:
+            assert row["n_blocks_a"] == pytest.approx(49 / (2 * row["tau_a"]))
     assert r["n_provisional"] == sum(x["provisional"] for x in r["rows"])
+
+
+def test_supported_uses_tau_ci_not_bootstrap(pretend_stats_valid, cache):
+    r = cs.compare_intervals(DS, "NMP", "CORE", (0, 49), (49, 98), n_resamples=100, cache_dir=cache)
+    for row in r["rows"]:
+        assert row["ci_low"] == pytest.approx(max(-1.0, row["delta"] - stats.Z_CI * row["se"]))
+        assert "boot_ci_low" in row and "boot_se" in row  # cross-check only
 
 
 def test_compare_is_reproducible(pretend_stats_valid, cache):
@@ -83,20 +89,30 @@ def test_contact_statistics_pipeline(pretend_stats_valid):
     assert r["frequency"] == pytest.approx(np.mean(r["in_contact"]))
     assert r["ci_low"] <= r["frequency"] <= r["ci_high"]
     assert r["tau_ns"] is None
-    assert r["provisional"] == (r["n_blocks"] is not None and r["n_blocks"] < 20)
+    assert r["provisional"] == (r["n_blocks"] is not None and r["n_blocks"] < stats.MIN_BLOCKS_FIRM)
 
 
 @pytest.mark.slow
 def test_equilibrium_known_strong_change_is_detected():
-    """SER30-ASP84 (NMP-CORE) drops from ~0.46 to ~0.15 between the two halves: must be supported."""
+    """HSE134-ASP118 (LID-CORE) drops from ~0.53 to ~0.40 between halves, with hundreds of chunks: supported, firm."""
+    eq = "adk_equilibrium"
+    r = cs.compare_intervals(eq, "LID", "CORE", (0, 2093), (2093, 4187))
+    row = next(x for x in r["rows"] if x["key_a"].endswith(":134:HSE") and x["key_b"].endswith(":118:ASP"))
+    assert row["delta"] < -0.1 and row["supported"] and not row["provisional"]
+    assert row["tau_ns_a"] == pytest.approx(row["tau_a"] * 0.24)
+    assert r["n_supported_firm"] + r["n_supported_provisional"] == r["n_supported"]
+    assert 0 < r["n_supported"] < r["n_tested"]  # neither all noise nor everything significant
+
+
+@pytest.mark.slow
+def test_equilibrium_slow_large_change_is_not_overclaimed():
+    """SER30-ASP84 (NMP-CORE): large drop (0.46 -> 0.15) but only ~18-25 independent chunks per half.
+    The old 2-tau bootstrap called it supported; calibrated CIs plus FDR do not (SPEC §8a)."""
     eq = "adk_equilibrium"
     r = cs.compare_intervals(eq, "NMP", "CORE", (0, 2093), (2093, 4187))
     row = next(x for x in r["rows"] if x["key_a"].endswith(":30:SER") and x["key_b"].endswith(":84:ASP"))
-    assert row["delta"] < -0.2 and row["supported"]
-    assert row["tau_ns_a"] == pytest.approx(row["tau_a"] * 0.24)
-    assert row["provisional"]  # tau ~ 42-58 frames: slow, with < 20 blocks per half
-    assert r["n_supported_firm"] + r["n_supported_provisional"] == r["n_supported"]
-    assert 0 < r["n_supported"] < r["n_tested"]  # neither all noise nor everything significant
+    assert row["delta"] < -0.2
+    assert row["provisional"] and not row["supported"] and row["q"] >= 0.05
 
 
 @pytest.mark.slow

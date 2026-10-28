@@ -104,7 +104,7 @@ def test_native_contacts_bad_radius_is_400(client):
 
 @pytest.mark.slow
 def test_compare_on_equilibrium(client):
-    r = client.get("/compare/adk_equilibrium", params={"group_a": "NMP", "group_b": "CORE",
+    r = client.get("/compare/adk_equilibrium", params={"group_a": "LID", "group_b": "CORE",
                                                        "a_start": 0, "a_stop": 2093, "b_start": 2093, "b_stop": 4187}).json()
     assert r["status"] == "ok"
     assert r["n_tested"] == len(r["rows"]) and r["n_supported"] > 0

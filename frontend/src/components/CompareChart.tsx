@@ -1,6 +1,6 @@
-// Per-pair change in contact frequency between two windows, with block-bootstrap CI bars.
+// Per-pair change in contact frequency between two windows, with autocorrelation-corrected CI bars.
 // Supported pairs (BH q < FDR, CI excludes 0, enough events) are coloured; the rest are greyed noise.
-// Supported pairs that are provisional (few blocks or slow tau_distance) are drawn hollow.
+// Supported pairs that are provisional (few independent chunks of data) are drawn hollow.
 // Clicking a bar selects that pair, so the heatmap, distance plot and viewer follow.
 import { useEffect, useMemo, useState } from 'react'
 import type { Data } from 'plotly.js'
@@ -26,8 +26,7 @@ function windowLabel(meta: Metadata, [start, stop]: [number, number]): string {
   return `frames ${start}–${stop - 1} (${frameTimeLabel(meta, start)} – ${frameTimeLabel(meta, stop - 1)})`
 }
 
-// Coverage of nominal 95% CIs on synthetic slow-drift series (SPEC §8a, notes/recon.md).
-const SLOW_COVERAGE = '61–87%'
+// Calibrated threshold comes from the API (min_blocks_firm); see SPEC §8a and notes/calibration/.
 
 /** τ in ns where the dataset has physical time, otherwise in frames (path steps). */
 function tauText(r: CompareRow, side: 'a' | 'b'): string {
@@ -49,12 +48,17 @@ function statusLabel(r: CompareRow): string {
   return 'not supported'
 }
 
-function provisionalHelp(slowNs: number | null, slowFrames: number | null, minBlocks: number): string {
-  const slow = slowNs !== null ? `${slowNs.toFixed(1)} ns` : slowFrames !== null ? `${slowFrames.toFixed(1)} path steps` : 'n/a'
+function chunksText(r: CompareRow): string {
+  const f = (c: number | null) => (c === null ? '–' : c.toFixed(0))
+  return `${f(r.n_blocks_a)} → ${f(r.n_blocks_b)} independent chunks`
+}
+
+function provisionalHelp(minChunks: number): string {
   return (
-    `Provisional: a window has fewer than ${minBlocks} bootstrap blocks, or the pair's distance τ is in the ` +
-    `slowest quartile of the pairs tested here (τ ≥ ${slow}). Slow pairs have little independent sampling: ` +
-    `on synthetic slow-drift data our nominal 95% CIs contained the true value only ${SLOW_COVERAGE} of the time. ` +
+    `Provisional: fewer than ${minChunks} independent chunks of data in a window → less certain. ` +
+    `A chunk is about 2τ of trajectory, the time a contact takes to forget its state. ` +
+    `In our coverage test on synthetic data with a known answer, 95% intervals built from fewer than ` +
+    `${minChunks} chunks contained the true value less than 90% of the time. ` +
     `A provisional "supported" result may not hold up with more sampling.`
   )
 }
@@ -107,7 +111,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
           `Δ ${r.delta.toFixed(3)} [${r.ci_low.toFixed(3)}, ${r.ci_high.toFixed(3)}]`,
           `q = ${r.q.toPrecision(2)} · ${statusLabel(r)}`,
           `N_eff ${nEffText(r, 'a')} → ${nEffText(r, 'b')} · τ ${tauText(r, 'a')} → ${tauText(r, 'b')}`,
-          `${r.transitions} transitions${r.provisional ? ` · provisional: ${r.provisional_reasons.join('; ')}` : ''}`,
+          `${chunksText(r)} · ${r.transitions} transitions${r.provisional ? ' · provisional (few chunks)' : ''}`,
         ].join('<br>'),
       ),
       hovertemplate: '%{y}<br>%{text}<extra>click to select</extra>',
@@ -129,8 +133,8 @@ export function CompareChart({ meta }: { meta: Metadata }) {
               className="info"
               tabIndex={0}
               role="img"
-              aria-label={provisionalHelp(ok.provisional_rule.slow_tau_distance_ns, ok.provisional_rule.slow_tau_distance_frames, ok.provisional_rule.min_blocks)}
-              title={provisionalHelp(ok.provisional_rule.slow_tau_distance_ns, ok.provisional_rule.slow_tau_distance_frames, ok.provisional_rule.min_blocks)}
+              aria-label={provisionalHelp(ok.min_blocks_firm)}
+              title={provisionalHelp(ok.min_blocks_firm)}
             >
               ⓘ
             </span>
@@ -138,7 +142,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
         )}
       </header>
       <p className="card-sub">
-        {groupA}–{groupB} · cutoff {CUTOFF} Å · Δ = window B − window A, {ok ? ok.ci_level * 100 : 95}% block-bootstrap CI ·
+        {groupA}–{groupB} · cutoff {CUTOFF} Å · Δ = window B − window A, {ok ? ok.ci_level * 100 : 95}% CI (autocorrelation-corrected) ·
         A: {windowLabel(meta, winA)} · B: {windowLabel(meta, winB)}
         <br />
         <span className="swatch" style={{ background: UP }} />more contact
