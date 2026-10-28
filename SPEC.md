@@ -212,15 +212,18 @@ Every tool:
   - applied to frequencies and to between-window differences
   - the two windows are resampled independently
 - **Multiple comparisons:** `compare_intervals` tests many pairs at once, so 95% CIs alone would produce false positives (about 5% of pairs).
-  - Compute a bootstrap p-value per pair and apply **Benjamini–Hochberg FDR at q < 0.05**.
-  - "Supported" = q < 0.05 **and** the CI excludes 0.
-  - The UI says how many pairs were tested.
+  - **p-value:** two-sided z-test, z = Δ / SE, where SE is the standard deviation of the block-bootstrap differences. Then apply **Benjamini–Hochberg FDR at q < 0.05**.
+    - *Why not a bootstrap-count p-value* (changed Day 3, 2026-10-28): with 2,000 resamples, such a p-value can't go below about 1/1,000. BH's strictest threshold is 0.05/m, which is about 1e-5 for NMP–CORE's 4,374 pairs. So BH could almost never declare anything, and the result would be a false "all noise." The z-test gives continuous p-values. The CI stays a bootstrap percentile CI.
+  - **Pre-filter:** test only pairs that are not sequence-local and whose pooled contact frequency across both windows is ≥ 1%. Rare or never-formed contacts carry no testable signal and would only inflate m. The filter doesn't look at the difference between windows, so BH stays valid.
+  - **"Supported"** = BH q < 0.05 **and** the percentile CI excludes 0 **and** the pair is not flagged "too few events" (< 5 transitions across both windows). A flagged pair is never supported, whatever its p or CI.
+  - The UI says "N tested · M filtered out (rare or never in contact)".
 - **Refusal:** if `stats_valid` is false, return `status: refused` with a one-sentence explanation the UI can show.
 - **Validation tests:**
   - On AR(1) with known τ, the estimate is within 20%.
   - On white noise, the block CI ≈ the naive CI.
   - On a correlated series, the block CI is clearly wider.
   - On 500 pure-noise pairs, BH declares ≤ 5% supported.
+  - On `adk_equilibrium`, a known strong change (SER30–ASP84, NMP–CORE, first vs second half) is supported (slow test), so the method is not "all noise."
 
 ## 9. Agent flow
 
