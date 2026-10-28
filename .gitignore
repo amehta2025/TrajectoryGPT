@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -220,3 +220,28 @@ __marimo__/
 .streamlit/secrets.toml
 
 .env
+
+# --- TrajectoryGPT additions ---
+.env.*
+!.env.example
+
+# data & caches (never commit)
+cache/
+investigations/
+*.dcd
+*.npy
+*.xtc
+*.trr
+mdanalysis_data/
+MDAnalysis_data/
+
+# local reference docs (Meta's copyrighted docs)
+docs_local/
+
+# frontend
+node_modules/
+.vercel/
+
+# windows/mac junk
+Thumbs.db
+.DS_Store

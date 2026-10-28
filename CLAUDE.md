@@ -3,24 +3,38 @@
 Project: **TrajectoryGPT**, an MD research copilot for the Meta Global AI Developer Hackathon. Full spec: @SPEC.md
 
 ## About me
-When you build something, explain it in 3–5 bullets at the end of each task: what the file does, and why it's built that way. Don't assume background.
+- I'm a beginner at this stack. At the end of each task, explain what you built in 3–5 plain-English bullets: what each file does and why it's built that way. Don't assume background.
+- I'm on **Windows**. Use the project venv (`.venv`). Give commands that work in my terminal, and tell me which terminal they're for.
 
 ## How we work
-- Build only the current day's scope from SPEC.md §13. Don't start future days or add unrequested features.
-- Before writing code for a new feature, give a short plan (files to touch, approach) and wait for my OK.
-- Make small, focused changes. Prefer editing existing files over creating new ones. Don't create extra .md files.
+- Build only the current day's scope from SPEC.md §14. Don't start future days or add unrequested features.
+- Before writing code for a new feature, give a short plan (files to touch, approach, how you'll test it) and wait for my OK.
+- Make small, focused changes. Prefer editing existing files over creating new ones. The only extra .md file allowed is `notes/recon.md`.
+- Ask before installing any new package, and add every package to `backend/requirements.txt` (pinned).
 - After each feature: run the relevant tests, show me the result, then commit with a clear message.
-- If something in SPEC.md seems wrong or impossible, say so instead of working around it silently.
+- If something in SPEC.md seems wrong, impossible, or scientifically shaky, say so instead of working around it silently.
+- If you're unsure of an external API's exact request shape, read `docs_local/meta/` first. If the page isn't there, stop and ask me to paste it. Never guess.
 
 ## Hard rules
-- The LLM never invents numbers. All values come from functions in `backend/app/science/`.
-- Science functions are pure Python (no FastAPI imports) and have pytest tests.
-- Residue key everywhere: `segid:resid:resname`.
-- Units: Å and ns, with frame index kept alongside time.
-- Never commit secrets. Keys live in `.env` (gitignored); `.env.example` lists the names.
-- No `eval`/exec of model output. The agent only calls the registered tools.
+- The LLM never writes numbers. It writes placeholders that code fills from stored tool results.
+- Science functions are pure Python (no FastAPI imports) and have pytest tests. Fast tests use the `adk_transition` dataset; slow ones are marked `@pytest.mark.slow`.
+- Statistics are refused on datasets with `stats_valid: false`.
+- Residue key everywhere: `dataset:segid:resid:resname`, built and parsed by one function each.
+- Units: Å, and ns only where real time exists. Keep the frame index alongside.
+- Tool results sent to the LLM are short summaries (<~2k tokens). Full data goes to the UI.
+- Never commit secrets, `.env`, trajectories, `cache/`, `investigations/`, or `docs_local/`. Keys live in `.env`; `.env.example` lists the names.
+- No `eval`/`exec` of model output. The agent only calls registered tools. The export script comes from our templates.
+- Never print or log API keys or `.env` values.
 
-## Commands
+## Meta Model API facts (from Meta's docs, Oct 2026)
+- Base URL `https://api.meta.ai/v1`. Agent model `muse-spark-1.3` (dev: `muse-spark-1.3-contributor`). Verifier `muse-wonder-1.0`.
+- Use the OpenAI Python SDK's **Responses API** (`client.responses.create`) with `include=["reasoning.encrypted_content"]`, and pass the output items back in the next turn's input. Read text via `response.output_text`.
+- Images and PDFs are accepted natively. Always pass `api_key` explicitly.
+- Baseten: `https://inference.baseten.co/v1`, model `meta-models/muse-spark-open-1026`, Chat Completions.
+
+## Commands (run from the repo root unless noted)
+- Activate venv: PowerShell `.venv\Scripts\Activate.ps1` · Git Bash `source .venv/Scripts/activate`
+- Tests (fast): `cd backend && pytest -q -m "not slow"` · all: `pytest -q`
 - Backend: `cd backend && uvicorn app.main:app --reload`
-- Tests: `cd backend && pytest -q`
+- Agent CLI: `cd backend && python -m app.agent.cli run --turns 3 "<question>"`
 - Frontend: `cd frontend && npm run dev`

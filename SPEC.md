@@ -1,223 +1,420 @@
-# TrajectoryGPT — Build Spec (v3)
+# TrajectoryGPT — Build Spec (v4)
 
-Working name: **TrajectoryGPT**. This is a Meta Global AI Developer Hackathon 2026 project in the Indie Developer track, under the "Push the Frontier" problem statement.
-Building period: **Tue Oct 27 – Wed Nov 4, 2026** (deadline 9 PM ET / 8 PM CT). Internal deadline: **Tue Nov 3**.
+**TrajectoryGPT** is a Meta Global AI Developer Hackathon 2026 project in the Indie Developer track, under the "Push the Frontier" problem statement.
+- Building period: Tue Oct 27 – Wed Nov 4, 2026. The official deadline is 8 PM CT on Nov 4.
+- **Internal submit deadline: Tue Nov 3, 10 PM CT.**
+- **Feature freeze: Mon Nov 2, 11:59 PM CT.**
 
-This file is the source of truth. Build one day at a time (§13). Do not start a day's work until the previous day's "done when" check passes.
+This file is the source of truth. Build one day at a time (§14). Do not start a day's work until the previous day's "done when" check passes. If anything here is wrong or impossible, stop and say so.
 
 ---
 
-## 1. One-sentence pitch
+## 1. Pitch
 
-An AI research copilot that reproduces a published molecular dynamics analysis from a paper's figure, runs verified calculations on a real trajectory, refuses to overclaim with honest time-series statistics, and links every result to an interactive 3D molecular view.
+An AI research copilot for protein simulations. It turns a researcher's question, or a published figure, into a multi-step investigation. The investigation uses real, tested calculations, separates real effects from noise with honest time-series statistics, ties every claim to the computation that supports it, and links results to an interactive 3D view.
 
-## 2. The four things that make this win (protect these)
+## 2. What must work (protect these; never cut)
 
-1. **Reproduce-this-figure.** The user uploads a paper figure (image) and its methods text (PDF or pasted text). Muse Spark extracts the analysis spec (groups, cutoff, time window, plot type) and proposes a plan. After the user confirms, the app runs the analysis and shows the paper's figure next to ours.
-2. **Linked investigation.** Clicking a heatmap cell or bar highlights those residues in the 3D viewer. Clicking a time point jumps the viewer to that frame.
-3. **Statistical honesty.** MD frames are autocorrelated, so we report the effective sample size and block-bootstrap confidence intervals. The agent is not allowed to call a change "significant" unless the CI supports it.
-4. **Verifiable and reproducible.** A verifier pass checks every claim against the tool output and the rendered plot. One-click export produces a standalone script that reproduces every number, and it can be re-run in a clean Modal Sandbox.
+1. **Linked investigation.** Clicking a heatmap cell or bar highlights those residues in 3D. Clicking a time point jumps the 3D view to that frame.
+2. **Statistical honesty.** Every result reports:
+   - the effective sample size,
+   - block-bootstrap confidence intervals,
+   - a multiple-comparison correction.
+
+   Noise is labeled as noise, and the agent cannot call an effect "supported" unless the statistics say so.
+3. **A multi-step agent with evidence.** One question becomes an approved plan. The model then chooses each tool call, and every finding cites the computations that support it.
+4. **Reproduce a published figure.** This means an *exact* numeric reproduction of a published analysis of the same data (see §5c), plus "apply this figure's method to my trajectory" for figures made from other data.
+5. **Reproducible export.** One click gives you a standalone script that recomputes every number.
 
 ## 3. Hackathon rules that affect the build
 
-- The repo is **public**. Never commit API keys; `.env` stays in `.gitignore`.
-- **New work only.** The first code commit is on Oct 27. The README must have a "Built during the hackathon" section listing what we built, with third-party libraries credited as dependencies.
-- **Data and assets must be ours to use.** That means:
-  - The AdK dataset from `MDAnalysisTests`.
-  - Paper figures only from open-access (CC-BY) papers or the MDAnalysis docs, with attribution.
-  - No lab data in the repo.
-- Must use Meta models: Muse Spark via the Meta Model API (default), and Muse Spark Open via Baseten (open-weight mode).
+- The repo is **public**. Never commit API keys, `.env`, downloaded trajectories, or cache files.
+- **New work only.** The README must have a "Built during the hackathon" section listing every component we built, with third-party libraries credited as dependencies.
+- **Rights to data and assets.** Use only:
+  - public datasets with their licenses respected (§5),
+  - figures whose license allows reuse, with attribution in `assets/figures/ATTRIBUTION.md`.
 
-## 4. Non-negotiable engineering rules
+  No lab data, ever. That includes sending it to Contributor-mode models.
+- Must use Meta models: Muse Spark and Muse Wonder through the Meta Model API, and Muse Spark Open through Baseten.
+- **Judges evaluate during Nov 5–8 and may use the live app.** The deployment must keep working and must not run out of credits (§12).
 
-- **The LLM never produces numbers.** Every displayed value comes from a deterministic tool function.
-- **No arbitrary code execution.** The agent can only call the tool registry (§7). No `eval`, and no running generated code on the server. (The exported script runs only inside a Modal Sandbox, and only when the user clicks.)
-- **No uploads of trajectories.** The dataset is preloaded server-side. Users may upload only a figure image and methods text.
-- **Consequential parameters require confirmation.** These are groups, cutoff, frame range/stride, and contact definition. The agent proposes, a PlanCard shows the plan, and nothing runs until the user clicks Run.
-- **Units are explicit everywhere.** Use Å and ns (with frame index alongside).
+## 4. Engineering rules (non-negotiable)
 
-## 5. Dataset
+- **The LLM never writes numbers.** It writes text with **placeholders** that reference results, e.g. `{{f3.delta}}` or `{{r12.ci_low}}`. Code fills in the values from stored tool results, with formatting and units. If text contains a bare numeral that isn't a residue number or a plan parameter, the deterministic check (§9 step 7) flags it.
+- **No code execution from model output.** The agent can only call registered tools (§7). The export script is generated from **templates by our code**, never by the LLM.
+- **No trajectory uploads.** Datasets are preloaded server-side. Users upload only a figure image and a methods PDF or text.
+- **Consequential parameters need human approval:**
+  - groups,
+  - cutoff,
+  - frame window and stride,
+  - contact definition,
+  - dataset.
 
-- AdK closed→open trajectory: `PSF`, `DCD` from `MDAnalysisTests.datafiles`.
-- Groups: the **LID** vs. **NMP** domains (plus **CORE** if useful). Their inter-domain contacts change across the transition.
-- Verify the domain residue ranges against the MDAnalysis docs or literature, and store them in `config/dataset.yaml`.
-- Record the atom count, frame count, timestep, and whether a box/PBC exists. This trajectory likely has no box; handle both cases anyway.
+  The backend enforces this; it is not left to the prompt.
+- **Units.** Distance is in Å. Time is in ns for the equilibrium dataset; the transition dataset has **no physical time**, so show "path step" and never invent ns. Frame index is always kept alongside.
+- **Keep model context small.** The LLM receives *summaries* of tool results: top-N rows, statistics, provenance ids, and shapes. Full matrices go to the UI only. A tool result sent to the model must stay under about 2,000 tokens.
 
-## 6. Stack
+## 5. Data
+
+### 5a. The protein
+**Adenylate kinase (AdK)** from *E. coli* is a 214-residue enzyme whose LID and NMP domains close over the substrates ATP and AMP, then reopen. Its domains are commonly defined as:
+- **NMP:** residues 30–59
+- **LID:** residues 122–159
+- **CORE:** the rest (1–29, 60–121, 160–214)
+
+These come from Beckstein et al. 2009 and MDAnalysis teaching material. **Day 1 must confirm the ranges against a citable source and record the source in `config/dataset.yaml`.**
+
+### 5b. Two datasets, two jobs
+
+| | **`adk_equilibrium` (primary)** | **`adk_transition` (fixture + reproduction)** |
+|---|---|---|
+| What | 1.004 µs unbiased equilibrium MD of apo AdK (Anton, CHARMM27, solvent stripped, fit to CORE) | 98-frame closed→open transition path made with DIMS, a *biased* path-sampling method |
+| Frames | 4,187, one every 0.24 ns | 98 path steps, not equally spaced in time |
+| Get it | `MDAnalysisData.datasets.fetch_adk_equilibrium()`, about 161 MB, cached, **never committed** | `MDAnalysisTests.datafiles` `PSF`, `DCD` |
+| License / cite | CC-BY 4.0. Seyler & Beckstein 2017, doi:10.6084/m9.figshare.5108170.v1 | Beckstein et al. 2009, *J Mol Biol* 394:160–176, doi:10.1016/j.jmb.2009.09.009 |
+| Stats valid? | **Yes** | **No.** Biased and non-stationary. `stats_valid: false`; stats tools refuse with an explanation |
+| Used for | All investigations and statistics | Fast tests, "closed vs open" contrast, exact figure reproduction |
+
+`config/dataset.yaml` holds each dataset's:
+- id, loader, and license/citation
+- `stats_valid`
+- `dt_ns` (`null` for transition)
+- the domain ranges and their source
+
+The dataset is a parameter on every tool, and the UI shows which dataset is active.
+
+### 5c. Reproduction targets (decide on Day 1, by end of day)
+- **Exact reproduction (primary demo):** the MDAnalysis User Guide's "Q1 vs Q2 contact analysis" example, run on the same `adk_transition` data.
+  - Its figures (fraction of native contacts vs frame, and Q1 vs Q2) can be reproduced **numerically**, which proves the pipeline end to end.
+  - Requires one extra tool: `native_contacts` (§7).
+  - **Before showing their figure image in the app or video:** check the User Guide repo's license and record it in `ATTRIBUTION.md`. If reuse isn't allowed, re-plot from their published code and data instead, and link the page.
+- **Method transfer (secondary):** an open-access (CC-BY) paper figure of a contact map or distance trace for any protein. The agent extracts the method and applies it to `adk_equilibrium`. The UI labels this **"Method applied to your data — numbers are not expected to match."**
+- Store figures and attribution in `assets/figures/`.
+
+### 5d. Data reconnaissance (Day 1; decides the demo story)
+On `adk_equilibrium`, compute and print contact-frequency summaries for **LID–NMP, LID–CORE, and NMP–CORE** at 4.5 Å. Flag which pairs ever form contacts and how variable they are.
+- If LID–NMP contacts are nearly absent, which is plausible for apo AdK, the demo uses the group pair with the richest behavior.
+- **Do not hard-code any domain pair as "the" story.** Write the findings to `notes/recon.md`. This is the one allowed extra .md file.
+
+## 6. Stack and environment
 
 | Layer | Choice |
 |---|---|
 | Frontend | React + TypeScript (Vite), deployed on Vercel |
-| Charts | Plotly (`react-plotly.js`) |
-| 3D viewer | NGL Viewer |
-| API | FastAPI (Python 3.11+), deployed on Modal |
-| Science | MDAnalysis, NumPy, SciPy |
-| LLM (agent loop) | Meta Model API, `muse-spark-1.3`, via the **Responses API** (OpenAI Python SDK) |
-| LLM (verifier) | Meta Model API, `muse-wonder-1.0`: a different, stronger model checks the agent's work |
-| LLM (open-weight mode) | Baseten, `meta-models/muse-spark-open-1026`, via Chat Completions |
+| Charts | Plotly (`react-plotly.js`) in the UI; **matplotlib** for server-side PNGs (verifier input, export) |
+| 3D viewer | NGL Viewer (§10a) |
+| API | FastAPI, Python **3.11 or 3.12**, deployed on Modal |
+| Science | MDAnalysis, NumPy, SciPy (`MDAnalysis.analysis.contacts` for native contacts) |
+| LLM: agent | Meta Model API, `muse-spark-1.3`, **Responses API** (OpenAI Python SDK) |
+| LLM: verifier | Meta Model API, `muse-wonder-1.0` |
+| LLM: open-weight mode | Baseten, `meta-models/muse-spark-open-1026`, Chat Completions |
 | Reproducibility check | Modal Sandbox |
-| Provenance | JSON files (no database) |
+| Storage | JSON files + `.npy` caches on a Modal Volume when deployed |
 
-Env vars:
-- `META_API_KEY`, `META_API_BASE_URL=https://api.meta.ai/v1`
-- `META_MODEL` (`muse-spark-1.3-contributor` during development, `muse-spark-1.3` for the demo/deploy)
+**Local environment:** the developer is on Windows.
+- Use a project virtual environment (`python -m venv .venv`), and pin dependencies in `backend/requirements.txt`.
+- Commands must work in both PowerShell and Git Bash, or the README gives both.
+
+**Env vars** (`.env` locally, Modal Secrets when deployed, never in frontend code):
+- `META_API_KEY`
+- `META_API_BASE_URL=https://api.meta.ai/v1`
+- `META_MODEL`: `muse-spark-1.3-contributor` for development, `muse-spark-1.3` for the demo
 - `META_VERIFIER_MODEL=muse-wonder-1.0`
-- `BASETEN_API_KEY`, `BASETEN_BASE_URL=https://inference.baseten.co/v1`, `BASETEN_MODEL=meta-models/muse-spark-open-1026`
+- `META_REASONING_EFFORT`: per call type, see §9c
+- `BASETEN_API_KEY`
+- `BASETEN_BASE_URL=https://inference.baseten.co/v1`
+- `BASETEN_MODEL=meta-models/muse-spark-open-1026`
 - `MODEL_PROVIDER=meta|baseten`
+- `APP_MODE=live|replay`
+- `DAILY_LLM_BUDGET_USD`
+- `DEMO_PASSCODE`
 
-### LLM wrapper (`app/agent/llm.py`)
-- There is **one** wrapper with one interface, `run_turn(messages, tools, response_schema) -> {tool_calls | final}`. The rest of the app never touches a provider SDK directly.
-- **Meta path:** `client.responses.create(...)` with `include=["reasoning.encrypted_content"]`, replaying prior reasoning items each turn so the model keeps its train of thought across a multi-step tool loop (Meta's docs: without this the model "reasons from scratch each turn and can lose the thread").
-- **Baseten path:** `client.chat.completions.create(...)` with standard tool calling. Same interface, same tools.
-- Pass `api_key` explicitly. The OpenAI SDK does not read our env var names on its own.
-- Retry 429s with exponential backoff + jitter, honoring `Retry-After`.
-- Log `usage` (input, output, cached tokens) per call to provenance, so we can show the cost per investigation.
+### 6a. API reference material
+Meta's docs live at dev.meta.ai/docs. The developer saves the needed pages as text in `docs_local/meta/`. That folder is **gitignored**; it's Meta's copyrighted documentation, for local reference only. The pages are:
+- tool-calling
+- structured-output
+- image-understanding
+- file-handling
+- reasoning
+- responses API
+- error-handling
 
-### Cost plan ($150 Meta credits)
-- **Development uses `muse-spark-1.3-contributor`** ($0.10 in / $0.20 out per 1M tokens, ~12–20× cheaper). This is acceptable because the AdK dataset and the figures are public; Contributor mode lets Meta train on content. Never send non-public data.
-- **Demo and deploy use `muse-spark-1.3` (Standard mode).**
-- The verifier runs on Muse Wonder ($4 / $20 per 1M); keep its input to the tool JSON + interpretation + one PNG.
-- Put the stable system prompt and tool schemas first in every request so prompt caching applies.
+**Before writing any LLM code, read the relevant page there. If a needed page is missing, stop and ask; don't guess request shapes.**
 
-## 7. Tool registry (the only things the agent can call)
+### 6b. LLM wrapper (`app/agent/llm.py`)
+- There is one interface: `run_turn(input_items, tools, *, schema=None, effort) -> TurnResult` (tool_calls | final_text | parsed), plus usage.
+- **Meta path:** `client.responses.create(...)` with `include=["reasoning.encrypted_content"]`. Append the model's output items, including reasoning, to the next turn's input so reasoning carries across the tool loop.
+- **Baseten path:** Chat Completions with function tools, behind the same interface. Smoke-test tool calling and image input on Day 4 morning. If tool calling is unreliable there, open-weight mode supports only the explain/verify steps, and the UI says so.
+- Pass `api_key` explicitly.
+- Timeouts: 120 s per call. Retry 429 and 5xx with exponential backoff and jitter, honoring `Retry-After`, max 3 tries.
+- Record usage per call: tokens, model, latency, and estimated $.
 
-Every tool returns `{ result, params, units, provenance_id }`.
+## 7. Tools
+
+Every tool:
+- takes `dataset` plus its params,
+- validates its inputs,
+- returns `{status, summary_for_model, data_for_ui, params, units, provenance_id}`.
+
+`status` is `ok`, `refused` (with a reason, e.g. stats on the transition dataset), or `error`.
+
+**Science tools**
 
 | Tool | Purpose |
 |---|---|
-| `get_metadata` | atoms, residues, segments, n_frames, dt_ns, has_box, groups |
-| `list_groups` | named selections + residue ranges |
+| `get_metadata` | atoms, residues, n_frames, dt_ns / path steps, has_box, stats_valid, groups |
+| `list_groups` | named groups and their residue ranges, with source |
 | `calculate_contacts` | residue-pair contact frequency matrix for two groups over a frame window |
-| `compare_intervals` | per-pair frequency change between two windows, top-N changed, **with block-bootstrap CI** |
 | `distance_over_time` | min heavy-atom distance per frame for one residue pair |
-| `contact_statistics` | for one pair: autocorrelation time τ, effective sample size, block-bootstrap CI of the contact frequency |
-| `cutoff_sensitivity` | contact frequency per pair across several cutoffs (stretch) |
-| `highlight` | UI-only: residues + frames to highlight |
+| `compare_intervals` | per-pair frequency change between two windows, block-bootstrap CI, **BH-FDR q-values**, supported or not |
+| `contact_statistics` | for one pair: τ, N_eff, block-bootstrap CI of the frequency |
+| `native_contacts` | fraction of native contacts vs frame against chosen reference frames (wraps `MDAnalysis.analysis.contacts`), for the §5c exact reproduction |
+| `cutoff_sensitivity` | contact frequency per pair across cutoffs (stretch) |
 
-**Contact definition (fixed, shown on every PlanCard):** two residues are in contact in a frame if their minimum heavy-atom distance ≤ cutoff (Å).
+**Bookkeeping tools**
+
+| Tool | Purpose |
+|---|---|
+| `update_checklist` | `item, status, note`; drives the live step log |
+| `record_finding` | `text_with_placeholders, evidence_ids[]`; rejected unless every placeholder resolves to a stored result and every evidence id exists |
+| `submit_report` | `finding_ids[], caveats[], follow_ups[]`; ends the run |
+
+**UI-only:** `highlight(residues[], frames[])`.
+
+**Contact definition (fixed, shown on every plan):** two residues are in contact in a frame if their minimum heavy-atom distance ≤ cutoff (Å).
 
 ## 8. Science implementation
 
-- **Precompute once.** Build `min_dist[frame, resA, resB]` for the chosen groups (heavy atoms) and cache it to `.npy`. Most tools then become NumPy slices of it. Use `MDAnalysis.lib.distances.distance_array` with an atom→residue index map.
-- **PBC.** If a box exists, use minimum-image distances and record that in provenance. If not, record `pbc: "none"`.
-- **Canonical residue key:** `segid:resid:resname`. The backend, Plotly labels, and NGL selections all use this exact key. This is the #1 bug risk, so test it.
-- **Time.** Always keep both frame index and `time_ns`.
+- **Precompute** `min_dist[frame, resA, resB]` per `(dataset, groupA, groupB, selection)`.
+  - Cache it to `cache/<hash>.npy` (gitignored), keyed by a hash of the inputs plus the library versions.
+  - Show a progress message the first time. On `adk_equilibrium`, the LID–NMP run is about 4,187 frames × roughly 300 × 230 atoms, which is fine but takes time; measure it and record it in `notes/recon.md`.
+- **PBC:** if a box exists, use minimum-image distances; otherwise record `pbc: "none"`.
+- **Residue key:** `dataset:segid:resid:resname`. One function builds it and one parses it. The UI-to-NGL mapping uses `resid` (single chain), via one tested function (§10a).
+- **Tests use `adk_transition`** so they run in seconds. One slow test, marked `@pytest.mark.slow`, checks the equilibrium precompute against a direct calculation on a few frames.
 
-### 8a. Statistics module (`app/science/stats.py`)
-
-- **Integrated autocorrelation time τ** of the per-frame contact indicator series (0/1). Use an automatic windowing cutoff, and handle constant series (all 0 or all 1) explicitly.
-- **Effective sample size:** `N_eff ≈ N / (2τ)`, reported on every result.
-- **Moving-block bootstrap** for the contact frequency and for the frequency difference between intervals. Use block length ≈ max(1, ceil(2τ)) and 2,000 resamples, with a fixed seed recorded in provenance.
-- **Decision rule.** A change is "supported" only if its 95% CI excludes 0. Otherwise it is "not distinguishable from noise at this sampling."
+### 8a. Statistics (`app/science/stats.py`)
+- **τ:** integrated autocorrelation time of the per-frame 0/1 contact series, with automatic windowing (Sokal).
+  - Constant series (always or never in contact) return `tau=None` and `stats_note`.
+  - Series with fewer than 5 transitions are flagged "too few events for reliable CI."
+- **N_eff** = N / (2τ), reported everywhere. **Show time too:** N_eff × 0.24 ns is "how much independent sampling you really have."
+- **Moving-block bootstrap:**
+  - block length = max(1, ceil(2τ)), 2,000 resamples
+  - fixed seed, recorded in provenance
+  - applied to frequencies and to between-window differences
+  - the two windows are resampled independently
+- **Multiple comparisons:** `compare_intervals` tests many pairs at once, so 95% CIs alone would produce false positives (about 5% of pairs).
+  - Compute a bootstrap p-value per pair and apply **Benjamini–Hochberg FDR at q < 0.05**.
+  - "Supported" = q < 0.05 **and** the CI excludes 0.
+  - The UI says how many pairs were tested.
+- **Refusal:** if `stats_valid` is false, return `status: refused` with a one-sentence explanation the UI can show.
 - **Validation tests:**
-  - On a synthetic AR(1) series with a known τ, the estimated τ is within tolerance.
-  - On white noise, the block bootstrap CI ≈ the naive CI.
-  - On a strongly correlated series, the block CI is clearly wider than the naive CI.
+  - On AR(1) with known τ, the estimate is within 20%.
+  - On white noise, the block CI ≈ the naive CI.
+  - On a correlated series, the block CI is clearly wider.
+  - On 500 pure-noise pairs, BH declares ≤ 5% supported.
 
 ## 9. Agent flow
 
-**What makes this an agent, not a form:** one question becomes a multi-step *investigation* that the agent plans, runs, and adapts. It is not one question → one tool call.
+1. **Input:** a question, *or* a figure image (+ optional methods PDF). Images and PDFs go to Muse Spark natively. If a file fails, fall back to `pypdf` text.
+2. **Plan:** structured output (schema enforced) with up to 5 steps. Each step has a tool, params, rationale, and optional references to earlier steps' results.
+   - In figure mode, the agent first returns an **extracted spec**: each field with its value, confidence, and source (caption / methods / axis / assumed).
+   - It also declares whether this is an **exact reproduction** (the figure's data is one of our datasets) or a **method transfer**.
+3. **Validate (code):**
+   - schema check
+   - groups exist
+   - frames in range
+   - cutoff between 2.0 and 10.0 Å
+   - tools allowed for the dataset (e.g. no stats on `adk_transition`)
 
-1. **Input.** Either a natural-language question, or a figure image + methods PDF ("reproduce this"). Muse Spark accepts **images and PDFs natively**, so send both directly; no text extraction is needed.
-2. **Plan an investigation.** Muse Spark returns a structured plan with **up to 5 steps**. Each step has a tool, params, and a one-line rationale, and later steps can reference earlier results (e.g. step 3 = `contact_statistics` on "the top 3 supported pairs from step 1"). For example, "Why do LID and NMP separate?" might become:
-   1. `compare_intervals`
-   2. `contact_statistics` on the top supported pairs
-   3. `distance_over_time` on the strongest pair
-   4. summarize
+   Invalid plans go back to the model once with the errors. If it fails again, show the user what's wrong.
+4. **Approve once:** the PlanCard shows every step with editable params, the active dataset, and the contact definition. One **Run** click approves it all, and the approved params are stored server-side.
+5. **Execute** with the turn loop (§9b):
+   - The model chooses every call.
+   - The backend rejects calls that change approved groups, cutoff, window, or dataset.
+   - The model may skip an item (with a reason) or add **one** extra step using already-approved params.
+   - A live step log streams to the UI.
+6. **Report:** built only from recorded findings. The sections are:
+   - Observed
+   - Statistical support (N_eff, CI, q-value, supported or not)
+   - Possible explanations (hedged, marked as hypotheses)
+   - Caveats (always including single-trajectory and limited-sampling caveats)
+   - Follow-ups, each a runnable plan step
 
-   In reproduce mode, the agent first returns an **extracted spec** listing each field it read from the figure/methods, with a confidence level and the source ("from caption", "from methods", "assumed").
-3. **Validate.** The backend checks the params against the schema and the metadata (groups exist, frames in range, cutoff between 2 and 10 Å).
-4. **Confirm once.** The PlanCard shows every step with editable params. The user approves the whole investigation with one Run click.
-5. **Execute autonomously.** The agent runs the steps in a tool loop, resolving references to earlier results as it goes. It may **adapt**: drop a step whose input is empty (e.g. no supported changes), or add at most one extra step from the approved tool set. Any adaptation is shown in a live step log ("Step 2 skipped: no pairs passed the CI test"). Parameter changes that the user didn't approve (groups, cutoff) are not allowed mid-run; the agent must stop and propose a new plan instead. Every call is logged to provenance.
-6. **Interpret.** Structured output with these sections: Observed (cite numbers from the result), Statistical support (N_eff, CI, supported or not), Possible explanations (hedged), Caveats, Suggested follow-ups (each one a runnable tool call).
-7. **Verify.** An independent verifier on **Muse Wonder** (a different model from the one that wrote the interpretation) receives the tool JSON, the interpretation, and the rendered plot PNG. It flags:
-   - any number not present in the result,
-   - any "significant/changed" claim without CI support,
-   - any mismatch between the claim and the plot.
+   Placeholders are filled by code.
+7. **Verify:**
+   - **Deterministic check (always runs):**
+     - every placeholder resolves;
+     - no bare numerals remain except residue numbers and approved params;
+     - every "supported/significant/changed" claim cites a result where supported = true;
+     - findings citing refused or errored results are flagged.
+   - **Model check (Muse Wonder):** receives the report text, the findings with their resolved values, and one matplotlib PNG per figure. It flags claims that the data or plot doesn't support.
+   - The UI shows ✅ or ⚠️ with the flags. The demo includes one intentionally overclaiming report, triggered by a dev-only toggle, to show the verifier catching it.
+8. **Follow-ups:** the conversation state (last run, selected pair, approved params) is stored per session server-side. "Does that persist?" resolves to the selected or top supported pair and produces a new plan for approval.
 
-   Flags show in the UI. Run a deterministic number check too, not only the LLM check.
-8. **Follow-ups** reuse context. "Does that persist?" resolves to the last selected or top-ranked pair.
+### 9b. Turn loop (`app/agent/orchestrator.py`)
+This is the same pattern as Meta's Agents 101 workshop. The loop is thin; all logic lives in tools.
+```
+run_investigation(session, question, approved_plan):
+    run = new_run()                       # investigations/<run_id>.json
+    input = [system prompt (stable, cached), user: question + plan as checklist]
+    for turn in 1..MAX_TURNS (8):
+        resp = llm.run_turn(input, TOOLS, effort=EFFORT["loop"])
+        input += resp.output_items        # includes encrypted reasoning
+        if no tool call: input += "Call exactly one tool."; continue
+        result = tools.run(call, approved_plan)    # guardrails enforced here
+        input += tool_result(result.summary_for_model)
+        save_progress(run, turn, call, result)     # → step log (SSE)
+        if result.status == "submitted": break
+        if turn == MAX_TURNS - 1: input += "Last turn: call submit_report now."
+    return run
+```
+- `resume_run(run_id)` continues from saved progress.
+- CLI quick check: `python -m app.agent.cli run --turns 3 "<question>"` prints one line per turn.
 
-Fallback only: if native PDF input fails for a specific file, extract the text with `pypdf` and send text + image.
+### 9c. Latency and cost budget (measure on Day 4; adjust)
+- Reasoning effort:
+  - `low` for the loop turns
+  - `medium` for planning and figure extraction
+  - `high` only for the verifier
+- **Target: a full investigation completes in under 90 s.**
+- Stream the step log so the user always sees progress.
+- If it's too slow, reduce turns, lower effort, and send smaller summaries.
+- Log $ per run. Print the cost of the last run in the CLI.
 
-### 9a. Stretch uses of Meta tooling (only if ahead; in this order)
-1. **SAM 3.1 panel finder.** Real paper figures have several panels. Send the figure to `sam-3.1` with a prompt like "heatmap" or "contact map" and crop the matching panel before extraction. Cost: about $0.0025 per image.
-2. **Search grounding for literature context.** In the interpretation's "Possible explanations" section, the agent can call the `web_search` tool to cite published work on the AdK LID/NMP motion. Citations show as links, and they are clearly separated from computed results. Cost: $2.50 per 1,000 searches.
+### 9d. Stretch (only if ahead, in order)
+1. SAM 3.1 to crop the relevant panel from a multi-panel figure.
+2. Search grounding (`web_search`) for literature-backed hypotheses, shown separately from computed results.
 
 ## 10. UI
 
-- **Heatmap** (residue × residue frequency). Clicking a cell highlights both residues in NGL and suggests "distance over time for A↔B".
-- **Distance plot.** Includes a cutoff line. Clicking a point jumps NGL to that frame.
-- **Comparison bar chart** of top changed pairs, with CI error bars. Unsupported changes are greyed out.
-- **Reproduce view.** The paper figure is on the left and our figure on the right, with the extracted spec table underneath.
-- **Verifier badge** on every result: ✅ verified, or ⚠️ with the list of flags.
-- **Model toggle:** Muse Spark (hosted) ↔ Muse Spark Open (Baseten).
-- One shared highlight store; the plots and the viewer both subscribe to it.
+Components:
+- **Chat**
+- **PlanCard**
+- **StepLog**
+- **Heatmap:** clicking a cell highlights the residues and suggests a follow-up
+- **DistancePlot:** with a cutoff line; clicking a point jumps to that frame
+- **CompareChart:** CI bars; unsupported pairs greyed; shows the "N tested, FDR 5%" note
+- **ReportView:** placeholders rendered with values; hovering a value shows its provenance
+- **ReproduceView:** their figure on the left, ours on the right, the spec table, and the match result (exact mode) or the "method applied" label (transfer mode)
+- **VerifierBadge**
+- **DatasetBadge**
+- **ModelToggle**
+- **CostMeter:** small, showing $ per run
+
+One shared selection store drives the plots and the viewer. The UI never calls an LLM directly; everything goes through the backend.
+
+### 10a. 3D viewer data path (decided now so Day 2 doesn't stall)
+- The backend serves a **reference structure** as PDB: `GET /structure/{dataset}`.
+- **Coordinates:** `GET /frames/{dataset}?start&stop&stride` returns a compact binary Float32 array of protein heavy atoms (or all 3,341 atoms) for up to about 300 frames. The frontend adds these as an NGL trajectory/frames for playback.
+  - For the equilibrium set, default to stride 14 (about 300 frames); jump-to-frame requests the exact frame.
+- **Atom order:** the PDB and the coordinate arrays are written by the **same** MDAnalysis AtomGroup, so atom order matches. This has a test.
+- **Selection mapping:** `residueKeyToNglSelection(key)` returns `"<resid> and .CA"` (or the sidechain for licorice), from one function with a test fixture. Verify visually for 5 residues on Day 2.
 
 ## 11. Provenance and export
 
-- Each tool call is appended to `investigations/<id>.json`. Each entry records:
-  - tool, params, units, and seed
+- Every tool call is appended to `investigations/<run_id>.json`. Each entry records:
+  - tool, params, and dataset id
   - dataset file hashes
+  - seed
   - library versions
-  - model + provider
+  - model, provider, and usage
   - timestamp
-  - a result summary
-- **Export** creates `reproduce_<id>.py`: plain MDAnalysis/NumPy that recomputes every result, including bootstrap CIs with the same seed, and saves the plots.
-- **"Verify in clean environment"** button: runs the script in a Modal Sandbox and shows whether the numbers match the app (within tolerance).
+  - the summary and a pointer to the full result
+- **Export:** `reproduce_<run_id>.py` is generated from templates by our code. It:
+  - uses only MDAnalysis, MDAnalysisData, NumPy, SciPy, and matplotlib;
+  - fetches the dataset;
+  - recomputes every result (bootstrap included, same seed);
+  - writes the plots;
+  - prints a comparison table against the values embedded from the run.
+- **Verify in clean environment:** run the export in a Modal Sandbox (dataset from a Modal Volume) and show a match within tolerance.
 
-## 12. Repo layout
+## 12. Deployment, reliability, and spend safety
+
+- **Deploy early.** The first deploy is a skeleton (backend health + one tool + frontend) by the end of Day 3. Redeploy every day after.
+- **Backend on Modal:**
+  - FastAPI as an ASGI app.
+  - The dataset is fetched into a Modal Volume once, and precompute caches live on the Volume.
+  - Secrets live in Modal Secrets.
+  - CORS allows only the Vercel domain.
+  - `keep_warm=1` during judging if credits allow; otherwise show a "waking up" note.
+- **Frontend on Vercel:** the backend URL comes from env; no keys in the frontend.
+- **Abuse and credit protection (required before the public link is shared):**
+  - Per-IP rate limit (e.g. 10 investigations/hour).
+  - Global daily $ budget (`DAILY_LLM_BUDGET_USD`) tracked from usage logs. When it's exceeded, switch to replay mode.
+  - A kill switch: setting env `APP_MODE=replay`.
+  - An optional `DEMO_PASSCODE` for live mode; judges get it in the submission notes.
+- **Replay mode:** 3–5 curated investigations recorded from real live runs, with full step logs and results, play back without calling any LLM. They are clearly labeled "Recorded run." The science tools, viewer, and charts stay live. This keeps the app useful during judging even if the API or credits fail.
+- **Health page:** `/health` shows the API reachable, the dataset loaded, the mode, and today's spend.
+
+## 13. Repo layout
 
 ```
 /backend
-  app/main.py
-  app/science/   loader.py contacts.py distances.py stats.py
-  app/agent/     llm.py tools.py orchestrator.py prompts.py verifier.py
-  app/provenance/ record.py export.py
+  app/main.py  app/config.py
+  app/science/   loader.py contacts.py distances.py stats.py native_contacts.py structure.py
+  app/agent/     llm.py tools.py orchestrator.py prompts.py verifier.py cli.py session.py
+  app/provenance/ record.py export.py templates/
+  app/safety/    ratelimit.py budget.py replay.py
   tests/
-  modal_app.py   (deploy entrypoint)
-/frontend
-  src/components/ Chat PlanCard Heatmap DistancePlot CompareChart ReproduceView Viewer VerifierBadge ModelToggle
-  src/state/
+  requirements.txt  modal_app.py
+/frontend  (Vite React TS)
+  src/components/ Chat PlanCard StepLog Heatmap DistancePlot CompareChart ReportView ReproduceView Viewer VerifierBadge DatasetBadge ModelToggle CostMeter
+  src/state/  src/api/
 /config/dataset.yaml
-/assets/figures/  (open-access figures + ATTRIBUTION.md)
-README.md  CLAUDE.md  SPEC.md
+/assets/figures/  (+ ATTRIBUTION.md)
+/notes/recon.md
+/docs_local/      (gitignored)
+/cache/  /investigations/  (gitignored)
+README.md  CLAUDE.md  SPEC.md  .env.example  .gitignore
 ```
 
-## 13. Daily plan (one day = one Claude Code session)
+## 14. Schedule
+
+Each day is one or more Claude Code sessions. Use `/clear` between unrelated tasks.
 
 | Day | Date | Build | Done when |
 |---|---|---|---|
-| 1 | Tue Oct 27 | Repo scaffold, dataset load, metadata, groups, min-distance precompute, `calculate_contacts`, `distance_over_time` | pytest passes; results match a hand-written MDAnalysis check on 3 pairs |
-| 2 | Wed Oct 28 | Frontend scaffold, NGL viewer, Plotly heatmap, click→highlight | clicking 5 different cells highlights the correct residues (checked by eye) |
-| 3 | Thu Oct 29 | `stats.py` (τ, N_eff, block bootstrap), `compare_intervals`, `contact_statistics`, comparison chart with CIs | synthetic AR(1) + white-noise tests pass |
-| 4 | Fri Oct 30 | LLM wrapper (Responses API + reasoning replay), multi-step investigation plan, PlanCard confirm-once, autonomous tool loop with live step log, interpretation | one question → 3-step plan → edit → run → step log → interpretation, end to end |
-| 5 | Sat Oct 31 | Reproduce-this-figure (image + methods PDF sent natively → extracted spec → plan → side-by-side) | the real open-access figure produces a matching analysis |
-| 6 | Sun Nov 1 | Verifier on Muse Wonder (deterministic number check + plot/claim check), context-aware follow-ups | a deliberately wrong interpretation gets flagged |
-| 7 | Mon Nov 2 | Export script, Modal deploy, Modal Sandbox verify, Baseten toggle | live URL works; the sandbox run reproduces the numbers |
-| 8 | Tue Nov 3 | Freeze. README, architecture diagram, 3-minute video, **submit** | submission confirmed |
-| 9 | Wed Nov 4 | Buffer, bug fixes only, X post | — |
+| 1 | Tue Oct 27 night – Wed Oct 28 | venv + requirements; `dataset.yaml` with confirmed domain ranges; loaders for both datasets; residue keys; precompute + cache; `calculate_contacts`; `distance_over_time`; **recon (§5d)**; pick the reproduction target (§5c) | `pytest -q` passes (fast tests on the transition set); 3 pairs match a direct hand calculation; the equilibrium precompute runs and its timing is recorded; `notes/recon.md` written |
+| 2 | Thu Oct 29 | FastAPI endpoints for metadata/contacts/distances/structure/frames; frontend scaffold; NGL viewer (§10a); heatmap + distance plot; click→highlight; jump-to-frame | 5 heatmap clicks highlight the correct residues (checked by eye against residue labels); clicking a distance point moves the viewer |
+| 3 | Fri Oct 30 | `stats.py` + tests; `compare_intervals` (BH-FDR); `contact_statistics`; refusal on the transition set; CompareChart; `native_contacts`; **skeleton deploy (Modal + Vercel)** | all stats validation tests pass; the live URL shows the heatmap from the deployed backend |
+| 4 | Sat Oct 31 | LLM wrapper (smoke-test Meta + Baseten first); planner with schema; PlanCard; turn loop with guardrails; bookkeeping tools; placeholders; StepLog streaming; ReportView; deterministic check; usage/cost logging | CLI and UI: question → plan → edit → run → live step log → report with filled values, in < 90 s, with the cost shown |
+| 5 | Sun Nov 1 | Figure mode: image + PDF → extracted spec → plan → exact reproduction of the §5c target with a numeric match; method-transfer label; ReproduceView. **Checkpoint: the full demo path works on the deployed app.** | the reproduction matches the target within tolerance; the deployed app runs one full investigation |
+| 6 | Mon Nov 2 | Muse Wonder verifier + overclaim toggle; follow-ups with session state; export script + Modal Sandbox verify; rate limit, budget, replay mode; record replay runs. **Feature freeze at midnight.** | the verifier flags the planted overclaim; the exported script reproduces the numbers in the sandbox; replay mode works with the LLM disabled |
+| 7 | Tue Nov 3 | Baseten toggle (if the smoke test passed); README (setup, architecture diagram, built-during-hackathon, attributions, limitations); final video; **submit by 10 PM CT** | submission confirmed; repo public; video link works in a private window |
+| 8 | Wed Nov 4 | Buffer: bug fixes only, X post, community vote push | — |
 
-**Cut order if behind:** stretch items in §9a → `cutoff_sensitivity` → agent adaptation in step 5 (keep the multi-step plan) → Baseten toggle → Modal Sandbox button (keep the export itself) → LLM plot check in the verifier (keep the deterministic check).
-**Never cut:** linked viewer, statistics, reproduce-this-figure, export.
+**Cut order if behind:**
+1. §9d stretch items
+2. `cutoff_sensitivity`
+3. Baseten toggle
+4. Modal Sandbox button (keep the export)
+5. agent "add one step" adaptation
+6. Muse Wonder model check (keep the deterministic check)
+7. method-transfer mode (keep exact reproduction)
 
-## 14. Demo video (3 minutes)
+**Never cut:** linked viewer, statistics + FDR, the multi-step agent with evidence, exact figure reproduction, export, replay mode.
 
-1. **0:00–0:20.** Drop in a paper figure. The extracted spec appears, then the side-by-side reproduction.
-2. **0:20–1:00.** Ask "why do the LID and NMP domains come apart?" The agent proposes a 3–4 step investigation; edit the cutoff and approve once. The step log runs live (including one adaptive skip or add). The bar chart appears with CIs, and some changes are greyed out as "noise."
-3. **1:00–1:40.** Click a supported pair: it highlights in 3D. Ask "does that persist?" The distance plot appears; click the crossing point and the viewer jumps to that frame.
-4. **1:40–2:10.** The verifier catches an overclaim (pre-scripted question). Show N_eff ("1,000 frames ≈ 40 independent samples").
-5. **2:10–2:40.** Export the script, verify it in the Modal Sandbox, and show that the numbers match.
-6. **2:40–3:00.** Flip to open-weight mode ("labs can self-host"), plus the built-during-hackathon summary.
+## 15. Demo video (3 minutes; rough cut Mon Nov 2, final Tue Nov 3)
 
-## 15. Out of scope
+The demo questions are chosen **after** Day 3 from what the recon actually shows. The skeleton:
 
-- Running simulations
-- Trajectory uploads
-- Formats beyond the verified dataset
-- RMSD/RMSF
-- Accounts
-- A database
-- Arbitrary code execution
-- Lab data
-- The C++ kernel (post-hackathon)
+1. **0:00–0:25.** Drop in the published figure. The extracted spec appears, our figure appears next to theirs, and the numbers match.
+2. **0:25–1:05.** Ask a real question on the equilibrium data. The plan appears; edit the cutoff and approve. The step log runs, and the chart shows supported pairs vs greyed noise, with the "N tested, FDR 5%" note.
+3. **1:05–1:40.** Click a supported pair and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame.
+4. **1:40–2:05.** Show the honesty: N_eff in ns of independent sampling, a stats refusal on the transition set, and the verifier catching a planted overclaim.
+5. **2:05–2:35.** Export the script; the sandbox re-run matches.
+6. **2:35–3:00.** Show the open-weight toggle (if shipped), the cost per investigation, and the built-during-hackathon summary.
+
+Record with replay mode available as a fallback, but use **real live runs** for the recording.
+
+## 16. Known limitations (state these in the README; judges respect honesty)
+
+- One protein, two public trajectories. No uploads.
+- Single trajectory: findings describe this simulation, not biology in general.
+- Contact definition is fixed (min heavy-atom distance ≤ cutoff).
+- Method-transfer reproductions are not expected to match numerically.
+- Replay runs are recorded real runs, labeled as such.
+
+## 17. Out of scope
+
+Running simulations; trajectory uploads; other proteins or formats; RMSD/RMSF; accounts; a database; executing model-written code; lab or private data; the C++ kernel (post-hackathon).
