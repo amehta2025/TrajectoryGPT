@@ -93,7 +93,7 @@ provisional below 40 independent chunks (N / 2τ) in either window. The block bo
 
 ### CI calibration (for README and SPEC §8a / §16)
 
-Rerun: `cd backend && python -m scripts.calibrate_ci --reps 200` (about 2 min). It writes `notes/calibration/coverage_by_process.csv`
+Rerun: `cd backend && python -m scripts.calibrate_ci --reps 200` (about 4 min). It writes `notes/calibration/coverage_by_process.csv`
 and `coverage_by_chunks.csv`.
 
 - Synthetic min distance = cutoff + offset + a·AR(1) + fast noise, so the true frequency is known.
