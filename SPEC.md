@@ -96,7 +96,8 @@ The dataset is a parameter on every tool, and the UI shows which dataset is acti
 On `adk_equilibrium`, compute and print contact-frequency summaries for **LID–NMP, LID–CORE, and NMP–CORE** at 4.5 Å. Flag which pairs ever form contacts and how variable they are.
 - If LID–NMP contacts are nearly absent, which is plausible for apo AdK, the demo uses the group pair with the richest behavior.
 - **Do not hard-code any domain pair as "the" story.** Write the findings to `notes/recon.md`. This is the one allowed extra .md file.
-- **Result (Day 1, see `notes/recon.md`):** LID–NMP contacts are nearly absent on `adk_equilibrium` (the top pair is in contact in 1.1% of frames; no pair is variable). The demo story centers on **NMP–CORE** (38 variable pairs), then **LID–CORE** (15). LID–NMP is used only as the closed-vs-open contrast with `adk_transition`. Group names stay parameters in code.
+- **Result (Day 1, see `notes/recon.md`):** LID–NMP contacts are nearly absent on `adk_equilibrium` (the top pair is in contact in 1.1% of frames; no pair is variable). Recon picked **NMP–CORE** (38 variable pairs), then **LID–CORE** (15). LID–NMP is used only as the closed-vs-open contrast with `adk_transition`. Group names stay parameters in code.
+  - **Updated after Day 3 statistics (2026-10-28):** with calibrated CIs (§8a), the first-vs-second-half comparison finds **0** supported NMP–CORE changes and **4** firm LID–CORE changes. The live investigation therefore centers on **LID–CORE**, and NMP–CORE becomes the "honest null" (§15).
 
 ## 6. Stack and environment
 
@@ -462,12 +463,23 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 
 ## 15. Demo video (3 minutes; rough cut Mon Nov 2, final Tue Nov 3)
 
-The demo questions are finalized **after** Day 3. Per the recon (§5d), the live investigation (beats 2–3) centers on **NMP–CORE**, with **LID–CORE** as the backup. The skeleton:
+Demo story (set after Day 3, see §5d and `notes/recon.md`):
+- The live investigation (beats 2–3) centers on **LID–CORE**, featuring **HSE134–ASP118**.
+  - First vs second half at 4.5 Å: frequency 0.527 → 0.399, Δ −0.127, CI [−0.185, −0.070], q = 4e-4, supported and firm (hundreds of independent chunks per window).
+  - It stays supported and firm at 4.0 Å (q = 0.001) and 5.0 Å (q = 0.006), but **not at 5.5 Å**, where the contact is almost always formed (0.98 → 0.97). So the beat-2 cutoff edit goes to 4.0 or 5.0 Å, never ≥ 5.5 Å.
+- **NMP–CORE is the honest null** in beat 4.
+
+The skeleton:
 
 1. **0:00–0:25.** Drop in the published figure. The extracted spec appears, our figure appears next to theirs, and the numbers match.
-2. **0:25–1:05.** Ask a real question on the equilibrium data. The plan appears; edit the cutoff and approve. The step log runs, and the chart shows supported pairs vs greyed noise, with the "N tested, FDR 5%" note.
-3. **1:05–1:40.** Click a supported pair and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame.
-4. **1:40–2:05.** Show the honesty: N_eff with τ in ns, a "supported (slow — provisional)" pair and its tooltip, a stats refusal on the transition set, and the verifier catching a planted overclaim.
+2. **0:25–1:05.** Ask a real question on the equilibrium data about **LID–CORE** contacts (e.g. "Which LID–CORE contacts change between the first and second half of the run?"). The plan appears; edit the cutoff (4.0 or 5.0 Å) and approve. The step log runs, and the chart shows the few supported pairs vs greyed noise, with the "N tested, FDR 5%" note.
+3. **1:05–1:40.** Click **HSE134–ASP118** and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame.
+4. **1:40–2:05.** Show the honesty:
+   - **The honest null: NMP–CORE.** **SER30–ASP84** looks like a big drop (0.46 → 0.15, Δ = −0.31), and its own 95% CI [−0.57, −0.06] excludes 0. But its contacts change slowly (τ ≈ 10–14 ns), so each half holds only about 25 / 18 independent chunks. After correcting for 53 pairs tested, q = 0.31: **not supported**, labelled provisional.
+     - Show the CI and q side by side (the CompareChart hover shows both).
+     - Say it plainly: "the frames are correlated and we tested 53 pairs, so this drop isn't established."
+     - All 53 NMP–CORE pairs come out unsupported.
+   - Also show N_eff with τ in ns, the "fewer than 40 independent chunks" tooltip, a stats refusal on the transition set, and the verifier catching a planted overclaim.
 5. **2:05–2:35.** Export the script; the sandbox re-run matches.
 6. **2:35–3:00.** Show the open-weight toggle (if shipped), the cost per investigation, and the built-during-hackathon summary.
 

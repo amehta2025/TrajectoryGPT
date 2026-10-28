@@ -30,7 +30,7 @@ Cached runs load in < 0.5 s. Dataset download (168 MB DCD) took about 2 min 15 s
   Many transitions mean many independent events, so N_eff should be healthy.
 - **LID–CORE** is second: 15 variable pairs, mostly at the LID hinge
   (HSE134–ASP118 at 0.463; ARG123–ARG119 at 0.573; THR155–GLN160 at 0.576).
-- Suggested demo default: **NMP–CORE**, with LID–CORE as a second example. LID–NMP is useful only
+- Day 1 suggestion (superseded, see "Demo story" below): **NMP–CORE**, with LID–CORE as a second example. LID–NMP is useful only
   as the "closed vs open" contrast against `adk_transition`, where it does form contacts
   (LYS157–ASP54 at 0.653 of path steps). Final choice of demo questions comes after Day 3 (SPEC §15).
 
@@ -108,3 +108,24 @@ and `coverage_by_chunks.csv`.
   autocorrelation tails, and quoted 61–87% / 49–82% coverage. The cause was wrong: τ estimates match the true τ on
   2-million-frame series (9.5 vs 9.6 and 89.5 vs 90.8 frames). The 2τ blocks were too short for the slow tail of
   the autocorrelation, so the bootstrap missed variance. Those percentages described the bootstrap and are superseded.
+
+## Demo story (decided after Day 3 statistics, 2026-10-28; SPEC §15)
+
+- **Live investigation (beats 2–3): LID–CORE, featuring HSE134–ASP118.**
+  First vs second half: 0.527 → 0.399, Δ −0.127, CI [−0.185, −0.070], q = 4e-4, supported and firm.
+  Robustness across cutoffs (same windows):
+
+  | cutoff | LID–CORE tested | supported (all firm) | HSE134–ASP118 |
+  |---|---|---|---|
+  | 4.0 Å | 24 | 7 | 0.199 → 0.119, Δ −0.079, CI [−0.122, −0.037], q 0.0014, supported |
+  | 4.5 Å | 29 | 4 | 0.527 → 0.399, Δ −0.127, CI [−0.185, −0.070], q 0.0004, supported |
+  | 5.0 Å | 36 | 5 | 0.863 → 0.785, Δ −0.079, CI [−0.123, −0.034], q 0.006, supported |
+  | 5.5 Å | 45 | 2 | 0.980 → 0.969, Δ −0.011, CI [−0.029, 0.007], q 0.66, **not supported** (saturated) |
+
+  So the cutoff edit in beat 2 should go to 4.0 or 5.0 Å, not ≥ 5.5 Å.
+- **Honest null (beat 4): NMP–CORE, SER30–ASP84.** It drops from 0.461 to 0.148 (Δ −0.313), and its individual 95% CI
+  [−0.568, −0.059] excludes 0. But τ = 10.1 / 13.8 ns leaves only 25 / 18 independent chunks per half (provisional),
+  and after BH-FDR over 53 tested pairs q = 0.31: not supported. None of the 53 NMP–CORE pairs is supported.
+  The point for viewers: a large-looking change in one trajectory is not established when the frames are correlated
+  and many pairs are tested.
+
