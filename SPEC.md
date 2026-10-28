@@ -1,4 +1,4 @@
-# TrajectoryGPT — Build Spec (v2)
+# TrajectoryGPT — Build Spec (v3)
 
 Working name: **TrajectoryGPT**. This is a Meta Global AI Developer Hackathon 2026 project in the Indie Developer track, under the "Push the Frontier" problem statement.
 Building period: **Tue Oct 27 – Wed Nov 4, 2026** (deadline 9 PM ET / 8 PM CT). Internal deadline: **Tue Nov 3**.
@@ -52,17 +52,32 @@ An AI research copilot that reproduces a published molecular dynamics analysis f
 | 3D viewer | NGL Viewer |
 | API | FastAPI (Python 3.11+), deployed on Modal |
 | Science | MDAnalysis, NumPy, SciPy |
-| LLM (default) | Meta Model API, Muse Spark (OpenAI-compatible SDK) |
-| LLM (open-weight mode) | Baseten, `meta-models/muse-spark-open-1026` |
+| LLM (agent loop) | Meta Model API, `muse-spark-1.3`, via the **Responses API** (OpenAI Python SDK) |
+| LLM (verifier) | Meta Model API, `muse-wonder-1.0`: a different, stronger model checks the agent's work |
+| LLM (open-weight mode) | Baseten, `meta-models/muse-spark-open-1026`, via Chat Completions |
 | Reproducibility check | Modal Sandbox |
 | Provenance | JSON files (no database) |
 
 Env vars:
-- `META_API_KEY`, `META_API_BASE_URL`, `META_MODEL`
-- `BASETEN_API_KEY`, `BASETEN_BASE_URL`, `BASETEN_MODEL`
+- `META_API_KEY`, `META_API_BASE_URL=https://api.meta.ai/v1`
+- `META_MODEL` (`muse-spark-1.3-contributor` during development, `muse-spark-1.3` for the demo/deploy)
+- `META_VERIFIER_MODEL=muse-wonder-1.0`
+- `BASETEN_API_KEY`, `BASETEN_BASE_URL=https://inference.baseten.co/v1`, `BASETEN_MODEL=meta-models/muse-spark-open-1026`
 - `MODEL_PROVIDER=meta|baseten`
 
-There is **one** LLM client wrapper in `app/agent/llm.py`. Switching providers changes only the base URL, key, and model.
+### LLM wrapper (`app/agent/llm.py`)
+- There is **one** wrapper with one interface, `run_turn(messages, tools, response_schema) -> {tool_calls | final}`. The rest of the app never touches a provider SDK directly.
+- **Meta path:** `client.responses.create(...)` with `include=["reasoning.encrypted_content"]`, replaying prior reasoning items each turn so the model keeps its train of thought across a multi-step tool loop (Meta's docs: without this the model "reasons from scratch each turn and can lose the thread").
+- **Baseten path:** `client.chat.completions.create(...)` with standard tool calling. Same interface, same tools.
+- Pass `api_key` explicitly. The OpenAI SDK does not read our env var names on its own.
+- Retry 429s with exponential backoff + jitter, honoring `Retry-After`.
+- Log `usage` (input, output, cached tokens) per call to provenance, so we can show the cost per investigation.
+
+### Cost plan ($150 Meta credits)
+- **Development uses `muse-spark-1.3-contributor`** ($0.10 in / $0.20 out per 1M tokens, ~12–20× cheaper). This is acceptable because the AdK dataset and the figures are public; Contributor mode lets Meta train on content. Never send non-public data.
+- **Demo and deploy use `muse-spark-1.3` (Standard mode).**
+- The verifier runs on Muse Wonder ($4 / $20 per 1M); keep its input to the tool JSON + interpretation + one PNG.
+- Put the stable system prompt and tool schemas first in every request so prompt caching applies.
 
 ## 7. Tool registry (the only things the agent can call)
 
@@ -101,13 +116,21 @@ Every tool returns `{ result, params, units, provenance_id }`.
 
 ## 9. Agent flow
 
-1. **Input.** Either a natural-language question, or a figure image + methods text ("reproduce this").
-2. **Plan.** Muse Spark returns a structured plan (tool + params + one-line rationale). In reproduce mode, it first returns an **extracted spec** listing each field it read from the figure/methods, with a confidence level and the source ("from caption", "from methods", "assumed").
+**What makes this an agent, not a form:** one question becomes a multi-step *investigation* that the agent plans, runs, and adapts. It is not one question → one tool call.
+
+1. **Input.** Either a natural-language question, or a figure image + methods PDF ("reproduce this"). Muse Spark accepts **images and PDFs natively**, so send both directly; no text extraction is needed.
+2. **Plan an investigation.** Muse Spark returns a structured plan with **up to 5 steps**. Each step has a tool, params, and a one-line rationale, and later steps can reference earlier results (e.g. step 3 = `contact_statistics` on "the top 3 supported pairs from step 1"). For example, "Why do LID and NMP separate?" might become:
+   1. `compare_intervals`
+   2. `contact_statistics` on the top supported pairs
+   3. `distance_over_time` on the strongest pair
+   4. summarize
+
+   In reproduce mode, the agent first returns an **extracted spec** listing each field it read from the figure/methods, with a confidence level and the source ("from caption", "from methods", "assumed").
 3. **Validate.** The backend checks the params against the schema and the metadata (groups exist, frames in range, cutoff between 2 and 10 Å).
-4. **Confirm.** The PlanCard shows editable params; the Run button is required.
-5. **Execute.** Run the tool and log it to provenance.
+4. **Confirm once.** The PlanCard shows every step with editable params. The user approves the whole investigation with one Run click.
+5. **Execute autonomously.** The agent runs the steps in a tool loop, resolving references to earlier results as it goes. It may **adapt**: drop a step whose input is empty (e.g. no supported changes), or add at most one extra step from the approved tool set. Any adaptation is shown in a live step log ("Step 2 skipped: no pairs passed the CI test"). Parameter changes that the user didn't approve (groups, cutoff) are not allowed mid-run; the agent must stop and propose a new plan instead. Every call is logged to provenance.
 6. **Interpret.** Structured output with these sections: Observed (cite numbers from the result), Statistical support (N_eff, CI, supported or not), Possible explanations (hedged), Caveats, Suggested follow-ups (each one a runnable tool call).
-7. **Verify.** A second Muse Spark pass receives the tool JSON, the interpretation, and the rendered plot PNG. It flags:
+7. **Verify.** An independent verifier on **Muse Wonder** (a different model from the one that wrote the interpretation) receives the tool JSON, the interpretation, and the rendered plot PNG. It flags:
    - any number not present in the result,
    - any "significant/changed" claim without CI support,
    - any mismatch between the claim and the plot.
@@ -115,7 +138,11 @@ Every tool returns `{ result, params, units, provenance_id }`.
    Flags show in the UI. Run a deterministic number check too, not only the LLM check.
 8. **Follow-ups** reuse context. "Does that persist?" resolves to the last selected or top-ranked pair.
 
-If the Meta API does not accept a PDF in the same call as the image, extract the text with `pypdf` and send text + image. Verify this at Day 4 office hours.
+Fallback only: if native PDF input fails for a specific file, extract the text with `pypdf` and send text + image.
+
+### 9a. Stretch uses of Meta tooling (only if ahead; in this order)
+1. **SAM 3.1 panel finder.** Real paper figures have several panels. Send the figure to `sam-3.1` with a prompt like "heatmap" or "contact map" and crop the matching panel before extraction. Cost: about $0.0025 per image.
+2. **Search grounding for literature context.** In the interpretation's "Possible explanations" section, the agent can call the `web_search` tool to cite published work on the AdK LID/NMP motion. Citations show as links, and they are clearly separated from computed results. Cost: $2.50 per 1,000 searches.
 
 ## 10. UI
 
@@ -164,20 +191,20 @@ README.md  CLAUDE.md  SPEC.md
 | 1 | Tue Oct 27 | Repo scaffold, dataset load, metadata, groups, min-distance precompute, `calculate_contacts`, `distance_over_time` | pytest passes; results match a hand-written MDAnalysis check on 3 pairs |
 | 2 | Wed Oct 28 | Frontend scaffold, NGL viewer, Plotly heatmap, click→highlight | clicking 5 different cells highlights the correct residues (checked by eye) |
 | 3 | Thu Oct 29 | `stats.py` (τ, N_eff, block bootstrap), `compare_intervals`, `contact_statistics`, comparison chart with CIs | synthetic AR(1) + white-noise tests pass |
-| 4 | Fri Oct 30 | LLM wrapper, tool calling, PlanCard confirm flow, interpretation | NL question → plan → edit → run → interpretation, end to end |
-| 5 | Sat Oct 31 | Reproduce-this-figure (image + methods → extracted spec → plan → side-by-side) | the real open-access figure produces a matching analysis |
-| 6 | Sun Nov 1 | Verifier (deterministic number check + LLM plot/claim check), context-aware follow-ups | a deliberately wrong interpretation gets flagged |
+| 4 | Fri Oct 30 | LLM wrapper (Responses API + reasoning replay), multi-step investigation plan, PlanCard confirm-once, autonomous tool loop with live step log, interpretation | one question → 3-step plan → edit → run → step log → interpretation, end to end |
+| 5 | Sat Oct 31 | Reproduce-this-figure (image + methods PDF sent natively → extracted spec → plan → side-by-side) | the real open-access figure produces a matching analysis |
+| 6 | Sun Nov 1 | Verifier on Muse Wonder (deterministic number check + plot/claim check), context-aware follow-ups | a deliberately wrong interpretation gets flagged |
 | 7 | Mon Nov 2 | Export script, Modal deploy, Modal Sandbox verify, Baseten toggle | live URL works; the sandbox run reproduces the numbers |
 | 8 | Tue Nov 3 | Freeze. README, architecture diagram, 3-minute video, **submit** | submission confirmed |
 | 9 | Wed Nov 4 | Buffer, bug fixes only, X post | — |
 
-**Cut order if behind:** `cutoff_sensitivity` → Baseten toggle → Modal Sandbox button (keep the export itself) → LLM plot check in the verifier (keep the deterministic check).
+**Cut order if behind:** stretch items in §9a → `cutoff_sensitivity` → agent adaptation in step 5 (keep the multi-step plan) → Baseten toggle → Modal Sandbox button (keep the export itself) → LLM plot check in the verifier (keep the deterministic check).
 **Never cut:** linked viewer, statistics, reproduce-this-figure, export.
 
 ## 14. Demo video (3 minutes)
 
 1. **0:00–0:20.** Drop in a paper figure. The extracted spec appears, then the side-by-side reproduction.
-2. **0:20–1:00.** Ask "which contacts change most between the halves?" Show the PlanCard and edit the cutoff. The bar chart appears with CIs, and some changes are greyed out as "noise."
+2. **0:20–1:00.** Ask "why do the LID and NMP domains come apart?" The agent proposes a 3–4 step investigation; edit the cutoff and approve once. The step log runs live (including one adaptive skip or add). The bar chart appears with CIs, and some changes are greyed out as "noise."
 3. **1:00–1:40.** Click a supported pair: it highlights in 3D. Ask "does that persist?" The distance plot appears; click the crossing point and the viewer jumps to that frame.
 4. **1:40–2:10.** The verifier catches an overclaim (pre-scripted question). Show N_eff ("1,000 frames ≈ 40 independent samples").
 5. **2:10–2:40.** Export the script, verify it in the Modal Sandbox, and show that the numbers match.
