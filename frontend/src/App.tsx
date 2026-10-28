@@ -3,6 +3,7 @@ import { api, type DatasetInfo, type Metadata } from './api/client'
 import { useSelection } from './state/selection'
 import { DatasetBadge } from './components/DatasetBadge'
 import { Heatmap } from './components/Heatmap'
+import { CompareChart } from './components/CompareChart'
 import { DistancePlot } from './components/DistancePlot'
 import { Viewer } from './components/Viewer'
 import { DOMAIN_COLORS } from './theme'
@@ -42,6 +43,7 @@ export default function App() {
           <div className="col-left">
             <Heatmap meta={meta} />
             <DistancePlot meta={meta} />
+            <CompareChart meta={meta} />
           </div>
           <section className="card viewer-card">
             <header className="card-head">

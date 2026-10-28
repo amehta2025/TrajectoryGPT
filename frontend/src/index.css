@@ -76,5 +76,7 @@ select:hover, button:hover:not(:disabled) { border-color: #3a4459; }
 .viewer-controls { display: flex; align-items: center; gap: 10px; padding-top: 8px; }
 .viewer-controls input[type='range'] { flex: 1; accent-color: var(--accent); }
 
+.refusal { color: #ffd59a; background: #2a2212; border: 1px solid #5a4723; border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+
 .loading { padding: 24px 16px; }
 .foot { padding: 8px 16px 14px; line-height: 1.5; }
