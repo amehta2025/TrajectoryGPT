@@ -47,6 +47,21 @@ def test_compare_filters_and_counts(pretend_stats_valid, cache):
             assert row["ci_low"] > 0 or row["ci_high"] < 0
         assert row["tau_ns_a"] is None  # no physical time on the transition path
     assert r["n_supported"] == sum(x["supported"] for x in r["rows"])
+    assert r["n_supported_firm"] + r["n_supported_provisional"] == r["n_supported"]
+
+
+def test_provisional_rule(pretend_stats_valid, cache):
+    r = cs.compare_intervals(DS, "NMP", "CORE", (0, 49), (49, 98), n_resamples=100, cache_dir=cache)
+    thr = r["provisional_rule"]["slow_tau_distance_frames"]
+    assert thr is not None and r["provisional_rule"]["slow_tau_distance_ns"] is None  # path steps, no ns
+    for row in r["rows"]:
+        few = any(b is not None and b < 20 for b in (row["n_blocks_a"], row["n_blocks_b"]))
+        td = [t for t in (row["tau_distance_a"], row["tau_distance_b"]) if t is not None]
+        slow = bool(td) and max(td) >= thr
+        assert row["provisional"] == (few or slow)
+        assert (cs.PROVISIONAL_FEW_BLOCKS in row["provisional_reasons"]) == few
+        assert (cs.PROVISIONAL_SLOW in row["provisional_reasons"]) == slow
+    assert r["n_provisional"] == sum(x["provisional"] for x in r["rows"])
 
 
 def test_compare_is_reproducible(pretend_stats_valid, cache):
@@ -67,7 +82,8 @@ def test_contact_statistics_pipeline(pretend_stats_valid):
     r = cs.contact_statistics(DS, a, b, n_resamples=200)
     assert r["frequency"] == pytest.approx(np.mean(r["in_contact"]))
     assert r["ci_low"] <= r["frequency"] <= r["ci_high"]
-    assert r["n_eff_time_ns"] is None
+    assert r["tau_ns"] is None
+    assert r["provisional"] == (r["n_blocks"] is not None and r["n_blocks"] < 20)
 
 
 @pytest.mark.slow
@@ -77,7 +93,9 @@ def test_equilibrium_known_strong_change_is_detected():
     r = cs.compare_intervals(eq, "NMP", "CORE", (0, 2093), (2093, 4187))
     row = next(x for x in r["rows"] if x["key_a"].endswith(":30:SER") and x["key_b"].endswith(":84:ASP"))
     assert row["delta"] < -0.2 and row["supported"]
-    assert row["n_eff_time_ns_a"] == pytest.approx(row["n_eff_a"] * 0.24)
+    assert row["tau_ns_a"] == pytest.approx(row["tau_a"] * 0.24)
+    assert row["provisional"]  # tau ~ 42-58 frames: slow, with < 20 blocks per half
+    assert r["n_supported_firm"] + r["n_supported_provisional"] == r["n_supported"]
     assert 0 < r["n_supported"] < r["n_tested"]  # neither all noise nor everything significant
 
 

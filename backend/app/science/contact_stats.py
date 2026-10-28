@@ -17,6 +17,9 @@ from app.science.distances import distance_over_time
 from app.science.residues import parse_residue_key
 
 MIN_POOLED_FREQ = 0.01  # pairs below this pooled frequency are not tested (rare or never in contact)
+SLOW_QUANTILE = 0.75  # tau_distance at or above this quantile of the tested pairs counts as slow
+PROVISIONAL_FEW_BLOCKS = f"fewer than {stats.PROVISIONAL_MIN_BLOCKS} bootstrap blocks in a window"
+PROVISIONAL_SLOW = "tau_distance in the slowest quartile of tested pairs"
 
 
 class StatsRefused(Exception):
@@ -35,15 +38,30 @@ def _pair_rng(seed: int, key_a: str, key_b: str) -> np.random.Generator:
     return np.random.default_rng([seed, parse_residue_key(key_a).resid, parse_residue_key(key_b).resid])
 
 
-def _time(n_eff: float | None, tau: float | None, dt_ns: float | None, stride: int) -> dict:
-    """tau and N_eff in ns where physical time exists (one sample = stride * dt_ns)."""
-    if dt_ns is None:
-        return {"tau_ns": None, "n_eff_time_ns": None}
-    step = dt_ns * stride
-    return {
-        "tau_ns": None if tau is None else tau * step,
-        "n_eff_time_ns": None if n_eff is None else n_eff * step,
-    }
+def _tau_ns(tau: float | None, dt_ns: float | None, stride: int) -> float | None:
+    """tau in ns where physical time exists (one sample = stride * dt_ns); None on the transition path."""
+    return None if tau is None or dt_ns is None else tau * dt_ns * stride
+
+
+def _few_blocks_for_provisional(*blocks: float | None) -> bool:
+    return any(b is not None and b < stats.PROVISIONAL_MIN_BLOCKS for b in blocks)
+
+
+def _mark_provisional(rows: list[dict]) -> float | None:
+    """Label rows provisional (few blocks or slowest-quartile tau_distance). Returns the slow threshold."""
+    slow_tau = [max(t for t in (r["tau_distance_a"], r["tau_distance_b"]) if t is not None)
+                for r in rows if r["tau_distance_a"] is not None or r["tau_distance_b"] is not None]
+    threshold = float(np.quantile(slow_tau, SLOW_QUANTILE)) if slow_tau else None
+    for r in rows:
+        reasons = []
+        if _few_blocks_for_provisional(r["n_blocks_a"], r["n_blocks_b"]):
+            reasons.append(PROVISIONAL_FEW_BLOCKS)
+        td = [t for t in (r["tau_distance_a"], r["tau_distance_b"]) if t is not None]
+        if threshold is not None and td and max(td) >= threshold:
+            reasons.append(PROVISIONAL_SLOW)
+        r["provisional"] = bool(reasons)
+        r["provisional_reasons"] = reasons
+    return threshold
 
 
 def compare_intervals(
@@ -67,6 +85,8 @@ def compare_intervals(
     Tested pairs: not sequence-local and pooled frequency over both windows >= min_pooled_freq.
     tau (hence block length) is the larger of the 0/1 series' and the min-distance series' tau.
     Supported = q < FDR and CI excludes 0 and not too few events and not too few blocks.
+    Provisional = < 20 blocks in a window or tau_distance in the slowest quartile of tested pairs;
+    a supported provisional pair is shown as "supported (slow — provisional)".
     """
     cfg = require_stats_valid(dataset)
     cutoff = validate_cutoff(cutoff)
@@ -96,8 +116,9 @@ def compare_intervals(
     for r, qi in zip(rows, q):
         r["q"] = float(qi)
         r["supported"] = stats.is_supported(r["q"], r["ci_low"], r["ci_high"], r["too_few_events"], r["too_few_blocks"])
-        r.update({f"{k}_a": v for k, v in _time(r["n_eff_a"], r["tau_a"], cfg["dt_ns"], stride).items()})
-        r.update({f"{k}_b": v for k, v in _time(r["n_eff_b"], r["tau_b"], cfg["dt_ns"], stride).items()})
+        r["tau_ns_a"] = _tau_ns(r["tau_a"], cfg["dt_ns"], stride)
+        r["tau_ns_b"] = _tau_ns(r["tau_b"], cfg["dt_ns"], stride)
+    slow_threshold = _mark_provisional(rows)
     rows.sort(key=lambda r: (not r["supported"], r["q"], -abs(r["delta"])))
 
     return {
@@ -117,6 +138,15 @@ def compare_intervals(
         "n_tested": len(rows),
         "n_filtered": int(candidates.sum() - len(rows)),
         "n_supported": sum(r["supported"] for r in rows),
+        "n_supported_firm": sum(r["supported"] and not r["provisional"] for r in rows),
+        "n_supported_provisional": sum(r["supported"] and r["provisional"] for r in rows),
+        "n_provisional": sum(r["provisional"] for r in rows),
+        "provisional_rule": {
+            "min_blocks": stats.PROVISIONAL_MIN_BLOCKS,
+            "slow_quantile": SLOW_QUANTILE,
+            "slow_tau_distance_frames": slow_threshold,
+            "slow_tau_distance_ns": _tau_ns(slow_threshold, cfg["dt_ns"], stride),
+        },
         "n_too_few_blocks": sum(r["too_few_blocks"] for r in rows),
         "min_pooled_freq": min_pooled_freq,
         "fdr": stats.FDR,
@@ -155,7 +185,9 @@ def contact_statistics(
         "frames": d["frames"],
         "in_contact": series,
         **r,
-        **_time(r["n_eff"], r["tau"], cfg["dt_ns"], stride),
+        "tau_ns": _tau_ns(r["tau"], cfg["dt_ns"], stride),
+        # One pair has no quartile to compare against, so only the block rule applies here.
+        "provisional": _few_blocks_for_provisional(r["n_blocks"]),
         "contact_definition": CONTACT_DEFINITION,
         "seed": seed,
         "n_resamples": n_resamples,

@@ -25,6 +25,7 @@ MIN_TRANSITIONS = 5
 CI_LEVEL = 0.95
 FDR = 0.05
 MIN_BLOCKS = 10
+PROVISIONAL_MIN_BLOCKS = 20  # below this, a supported result is labelled provisional (SPEC §8a)
 TOO_FEW_EVENTS = "too few events for reliable CI"
 TOO_FEW_BLOCKS = f"too few independent blocks (< {MIN_BLOCKS}) for a reliable bootstrap CI"
 
@@ -58,8 +59,13 @@ def series_tau(x: np.ndarray, distance: np.ndarray | None = None) -> dict:
     return {"tau": tau, "tau_indicator": tau_indicator, "tau_distance": tau_distance}
 
 
+def n_blocks(n: int, tau: float | None) -> float | None:
+    """Bootstrap blocks per window, N / block length (None for a constant series)."""
+    return None if tau is None else n / block_length(tau)
+
+
 def too_few_blocks(n: int, tau: float | None) -> bool:
-    return tau is not None and n / block_length(tau) < MIN_BLOCKS
+    return tau is not None and n_blocks(n, tau) < MIN_BLOCKS
 
 
 def n_effective(n: int, tau: float | None) -> float | None:
@@ -120,6 +126,7 @@ def describe_series(
         **taus,
         "n_eff": n_effective(len(x), tau),
         "block_length": blen,
+        "n_blocks": n_blocks(len(x), tau),
         "transitions": transitions,
         "too_few_events": few_events,
         "too_few_blocks": few_blocks,
@@ -166,6 +173,8 @@ def compare_series(
         **{f"{k}_b": v for k, v in taus_b.items()},
         "block_length_a": block_length(tau_a),
         "block_length_b": block_length(tau_b),
+        "n_blocks_a": n_blocks(len(x_a), tau_a),
+        "n_blocks_b": n_blocks(len(x_b), tau_b),
         "n_eff_a": n_effective(len(x_a), tau_a),
         "n_eff_b": n_effective(len(x_b), tau_b),
         "transitions": transitions,

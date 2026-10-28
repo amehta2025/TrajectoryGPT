@@ -56,6 +56,9 @@ select:hover, button:hover:not(:disabled) { border-color: #3a4459; }
 .controls { display: flex; align-items: center; gap: 8px; }
 .controls label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+.swatch.hollow { background: transparent; border: 2px solid; border-radius: 50%; }
+.info { cursor: help; color: var(--accent); font-size: 13px; outline: none; }
+.info:focus-visible { outline: 1px solid var(--accent); border-radius: 50%; }
 
 .plot-wrap { position: relative; min-height: 0; }
 .heatmap-wrap { height: 340px; }

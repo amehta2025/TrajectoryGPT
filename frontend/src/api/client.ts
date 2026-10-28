@@ -61,13 +61,18 @@ export type CompareRow = {
   q: number
   supported: boolean
   too_few_events: boolean
+  too_few_blocks: boolean
+  provisional: boolean
+  provisional_reasons: string[]
   transitions: number
   tau_a: number | null
   tau_b: number | null
+  tau_ns_a: number | null
+  tau_ns_b: number | null
   n_eff_a: number | null
   n_eff_b: number | null
-  n_eff_time_ns_a: number | null
-  n_eff_time_ns_b: number | null
+  n_blocks_a: number | null
+  n_blocks_b: number | null
 }
 
 export type Compare =
@@ -85,6 +90,15 @@ export type Compare =
       n_tested: number
       n_filtered: number
       n_supported: number
+      n_supported_firm: number
+      n_supported_provisional: number
+      n_provisional: number
+      provisional_rule: {
+        min_blocks: number
+        slow_quantile: number
+        slow_tau_distance_frames: number | null
+        slow_tau_distance_ns: number | null
+      }
       min_pooled_freq: number
       fdr: number
       ci_level: number

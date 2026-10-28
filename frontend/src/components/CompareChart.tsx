@@ -1,5 +1,6 @@
 // Per-pair change in contact frequency between two windows, with block-bootstrap CI bars.
 // Supported pairs (BH q < FDR, CI excludes 0, enough events) are coloured; the rest are greyed noise.
+// Supported pairs that are provisional (few blocks or slow tau_distance) are drawn hollow.
 // Clicking a bar selects that pair, so the heatmap, distance plot and viewer follow.
 import { useEffect, useMemo, useState } from 'react'
 import type { Data } from 'plotly.js'
@@ -25,11 +26,37 @@ function windowLabel(meta: Metadata, [start, stop]: [number, number]): string {
   return `frames ${start}–${stop - 1} (${frameTimeLabel(meta, start)} – ${frameTimeLabel(meta, stop - 1)})`
 }
 
+// Coverage of nominal 95% CIs on synthetic slow-drift series (SPEC §8a, notes/recon.md).
+const SLOW_COVERAGE = '72–84%'
+
+/** τ in ns where the dataset has physical time, otherwise in frames (path steps). */
+function tauText(r: CompareRow, side: 'a' | 'b'): string {
+  const tau = side === 'a' ? r.tau_a : r.tau_b
+  const ns = side === 'a' ? r.tau_ns_a : r.tau_ns_b
+  if (tau === null) return 'constant'
+  return ns !== null ? `${ns.toFixed(1)} ns` : `${tau.toFixed(1)} steps`
+}
+
 function nEffText(r: CompareRow, side: 'a' | 'b'): string {
   const n = side === 'a' ? r.n_eff_a : r.n_eff_b
-  const ns = side === 'a' ? r.n_eff_time_ns_a : r.n_eff_time_ns_b
-  if (n === null) return 'constant'
-  return `${n.toFixed(0)}${ns !== null ? ` (≈${ns.toFixed(0)} ns)` : ''}`
+  return n === null ? '–' : n.toFixed(0)
+}
+
+function statusLabel(r: CompareRow): string {
+  if (r.supported) return r.provisional ? 'supported (slow — provisional)' : 'supported'
+  if (r.too_few_events) return 'too few events'
+  if (r.too_few_blocks) return 'too few independent blocks'
+  return 'not supported'
+}
+
+function provisionalHelp(slowNs: number | null, slowFrames: number | null, minBlocks: number): string {
+  const slow = slowNs !== null ? `${slowNs.toFixed(1)} ns` : slowFrames !== null ? `${slowFrames.toFixed(1)} path steps` : 'n/a'
+  return (
+    `Provisional: a window has fewer than ${minBlocks} bootstrap blocks, or the pair's distance τ is in the ` +
+    `slowest quartile of the pairs tested here (τ ≥ ${slow}). Slow pairs have little independent sampling: ` +
+    `on synthetic slow-drift data our nominal 95% CIs contained the true value only ${SLOW_COVERAGE} of the time. ` +
+    `A provisional "supported" result may not hold up with more sampling.`
+  )
 }
 
 export function CompareChart({ meta }: { meta: Metadata }) {
@@ -59,6 +86,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
     const labels = rows.map((r) => `${residueLabel(r.key_a)}–${residueLabel(r.key_b)}`)
     const colors = rows.map((r) => (r.supported ? (r.delta > 0 ? UP : DOWN) : EXCLUDED_GREY))
     const selected = rows.map((r) => pair?.keyA === r.key_a && pair?.keyB === r.key_b)
+    const hollow = rows.map((r) => r.supported && r.provisional)
     return [{
       type: 'scatter', mode: 'markers', orientation: 'h',
       x: rows.map((r) => r.delta), y: labels,
@@ -70,14 +98,16 @@ export function CompareChart({ meta }: { meta: Metadata }) {
       },
       marker: {
         size: rows.map((_, i) => (selected[i] ? 12 : 8)), color: colors,
-        line: { color: selected.map((s) => (s ? '#ffffff' : 'rgba(0,0,0,0)')), width: 2 },
+        symbol: hollow.map((h) => (h ? 'circle-open' : 'circle')),
+        line: { color: rows.map((_, i) => (selected[i] ? '#ffffff' : hollow[i] ? colors[i] : 'rgba(0,0,0,0)')), width: 2 },
       },
       text: rows.map((r) =>
         [
           `freq ${r.freq_a.toFixed(3)} → ${r.freq_b.toFixed(3)}`,
           `Δ ${r.delta.toFixed(3)} [${r.ci_low.toFixed(3)}, ${r.ci_high.toFixed(3)}]`,
-          `q = ${r.q.toPrecision(2)} · ${r.supported ? 'supported' : r.too_few_events ? 'too few events' : 'not supported'}`,
-          `N_eff ${nEffText(r, 'a')} → ${nEffText(r, 'b')} · ${r.transitions} transitions`,
+          `q = ${r.q.toPrecision(2)} · ${statusLabel(r)}`,
+          `N_eff ${nEffText(r, 'a')} → ${nEffText(r, 'b')} · τ ${tauText(r, 'a')} → ${tauText(r, 'b')}`,
+          `${r.transitions} transitions${r.provisional ? ` · provisional: ${r.provisional_reasons.join('; ')}` : ''}`,
         ].join('<br>'),
       ),
       hovertemplate: '%{y}<br>%{text}<extra>click to select</extra>',
@@ -93,7 +123,17 @@ export function CompareChart({ meta }: { meta: Metadata }) {
         {ok && (
           <span className="muted small">
             {ok.n_tested} tested · {ok.n_filtered} filtered out (rare or never in contact) · FDR {ok.fdr * 100}% ·{' '}
-            <b style={{ color: 'var(--text)' }}>{ok.n_supported} supported</b>
+            <b style={{ color: 'var(--text)' }}>{ok.n_supported} supported</b>: {ok.n_supported_firm} firm ·{' '}
+            {ok.n_supported_provisional} slow — provisional{' '}
+            <span
+              className="info"
+              tabIndex={0}
+              role="img"
+              aria-label={provisionalHelp(ok.provisional_rule.slow_tau_distance_ns, ok.provisional_rule.slow_tau_distance_frames, ok.provisional_rule.min_blocks)}
+              title={provisionalHelp(ok.provisional_rule.slow_tau_distance_ns, ok.provisional_rule.slow_tau_distance_frames, ok.provisional_rule.min_blocks)}
+            >
+              ⓘ
+            </span>
           </span>
         )}
       </header>
@@ -103,6 +143,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
         <br />
         <span className="swatch" style={{ background: UP }} />more contact
         <span className="swatch" style={{ background: DOWN, marginLeft: 8 }} />less contact
+        <span className="swatch hollow" style={{ borderColor: DOWN, marginLeft: 8 }} />supported (slow — provisional)
         <span className="swatch" style={{ background: EXCLUDED_GREY, marginLeft: 8 }} />not supported (noise)
         {ok && ok.n_tested > MAX_ROWS && <> · top {MAX_ROWS} of {ok.n_tested} shown</>}
       </p>
