@@ -63,56 +63,48 @@ https://userguide.mdanalysis.org/stable/examples/analysis/distances_and_contacts
 
 **Method transfer (secondary):** not chosen yet. It needs a CC-BY paper figure; that's Day 5 scope.
 
-## Statistics check: first half vs second half (Day 3, 2026-10-28)
+## Statistics check: first half vs second half (Day 3, 2026-10-28; final, stats frozen)
 
 `compare_intervals` on adk_equilibrium, windows frames 0–2092 vs 2093–4186 (≈ 502 ns each), cutoff 4.5 Å,
-sequence exclusion 2, pooled-frequency filter ≥ 1%, BH-FDR 5%, seed 0, 2,000 resamples. Each run takes ~2 s on cached distances.
+sequence exclusion 2, pooled-frequency filter ≥ 1%, BH-FDR 5%. Final method (SPEC §8a):
+τ = max(τ_indicator, τ_distance); CI = Δ ± 1.96·sqrt(SE_A² + SE_B²) with SE = sqrt(p(1−p)·2τ/N);
+provisional below 40 independent chunks (N / 2τ) in either window. The block bootstrap is kept only as a cross-check.
 
-| groups | pairs | tested | filtered out | supported, τ from 0/1 only | supported, τ = max(0/1, distance) | too few blocks |
-|---|---|---|---|---|---|---|
-| NMP–CORE | 4,374 | 53 | 4,321 | 27 | **15** | 7 |
-| LID–CORE | 5,542 | 29 | 5,513 | 14 | **14** | 0 |
+| groups | pairs | tested | filtered out | supported | firm | slow — provisional | provisional (all tested) |
+|---|---|---|---|---|---|---|---|
+| NMP–CORE | 4,374 | 53 | 4,321 | **0** | 0 | 0 | 39 |
+| LID–CORE | 5,542 | 29 | 5,513 | **4** | 4 | 0 | 3 |
 
-- **τ from the distance series matters on NMP–CORE:** median τ over tested pairs (first half) is 11.9 frames
-  from the 0/1 series and 42.6 frames from the min distance. Slow drifts near the cutoff look like fast flicker in 0/1.
-  LID–CORE pairs flicker fast either way (median τ 0.9 vs 1.7 frames), so nothing changed there.
-- **SER30–ASP84 is still supported:** frequency 0.461 → 0.148, Δ = −0.313, 95% CI [−0.450, −0.158], q = 7e-4,
-  τ = 41.9 / 57.5 frames (≈ 10 / 14 ns), N_eff = 25 / 18 per window. It is the slow test's known strong change.
-- The 7 "too few blocks" NMP–CORE pairs all had q ≥ 0.05, so the flag did not change the count today.
-- **Coverage is still below nominal for slow pairs** (synthetic test, see SPEC §8a): 61–87% for a nominal 95% CI (see the coverage table below).
-  With 4τ blocks the supported counts would be 6 (NMP–CORE) and 13 (LID–CORE), but 24 NMP–CORE pairs,
-  SER30–ASP84 included, would then have < 10 blocks. Not adopted; the limited-sampling caveat covers it.
+- **LID–CORE supported (all firm, hundreds of chunks per window):** HSE134–ASP118 (Δ −0.127, q 4e-4),
+  GLY122–ASP118 (Δ −0.021), THR155–GLN160 (Δ −0.099), GLY122–ARG119 (Δ +0.031). HSE134–ASP118 is the slow test's known change.
+- **SER30–ASP84 is no longer supported.** Δ = −0.313 (0.461 → 0.148), CI [−0.568, −0.059], q = 0.31.
+  τ = 10.1 / 13.8 ns, so only 25 / 18 independent chunks per half. Label: provisional, not supported.
+  Its own CI excludes 0, but after FDR across 53 tested pairs it does not pass.
+- **NMP–CORE pairs are slow** (median τ_distance 42.6 frames vs τ_indicator 11.9 in the first half), so 39 of 53 are
+  provisional. Several show large Δ with CIs that span 0 or don't survive FDR (e.g. VAL59–ARG88, MET34–LEU83, THR31–GLY85).
+  On this trajectory, half-vs-half NMP–CORE changes are not established.
+- **How the method evolved** (all superseded by the table above):
+  - 2τ block bootstrap with τ_indicator: 27 (NMP–CORE) / 14 (LID–CORE) supported.
+  - Adding τ_distance: 15 / 14.
+  - The calibrated τ-based CI: 0 / 4.
+
+  The bootstrap versions overclaimed: their CIs covered only 65–84% from 40 chunks up (notes/calibration/).
 - Single trajectory: "supported" means the two halves of *this* run differ, not that the protein's ensemble does.
 
-### Provisional labels (Day 3, 2026-10-28)
+### CI calibration (for README and SPEC §8a / §16)
 
-Same comparison (first vs second half). Provisional = a window has < 20 bootstrap blocks, or τ_distance (the slower window)
-is in the slowest quartile of the tested pairs. Supported provisional pairs display as "supported (slow — provisional)".
+Rerun: `cd backend && python -m scripts.calibrate_ci --reps 200` (about 2 min). It writes `notes/calibration/coverage_by_process.csv`
+and `coverage_by_chunks.csv`.
 
-| groups | supported | firm | slow — provisional | provisional (all tested) | slowest-quartile τ_distance cutoff |
-|---|---|---|---|---|---|
-| NMP–CORE | 15 | 11 | 4 (3 for < 20 blocks, 1 for both reasons) | 24 of 53 | ≥ 87.4 frames (21.0 ns) |
-| LID–CORE | 14 | 10 | 4 (all slowest-quartile only) | 8 of 29 | ≥ 4.8 frames (1.1 ns) |
-
-- SER30–ASP84: **supported (slow — provisional)**. N_eff 25 → 18, τ 10.1 → 13.8 ns, fewer than 20 blocks per half.
-- The quartile rule is relative: on LID–CORE it labels pairs with τ ≈ 1 ns "slow", although they have
-  hundreds of blocks per window.
-
-### CI coverage on synthetic slow-drift series (for README and SPEC §16)
-
-Distance = cutoff + 0.4·AR(1) + fast Gaussian noise, so the true contact frequency is exactly 0.5.
-Windows of 2,000 frames, 200 replicates per case (Monte Carlo error about ±3 points), data seed 2026,
-1,000 bootstrap resamples. The table gives the fraction of nominal 95% CIs that contain 0.5.
-
-| case | τ from 0/1 only (old) | τ = max(0/1, distance) (current) |
-|---|---|---|
-| φ = 0.967 (τ_AR ≈ 30), noise 0.1 Å | 0.82 | 0.87 |
-| φ = 0.98 (τ_AR ≈ 49), noise 0.2 Å | 0.77 | 0.81 |
-| φ = 0.99 (τ_AR ≈ 99), noise 0.2 Å | 0.74 | 0.79 |
-| φ = 0.98 (τ_AR ≈ 49), noise 0.6 Å | 0.49 | 0.61 |
-| white noise (control) | 0.96 | 0.96 |
-
-**Headline: 49–82% (old) → 61–87% (current) on slow cases.** An earlier quick summary (72–84% vs 56–76%)
-came from smaller, mixed runs that left out the high-noise case. It was wrong and is superseded by this table.
-In exploratory runs, 4τ blocks added a few more points, and longer windows didn't close the gap: coverage
-levelled off around 0.84 at 20,000 frames. Sokal's window cuts off small, slow autocorrelation tails.
+- Synthetic min distance = cutoff + offset + a·AR(1) + fast noise, so the true frequency is known.
+  There are 8 processes (white, fast AR, slow and very slow drift with 0.1–0.6 Å noise, p = 0.5 and ≈ 0.23)
+  × windows of 500–16,000 frames × 200 replicates.
+- **τ-based CI coverage is ≥ 0.93 in every chunk bin from 40 up** (frequency 0.930–0.965, difference 0.942–0.977), and 0.86–0.92 below 40.
+  So MIN_BLOCKS_FIRM = 40.
+- **Bootstrap (2τ blocks) coverage from 40 chunks up: 0.74–0.81** (0.93 only above 1,000 chunks).
+- Exception to the pooled threshold: slow drift with 0.6 Å fast noise on 500–1,000-frame windows covers 0.79–0.86
+  despite 57–79 chunks. Listed in SPEC §16.
+- **Correction:** an earlier version of these notes said the undercoverage came from Sokal's window cutting off slow
+  autocorrelation tails, and quoted 61–87% / 49–82% coverage. The cause was wrong: τ estimates match the true τ on
+  2-million-frame series (9.5 vs 9.6 and 89.5 vs 90.8 frames). The 2τ blocks were too short for the slow tail of
+  the autocorrelation, so the bootstrap missed variance. Those percentages described the bootstrap and are superseded.

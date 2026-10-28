@@ -18,7 +18,7 @@ An AI research copilot for protein simulations. It turns a researcher's question
 1. **Linked investigation.** Clicking a heatmap cell or bar highlights those residues in 3D. Clicking a time point jumps the 3D view to that frame.
 2. **Statistical honesty.** Every result reports:
    - the effective sample size,
-   - block-bootstrap confidence intervals,
+   - autocorrelation-corrected confidence intervals, validated by a coverage experiment (§8a),
    - a multiple-comparison correction.
 
    Noise is labeled as noise, and the agent cannot call an effect "supported" unless the statistics say so.
@@ -175,8 +175,8 @@ Every tool:
 | `list_groups` | named groups and their residue ranges, with source |
 | `calculate_contacts` | residue-pair contact frequency matrix for two groups over a frame window |
 | `distance_over_time` | min heavy-atom distance per frame for one residue pair |
-| `compare_intervals` | per-pair frequency change between two windows, block-bootstrap CI, **BH-FDR q-values**, supported or not |
-| `contact_statistics` | for one pair: τ, N_eff, block-bootstrap CI of the frequency |
+| `compare_intervals` | per-pair frequency change between two windows, autocorrelation-corrected CI, **BH-FDR q-values**, supported or not |
+| `contact_statistics` | for one pair: τ, N_eff, autocorrelation-corrected CI of the frequency (block bootstrap as a cross-check) |
 | `native_contacts` | fraction of native contacts vs frame against chosen reference frames (wraps `MDAnalysis.analysis.contacts`), for the §5c exact reproduction |
 | `cutoff_sensitivity` | contact frequency per pair across cutoffs (stretch) |
 
@@ -202,39 +202,59 @@ Every tool:
 - **Tests use `adk_transition`** so they run in seconds. One slow test, marked `@pytest.mark.slow`, checks the equilibrium precompute against a direct calculation on a few frames.
 
 ### 8a. Statistics (`app/science/stats.py`)
-- **τ:** integrated autocorrelation time with automatic windowing (Sokal, c = 5). It is computed on **both** the per-frame 0/1 contact series (τ_indicator) and the per-frame min-distance series (τ_distance). **τ = max(τ_indicator, τ_distance)** sets the block length and N_eff.
-  - *Why* (changed Day 3, 2026-10-28): a distance that drifts slowly near the cutoff makes the 0/1 series flicker fast. τ_indicator alone then misses the slow memory, and the CIs come out too narrow. On NMP–CORE the median τ_distance is about 3.5× τ_indicator (42.6 vs 11.9 frames, first half).
+**Frozen for the hackathon (2026-10-28).** Further issues go into §16 Known limitations.
+
+- **τ:** integrated autocorrelation time with automatic windowing (Sokal, c = 5). It is computed on **both** the per-frame 0/1 contact series (τ_indicator) and the per-frame min-distance series (τ_distance). **τ = max(τ_indicator, τ_distance)**.
+  - *Why:* a distance that drifts slowly near the cutoff makes the 0/1 series flicker fast, and τ_indicator alone can then miss the slow memory. On NMP–CORE (first half) the median τ_distance is 42.6 frames, against 11.9 for τ_indicator.
   - Constant 0/1 series (always or never in contact) return `tau=None` and `stats_note`.
   - Series with fewer than 5 transitions are flagged "too few events for reliable CI."
-  - A window with fewer than 10 bootstrap blocks (N / block length < 10) is flagged "too few independent blocks." With so few blocks, the moving-block bootstrap itself underestimates the spread.
-  - **Known limitation (measured Day 3):** on synthetic slow-drift series (AR(1) with τ ≈ 30–100 frames, plus fast noise; 2,000-frame windows; 200 replicates per case), nominal 95% CIs cover the truth only **61–87%** of the time with this rule, against **49–82%** with τ_indicator alone. White noise covers 96%. The worst case is a slow drift under large fast noise (61% vs 49%). Sokal's window cuts off small, slow autocorrelation tails, and short windows can't measure their own slow variance. 4τ blocks raise coverage by a few more points (exploratory run), but on 500 ns windows they flag most slow pairs, SER30–ASP84 included. So "supported" can still be somewhat optimistic for slow pairs. These pairs are labelled **provisional** (below), and the report's limited-sampling caveat must say so.
-- **N_eff** = N / (2τ), reported everywhere, shown next to **τ in ns** (τ × 0.24 ns × stride; path steps on `adk_transition`).
-  - *Changed Day 3:* "N_eff × 0.24 ns" was dropped. It read as "6 ns of independent sampling" for SER30–ASP84 in a 502 ns window, which is misleading. τ in ns is the physical memory time.
-- **Moving-block bootstrap:**
-  - block length = max(1, ceil(2·τ_indicator), ceil(2·τ_distance)), 2,000 resamples
-  - fixed seed, recorded in provenance
-  - applied to frequencies and to between-window differences
-  - the two windows are resampled independently
+- **Independent chunks** = N / (2τ) = N_eff: how many independent pieces of data a window holds. N_eff is reported everywhere, next to **τ in ns** (τ × 0.24 ns × stride; path steps on `adk_transition`). "N_eff × 0.24 ns" is not shown: it read as "6 ns of sampling" in a 502 ns window.
+- **Confidence intervals (autocorrelation-corrected):** SE = sqrt(p(1−p) · 2τ / N), the variance of the mean of a correlated series. CI = p ± 1.96·SE, clipped to [0, 1].
+  - **Differences** between two windows: SE = sqrt(SE_A² + SE_B²), CI = Δ ± 1.96·SE, clipped to [−1, 1].
+  - **p-value:** two-sided z-test on z = Δ / SE.
+  - **Block bootstrap: cross-check only.** A moving-block bootstrap (block length max(1, ceil(2τ)), fixed seed, windows resampled independently) is still computed and returned as `boot_*` fields. It is **not** used for "supported," because it undercovers (next bullet).
+- **Calibration (Day 3; `backend/scripts/calibrate_ci.py`, tables in `notes/calibration/`):**
+  - **Setup:** synthetic min-distance series with a known true frequency, distance = cutoff + offset + a·AR(1) + noise. There are 8 processes: white noise, fast AR(1), and slow and very slow drifts with 0.1–0.6 Å fast noise, at p = 0.5 and p ≈ 0.23. Each runs at window lengths of 500–16,000 frames, with 200 replicates per cell (about 9,600 replicates in total). The script runs the production functions and records whether each CI contains the truth (for differences, Δ = 0 between the halves of one series).
+  - **Coverage of nominal 95% CIs, by independent chunks per window:**
+
+    | chunks (N / 2τ) | τ-based, frequency | τ-based, difference | bootstrap (cross-check), frequency |
+    |---|---|---|---|
+    | 5–10 | 0.88 | 0.91 | 0.69 |
+    | 10–20 | 0.86–0.87 | 0.91–0.92 | 0.66–0.71 |
+    | 20–30 | 0.87 | 0.92 | 0.71 |
+    | 30–40 | 0.88 | 0.96 | 0.70 |
+    | **40–50** | **0.93** | **0.96** | 0.75 |
+    | 50–200 | 0.93–0.94 | 0.94–0.98 | 0.74–0.78 |
+    | 200–1000 | 0.94–0.96 | 0.96–0.97 | 0.76–0.81 |
+    | ≥ 1000 | 0.97 | 0.96 | 0.93 |
+
+  - **MIN_BLOCKS_FIRM = 40:** the smallest chunk count from which every bin covers ≥ 90%, for both frequencies and differences.
+  - Below 10 chunks, a pair is never supported ("too few independent chunks of data").
+  - *Correction (2026-10-28):* an earlier note blamed the undercoverage on Sokal's window cutting off slow autocorrelation tails. That was wrong. On 2-million-frame series our τ estimates match the true τ (for example 9.5 vs 9.6 frames, and 89.5 vs 90.8). The bootstrap was the problem: blocks of 2τ are shorter than the slow tail of the autocorrelation (about 50–250 frames), so neighbouring blocks stay correlated and the bootstrap misses that variance, however many blocks there are. Earlier coverage figures for the old rule (61–87%, and 49–82% with τ_indicator alone) described the 2τ bootstrap and are superseded by the table above.
 - **Multiple comparisons:** `compare_intervals` tests many pairs at once, so 95% CIs alone would produce false positives (about 5% of pairs).
-  - **p-value:** two-sided z-test, z = Δ / SE, where SE is the standard deviation of the block-bootstrap differences. Then apply **Benjamini–Hochberg FDR at q < 0.05**.
-    - *Why not a bootstrap-count p-value* (changed Day 3, 2026-10-28): with 2,000 resamples, such a p-value can't go below about 1/1,000. BH's strictest threshold is 0.05/m, which is about 1e-5 for NMP–CORE's 4,374 pairs. So BH could almost never declare anything, and the result would be a false "all noise." The z-test gives continuous p-values. The CI stays a bootstrap percentile CI.
+  - Apply **Benjamini–Hochberg FDR at q < 0.05** to the z-test p-values. The p-values are continuous: a bootstrap-count p-value (≥ about 1/2,000) could never pass BH's 0.05/m with thousands of pairs.
   - **Pre-filter:** test only pairs that are not sequence-local and whose pooled contact frequency across both windows is ≥ 1%. Rare or never-formed contacts carry no testable signal and would only inflate m. The filter doesn't look at the difference between windows, so BH stays valid.
-  - **"Supported"** = BH q < 0.05 **and** the percentile CI excludes 0 **and** the pair is not flagged "too few events" (< 5 transitions across both windows) **and** neither window is flagged "too few independent blocks" (< 10). A flagged pair is never supported, whatever its p or CI.
-  - **Provisional** (added Day 3): a tested pair is provisional if either window has fewer than **20** bootstrap blocks, or its τ_distance (the slower window) is in the **slowest quartile** of the pairs tested in that comparison.
-    - A supported pair that is provisional displays as **"supported (slow — provisional)"**; it still counts as supported.
-    - The summary shows both counts ("15 supported: 11 firm · 4 slow — provisional"). An info tooltip explains the rule and cites the coverage numbers above.
-    - The quartile is relative to the comparison, so about a quarter of tested pairs are always "slow" whatever their absolute τ. On LID–CORE the cutoff is about 1.1 ns.
-    - `contact_statistics` (one pair, no quartile) uses only the < 20-blocks rule.
+  - **"Supported"** = BH q < 0.05 **and** the τ-based CI excludes 0 **and** not "too few events" (< 5 transitions across both windows) **and** not "too few independent chunks" (< 10 in either window). A flagged pair is never supported, whatever its p or CI.
+  - **Provisional** = fewer than **MIN_BLOCKS_FIRM (40)** independent chunks in either window, where calibrated coverage is below 90%.
+    - A supported provisional pair displays as **"supported (slow — provisional)"** and still counts as supported.
+    - The summary shows "N supported: F firm · P slow — provisional", and the tooltip says "fewer than 40 independent chunks of data → less certain."
+    - `contact_statistics` (one pair) uses the same rule.
   - The UI says "N tested · M filtered out (rare or never in contact)".
+- **Result on `adk_equilibrium`, first vs second half (cutoff 4.5 Å):**
+  - NMP–CORE: 53 tested, **0 supported**.
+  - LID–CORE: 29 tested, **4 supported, all firm**.
+  - SER30–ASP84 (Δ = −0.31, 18–25 chunks per half) is provisional and **not supported** (q = 0.31). The old bootstrap called it supported. Details in `notes/recon.md`.
 - **Refusal:** if `stats_valid` is false, return `status: refused` with a one-sentence explanation the UI can show.
 - **Validation tests:**
   - On AR(1) with known τ, the estimate is within 20%.
-  - On white noise, the block CI ≈ the naive CI.
-  - On a correlated series, the block CI is clearly wider.
+  - On white noise, the τ-based CI ≈ the naive CI.
+  - On a correlated series, the CI is clearly wider.
+  - The SE formula and the difference SE match their definitions.
+  - On 300 correlated AR(1) series with known truth, the τ-based CI covers ≥ 90% (a fast version of the calibration).
   - On 500 pure-noise pairs, BH declares ≤ 5% supported.
-  - On a slow-drift distance hovering at the cutoff (the 0/1 series flickers fast), τ_distance governs, and the block CI is ≥ 1.3× wider than with τ_indicator alone.
-  - A series with fewer than 10 blocks is flagged and can never be supported.
-  - On `adk_equilibrium`, a known strong change (SER30–ASP84, NMP–CORE, first vs second half) is supported (slow test), so the method is not "all noise."
+  - On a slow-drift distance hovering at the cutoff, τ_distance governs, and the CI is ≥ 1.3× wider than with τ_indicator alone.
+  - A series with fewer than 10 chunks is flagged and can never be supported.
+  - On `adk_equilibrium` (slow tests): HSE134–ASP118 (LID–CORE) is supported and firm, so the method is not "all noise." SER30–ASP84 is provisional and not supported, so the method doesn't overclaim large but poorly sampled changes.
 
 ## 9. Agent flow
 
@@ -460,10 +480,11 @@ Record with replay mode available as a fallback, but use **real live runs** for 
 - Contact definition is fixed (min heavy-atom distance ≤ cutoff).
 - Method-transfer reproductions are not expected to match numerically.
 - Replay runs are recorded real runs, labeled as such.
-- **Confidence intervals are optimistic for slowly varying contacts.**
-  - On synthetic slow-drift series (AR(1), τ ≈ 30–100 frames, plus fast noise; 2,000-frame windows; 200 replicates per case), nominal 95% block-bootstrap CIs contained the true frequency in only **61–87%** of trials with our rule (τ = max of indicator and distance τ, blocks of 2τ).
-  - With the indicator τ alone it was **49–82%**. White noise: 96%.
-  - Such pairs are labelled "supported (slow — provisional)" (SPEC §8a; numbers in `notes/recon.md`).
+- **Statistics describe this one simulation, with calibrated but imperfect intervals.**
+  - CIs are autocorrelation-corrected (SE from τ). In a coverage experiment with known answers (about 9,600 synthetic series, `notes/calibration/`), nominal 95% CIs covered 93–97% from 40 independent chunks per window upward, but only 86–88% below that. Such results are labelled "provisional."
+  - The 40-chunk threshold is pooled across processes. One case, a slow drift under large fast noise on short windows (500–1,000 frames), covered only 79–86% despite 57–79 chunks.
+  - The first statistics version used a 2τ block bootstrap, which covered only 65–84%. It is kept as a cross-check field and is not used for decisions.
+  - With these CIs, the first-vs-second-half comparison finds no supported NMP–CORE change and 4 LID–CORE changes. Large-looking slow changes such as SER30–ASP84 stay unsupported, because a 500 ns window holds only about 20 independent chunks of them.
 
 ## 17. Out of scope
 
