@@ -17,6 +17,14 @@ def test_domains_cover_protein_once():
     assert sorted(resids) == list(range(1, 215))
 
 
+def test_pbc_comes_from_config():
+    from app.science.loader import box_for, pbc_mode
+    for ds in ("adk_transition", "adk_equilibrium"):
+        assert pbc_mode(ds) == "none"
+    u = load_universe("adk_transition")
+    assert box_for("adk_transition", u.trajectory.ts) is None
+
+
 def test_heavy_atoms_have_no_hydrogens():
     ag = group_heavy_atoms("adk_transition", "LID")
     assert len(ag) > 0

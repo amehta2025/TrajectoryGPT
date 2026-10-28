@@ -30,6 +30,11 @@ datasets:
       benchmarking MDAnalysis. figshare. doi:10.6084/m9.figshare.5108170.v1
     stats_valid: true
     dt_ns: 0.24
+    # The DCD carries an 85.5 A box, but frames were rotated when fit to CORE,
+    # so the box no longer matches the coordinates and minimum-image distances
+    # are wrong (checked 2026-10-27: up to 34 A too short). The protein is whole
+    # (max bond 1.87 A without PBC), so plain distances are correct.
+    pbc: none
     time_label: ns
     domains: *domains
     domains_source: *domains_source
@@ -39,11 +44,12 @@ datasets:
       98-frame closed->open transition path of AdK generated with DIMS
       (biased path sampling). Frames are path steps, not equal time steps.
     loader: mdanalysistests_psf_dcd
-    license: GPL-2.0 (distributed with MDAnalysisTests)
+    license: LGPLv3+ (distributed with the MDAnalysisTests package)
     citation: >-
       Beckstein O, Denning EJ, Perilla JR, Woolf TB (2009). J Mol Biol
       394:160-176. doi:10.1016/j.jmb.2009.09.009
     stats_valid: false
+    pbc: none  # no box in the DCD
     stats_refusal: >-
       This is a biased, non-stationary transition path (DIMS), so time-series
       statistics such as autocorrelation and confidence intervals are not meaningful.

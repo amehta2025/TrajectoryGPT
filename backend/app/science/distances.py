@@ -4,7 +4,7 @@ from MDAnalysis.lib.distances import distance_array
 
 from app.config import dataset_config
 from app.science.contacts import validate_window
-from app.science.loader import HEAVY, load_universe
+from app.science.loader import HEAVY, box_for, load_universe, pbc_mode
 from app.science.residues import parse_residue_key
 
 
@@ -29,10 +29,8 @@ def distance_over_time(
     frames = validate_window(u.trajectory.n_frames, start, stop, stride)
 
     dist = np.empty(len(frames), dtype=np.float64)
-    has_box = u.dimensions is not None and np.all(u.dimensions[:3] > 0)
     for n, ts in enumerate(u.trajectory[frames.start:frames.stop:frames.step]):
-        box = ts.dimensions if has_box else None
-        dist[n] = distance_array(ag_a.positions, ag_b.positions, box=box).min()
+        dist[n] = distance_array(ag_a.positions, ag_b.positions, box=box_for(dataset, ts)).min()
 
     cfg = dataset_config(dataset)
     frames_arr = np.asarray(frames)
@@ -43,6 +41,6 @@ def distance_over_time(
         "frames": frames_arr,
         "time_ns": None if cfg["dt_ns"] is None else frames_arr * cfg["dt_ns"],
         "distance": dist,
-        "pbc": "minimum-image" if has_box else "none",
+        "pbc": pbc_mode(dataset),
         "units": {"distance": "Å", "time": cfg["time_label"], "dt_ns": cfg["dt_ns"]},
     }

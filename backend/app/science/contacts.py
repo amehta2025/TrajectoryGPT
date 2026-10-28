@@ -16,7 +16,7 @@ import numpy as np
 from MDAnalysis.lib.distances import distance_array
 
 from app.config import CACHE_DIR, dataset_config
-from app.science.loader import HEAVY, dataset_files, group_heavy_atoms, load_universe
+from app.science.loader import HEAVY, box_for, dataset_files, group_heavy_atoms, load_universe, pbc_mode
 from app.science.residues import residue_keys
 
 log = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ class MinDistances:
     keys_b: list[str]
     pbc: str
     cache_path: Path
+    computed: bool  # False when loaded from cache
 
 
 @lru_cache(maxsize=8)
@@ -57,6 +58,7 @@ def _cache_key(dataset: str, group_a: str, group_b: str, ag_a, ag_b) -> str:
         "files": dataset_hashes(dataset),
         "groups": [group_a, group_b],
         "selection": HEAVY,
+        "pbc": pbc_mode(dataset),
         "atoms_a": ag_a.indices.tolist(),
         "atoms_b": ag_b.indices.tolist(),
         "mdanalysis": mda.__version__,
@@ -88,12 +90,11 @@ def precompute_min_distances(
     keys_b = residue_keys(dataset, ag_b.residues)
 
     u = load_universe(dataset)
-    has_box = u.dimensions is not None and np.all(u.dimensions[:3] > 0)
-    pbc = "minimum-image" if has_box else "none"
+    pbc = pbc_mode(dataset)
 
     path = Path(cache_dir) / f"mindist_{dataset}_{group_a}_{group_b}_{_cache_key(dataset, group_a, group_b, ag_a, ag_b)}.npy"
     if path.exists():
-        return MinDistances(np.load(path), keys_a, keys_b, pbc, path)
+        return MinDistances(np.load(path), keys_a, keys_b, pbc, path, computed=False)
 
     n_frames = u.trajectory.n_frames
     msg = f"Precomputing {group_a}-{group_b} distances on {dataset}: {n_frames} frames (first time only)"
@@ -105,14 +106,13 @@ def precompute_min_distances(
     out = np.empty((n_frames, len(starts_a), len(starts_b)), dtype=np.float32)
     buf = np.empty((len(ag_a), len(ag_b)), dtype=np.float64)
     for ts in u.trajectory:
-        box = ts.dimensions if has_box else None
-        distance_array(ag_a.positions, ag_b.positions, box=box, result=buf)
+        distance_array(ag_a.positions, ag_b.positions, box=box_for(dataset, ts), result=buf)
         per_res_a = np.minimum.reduceat(buf, starts_a, axis=0)
         out[ts.frame] = np.minimum.reduceat(per_res_a, starts_b, axis=1)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     np.save(path, out)
-    return MinDistances(out, keys_a, keys_b, pbc, path)
+    return MinDistances(out, keys_a, keys_b, pbc, path, computed=True)
 
 
 def validate_window(n_frames: int, start: int, stop: int | None, stride: int) -> range:

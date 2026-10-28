@@ -63,6 +63,7 @@ def test_three_cases_behave_as_labelled(mindist):
 
 def test_cache_is_reused(mindist):
     again = precompute_min_distances(DS, "LID", "NMP", cache_dir=mindist.cache_path.parent)
+    assert mindist.computed and not again.computed
     assert again.cache_path == mindist.cache_path
     np.testing.assert_array_equal(again.min_dist, mindist.min_dist)
 

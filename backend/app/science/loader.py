@@ -33,6 +33,23 @@ def load_universe(dataset: str) -> mda.Universe:
         return mda.Universe(top, traj)
 
 
+def pbc_mode(dataset: str) -> str:
+    """'none' or 'minimum-image', from config (a box in the file is not enough; see dataset.yaml)."""
+    mode = dataset_config(dataset)["pbc"]
+    if mode not in ("none", "minimum-image"):
+        raise ValueError(f"pbc must be 'none' or 'minimum-image', got {mode!r}")
+    return mode
+
+
+def box_for(dataset: str, ts):
+    """Box to pass to MDAnalysis distance functions for this frame, or None."""
+    if pbc_mode(dataset) == "none":
+        return None
+    if ts.dimensions is None:
+        raise ValueError(f"{dataset} is configured for minimum-image PBC but frame {ts.frame} has no box")
+    return ts.dimensions
+
+
 def group_selection(dataset: str, group: str) -> str:
     """MDAnalysis selection string for a named domain, e.g. 'resid 30:59'."""
     domains = dataset_config(dataset)["domains"]
