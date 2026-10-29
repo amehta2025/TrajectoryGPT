@@ -123,3 +123,46 @@ def test_equilibrium_contact_statistics():
     assert r["frequency"] == pytest.approx(0.477, abs=0.01)  # notes/recon.md
     assert r["tau"] > 0.5 and r["n_eff"] < r["n"]
     assert r["ci_low"] < r["frequency"] < r["ci_high"]
+
+
+# ---------- cutoff_sensitivity (SPEC §7) ----------
+
+def test_cutoff_sensitivity_refuses_on_transition(cache):
+    with pytest.raises(cs.StatsRefused):
+        cs.cutoff_sensitivity(DS, "NMP", "CORE", (0, 49), (49, 98), cache_dir=cache)
+
+
+@pytest.mark.parametrize("cuts,main", [([4.5], None), ([3.0, 4.5], None), ([4.5, 6.5], None), ([4.0, 5.0], 4.5)])
+def test_robustness_cutoffs_validated(cuts, main):
+    with pytest.raises(ValueError):
+        cs.validate_robustness_cutoffs(cuts, main)
+
+
+def test_robustness_cutoffs_sorted_and_deduplicated():
+    assert cs.validate_robustness_cutoffs([5.0, 4.0, 4.5, 4.5], 4.5) == [4.0, 4.5, 5.0]
+
+
+def test_cutoff_sensitivity_verdicts_match_per_cutoff_runs(pretend_stats_valid, cache):
+    cuts = [4.0, 4.5, 5.0]
+    r = cs.cutoff_sensitivity(DS, "NMP", "CORE", (0, 49), (49, 98), cuts, n_resamples=100, cache_dir=cache)
+    assert r["cutoffs"] == cuts and r["rows"]
+    direct = {c: {(x["key_a"], x["key_b"]): x for x in
+                  cs.compare_intervals(DS, "NMP", "CORE", (0, 49), (49, 98), c, n_resamples=100, cache_dir=cache)["rows"]}
+              for c in cuts}
+    for row in r["rows"]:
+        k = (row["key_a"], row["key_b"])
+        held = [c for c in cuts if k in direct[c] and direct[c][k]["supported"]]
+        assert row["holds_at"] == held
+        signs = {direct[c][k]["delta"] > 0 for c in held}
+        assert (row["verdict"] == "robust") == (held == cuts and len(signs) == 1)
+    assert r["n_robust"] == sum(x["verdict"] == "robust" for x in r["rows"])
+
+
+@pytest.mark.slow
+def test_equilibrium_hse134_asp118_robust_4_to_5():
+    ds = "adk_equilibrium"
+    pair = (make_residue_key(ds, "ADK", 134, "HSE"), make_residue_key(ds, "ADK", 118, "ASP"))
+    r = cs.cutoff_sensitivity(ds, "LID", "CORE", (0, 2093), (2093, 4187), [4.0, 4.5, 5.0], pairs=[pair])
+    assert r["rows"][0]["verdict"] == "robust"
+    r = cs.cutoff_sensitivity(ds, "LID", "CORE", (0, 2093), (2093, 4187), [4.5, 5.5], pairs=[pair])
+    assert r["rows"][0]["verdict"] == "cutoff-sensitive" and r["rows"][0]["holds_at"] == [4.5]

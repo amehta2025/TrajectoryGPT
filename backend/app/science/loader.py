@@ -1,4 +1,5 @@
 """Load preloaded datasets as MDAnalysis Universes, and resolve named groups."""
+import threading
 import warnings
 from functools import lru_cache
 
@@ -7,6 +8,9 @@ import MDAnalysis as mda
 from app.config import DATA_DIR, dataset_config
 
 HEAVY = "protein and not name H*"
+
+# Universes are shared and reading a frame moves the trajectory cursor: hold this while reading frames.
+TRAJ_LOCK = threading.RLock()
 
 
 def _paths(loader: str) -> tuple[str, str]:

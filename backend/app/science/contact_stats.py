@@ -17,6 +17,8 @@ from app.science.distances import distance_over_time
 from app.science.residues import parse_residue_key
 
 MIN_POOLED_FREQ = 0.01  # pairs below this pooled frequency are not tested (rare or never in contact)
+ROBUST_CUTOFF_MIN, ROBUST_CUTOFF_MAX = 3.5, 6.0  # allowed robustness range (SPEC §7)
+DEFAULT_ROBUST_CUTOFFS = (4.0, 4.5, 5.0)
 
 
 class StatsRefused(Exception):
@@ -131,6 +133,70 @@ def compare_intervals(
         "n_resamples": n_resamples,
         "pbc": md.pbc,
         "units": {"distance": "Å", "time": cfg["time_label"], "dt_ns": cfg["dt_ns"]},
+    }
+
+
+def validate_robustness_cutoffs(cutoffs, main_cutoff: float | None = None) -> list[float]:
+    """2-6 distinct cutoffs within ROBUST_CUTOFF_MIN..MAX, sorted; must include the main cutoff if given."""
+    cs = sorted({round(float(c), 3) for c in cutoffs})
+    if not 2 <= len(cs) <= 6:
+        raise ValueError(f"Give 2-6 distinct robustness cutoffs, got {cs}")
+    bad = [c for c in cs if not ROBUST_CUTOFF_MIN <= c <= ROBUST_CUTOFF_MAX]
+    if bad:
+        raise ValueError(f"Robustness cutoffs must be within {ROBUST_CUTOFF_MIN}-{ROBUST_CUTOFF_MAX} Å, got {bad}")
+    if main_cutoff is not None and round(float(main_cutoff), 3) not in cs:
+        raise ValueError(f"The main cutoff {main_cutoff} Å must be one of the robustness cutoffs {cs}")
+    return cs
+
+
+def cutoff_sensitivity(
+    dataset: str,
+    group_a: str,
+    group_b: str,
+    window_a: tuple[int, int],
+    window_b: tuple[int, int],
+    cutoffs=DEFAULT_ROBUST_CUTOFFS,
+    pairs: list[tuple[str, str]] | None = None,
+    stride: int = 1,
+    sequence_exclusion: int | None = None,
+    **kwargs,
+) -> dict:
+    """Rerun compare_intervals at each cutoff (frozen §8a stats, BH per cutoff) and judge robustness.
+
+    robust = supported at every cutoff with the same sign of delta; otherwise cutoff-sensitive.
+    `pairs` limits the verdicts to those pairs; by default, every pair supported at any cutoff.
+    A pair filtered out (rare) at some cutoff counts as not supported there.
+    """
+    require_stats_valid(dataset)
+    cutoffs = validate_robustness_cutoffs(cutoffs)
+    runs = {c: compare_intervals(dataset, group_a, group_b, window_a, window_b, c, stride, sequence_exclusion, **kwargs)
+            for c in cutoffs}
+    by_cut = {c: {(r["key_a"], r["key_b"]): r for r in run["rows"]} for c, run in runs.items()}
+    if pairs is None:
+        pairs = sorted({k for rows in by_cut.values() for k, r in rows.items() if r["supported"]})
+    rows = []
+    for ka, kb in pairs:
+        per = []
+        for c in cutoffs:
+            r = by_cut[c].get((ka, kb))
+            per.append({"cutoff": c, "tested": r is not None,
+                        **({k: r[k] for k in ("freq_a", "freq_b", "delta", "ci_low", "ci_high", "q", "supported", "provisional")}
+                           if r else {"supported": False, "provisional": False})})
+        holds = [p["cutoff"] for p in per if p["supported"]]
+        signs = {p["delta"] > 0 for p in per if p["supported"]}
+        robust = len(holds) == len(cutoffs) and len(signs) == 1
+        rows.append({"key_a": ka, "key_b": kb, "per_cutoff": per, "holds_at": holds,
+                     "verdict": "robust" if robust else "cutoff-sensitive"})
+    return {
+        "dataset": dataset, "group_a": group_a, "group_b": group_b,
+        "window_a": list(window_a), "window_b": list(window_b), "stride": stride,
+        "cutoffs": cutoffs,
+        "n_tested": {c: runs[c]["n_tested"] for c in cutoffs},
+        "n_supported": {c: runs[c]["n_supported"] for c in cutoffs},
+        "rows": rows,
+        "n_robust": sum(r["verdict"] == "robust" for r in rows),
+        "contact_definition": CONTACT_DEFINITION,
+        "units": runs[cutoffs[0]]["units"],
     }
 
 

@@ -1,6 +1,5 @@
 """FastAPI app: thin HTTP wrappers around the science functions. No science here."""
 import os
-import threading
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query
@@ -12,7 +11,7 @@ from app.config import dataset_config, load_config
 from app.science.contact_stats import StatsRefused, compare_intervals, contact_statistics
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts
 from app.science.distances import distance_over_time
-from app.science.loader import group_selection, load_universe, pbc_mode
+from app.science.loader import TRAJ_LOCK, group_selection, load_universe, pbc_mode
 from app.science.native_contacts import native_contacts
 from app.science.structure import frames_float32, playback_stride, structure_pdb, viewer_atoms
 
@@ -30,8 +29,8 @@ app.add_middleware(
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
 
-# Universes are shared and reading a frame moves the trajectory cursor, so one request at a time.
-_traj_lock = threading.Lock()
+# One trajectory read at a time (shared with the agent's tools).
+_traj_lock = TRAJ_LOCK
 
 
 def _check_dataset(dataset: str) -> dict:
