@@ -43,7 +43,7 @@ def test_run_streams_and_reports():
     assert [e["tool"] for e in evs if e["type"] == "turn"] == ["calculate_contacts", "record_finding", "submit_report"]
     assert evs[-1]["status"] == "awaiting_verification"
     view = c.get(f"/runs/{rid}").json()
-    assert view["report"]["findings"][0]["badge"] == "observed" and "input_items" not in view
+    assert view["report"]["findings"][0]["badge"] == "descriptive" and "input_items" not in view
     assert view["turns"][0]["saw"][0]["role"] == "system"
 
 
@@ -63,3 +63,16 @@ def test_step_through_pauses_until_next():
         if e["type"] == "paused":
             assert c.post(f"/runs/{rid}/next", json={}).json() == {"ok": True}
     assert seen.count("paused") == 2 and seen[-1] == "run_finished"
+
+
+def test_finished_run_is_read_back_from_disk_after_restart():
+    c = TestClient(app)
+    rid = c.post("/runs", json={"plan_id": store_plan(GOOD), "edits": {}}).json()["run_id"]
+    list(events(c, rid))
+    session.RUNS.clear()  # as after a container restart
+    view = c.get(f"/runs/{rid}").json()
+    assert view["status"] == "awaiting_verification" and view["report"]["findings"]
+    evs = list(events(c, rid))
+    assert evs == [{**evs[0], "type": "run_finished", "status": "awaiting_verification"}]
+    assert c.get("/runs/nope").status_code == 404
+    assert c.get("/runs").json()[0]["run_id"] == rid

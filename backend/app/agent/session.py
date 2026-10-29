@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.agent.llm import LLM, CostTracker
+from app.agent import orchestrator
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import make_plan, to_approved
 from app.safety import budget
@@ -66,6 +67,7 @@ class RunHandle:
 
 
 PLANS: dict[str, dict] = {}
+ON_RUN_FINISHED = None  # set on Modal to commit the Volume, so a finished run survives restarts
 RUNS: dict[str, RunHandle] = {}
 _lock = threading.Lock()
 
@@ -100,6 +102,8 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False) -> str:
 
     def work():
         run_investigation(llm, run, on_event=handle.emit, wait_for_next=handle.wait_for_next)
+        if ON_RUN_FINISHED:
+            ON_RUN_FINISHED()
 
     threading.Thread(target=work, name=f"run-{run.run_id}", daemon=True).start()
     return run.run_id
@@ -124,9 +128,17 @@ def next_turn(run_id: str, step_through: bool | None = None) -> None:
 
 
 def run_view(run_id: str) -> dict:
-    """Everything the UI shows for a run: plan, checklist, timeline, results, findings, report."""
-    h = get_handle(run_id)
-    d = h.run.as_dict()
+    """Everything the UI shows for a run: plan, checklist, timeline, results, findings, report.
+    A run this container is not running is read back from its saved file (e.g. after a restart)."""
+    with _lock:
+        h = RUNS.get(run_id)
+    if h is not None:
+        d, step = h.run.as_dict(), h.step_through
+    else:
+        try:
+            d, step = orchestrator.load_run(run_id).as_dict(), False
+        except (FileNotFoundError, ValueError):
+            raise KeyError(f"unknown run {run_id}") from None
     d.pop("input_items")
-    d["step_through"] = h.step_through
+    d["step_through"] = step
     return d

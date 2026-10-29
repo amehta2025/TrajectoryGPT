@@ -11,6 +11,10 @@ import json
 import sys
 import time
 
+# Windows consoles default to cp1252, which cannot print "−" or "Å": force UTF-8 before any output.
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(encoding="utf-8", errors="replace")
+
 from app.agent.llm import LLM, BudgetExceeded, CostTracker
 from app.agent.orchestrator import MAX_TURNS, new_run, run_investigation
 from app.agent.planner import PlanInvalid, make_plan, to_approved
@@ -39,7 +43,7 @@ def _print_report(run) -> None:
     print("\n=== Report ===")
     for f in rep["findings"]:
         rob = "; ".join(f"{r['pair']}: {r['label']}" for r in f["robustness"])
-        print(f"[{f['badge']}] {f['rendered']}" + (f"   <{rob}>" if rob else ""))
+        print(f"[{f['badge_label']}] {f['rendered']}" + (f"   <{rob}>" if rob else ""))
         print(f"    citations: {', '.join(f['evidence_ids'])}")
     if rep["statistical_support"]:
         print("Statistical support:")
@@ -47,6 +51,8 @@ def _print_report(run) -> None:
             print(f"  {s['pair']}: Δ {s['delta']}  CI {s['ci']}  q {s['q']}  chunks {s['n_blocks_a']}/{s['n_blocks_b']}"
                   f"  τ {s['tau_ns_a']}/{s['tau_ns_b']}  {'supported' if s['supported'] else 'not supported'}"
                   f"{' (provisional)' if s['provisional'] else ''}  [{s['robustness']}]")
+    for x in rep["background"]:
+        print(f"[{rep['background_label']}] {x['text']}")
     for name in ("hypotheses", "caveats", "gaps"):
         if rep[name]:
             print(name.capitalize() + ":")
@@ -125,7 +131,6 @@ def main(argv=None) -> int:
     r.add_argument("--robust", help="edit the robustness cutoffs, e.g. 4.0,4.5,5.0")
     r.add_argument("--budget", type=float, default=DEV_BUDGET_USD, help="abort when estimated $ passes this")
     a = ap.parse_args(argv)
-    sys.stdout.reconfigure(encoding="utf-8")
     return cmd_run(a)
 
 

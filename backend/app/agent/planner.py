@@ -13,7 +13,7 @@ from app.science.contacts import CUTOFF_MAX, CUTOFF_MIN, SEQ_EXCLUSION_MAX
 from app.science.loader import TRAJ_LOCK, load_universe
 
 MAX_STEPS = 5
-PLAN_TOOLS = ["calculate_contacts", "distance_over_time", "compare_intervals", "contact_statistics",
+PLAN_TOOLS = ["get_metadata", "list_groups", "calculate_contacts", "distance_over_time", "compare_intervals", "contact_statistics",
               "cutoff_sensitivity", "native_contacts", "submit_report"]
 
 

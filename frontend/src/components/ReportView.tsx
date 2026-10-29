@@ -53,7 +53,7 @@ function FindingCard({ f, run }: { f: Finding; run: RunView }) {
   return (
     <li className={`finding ${f.badge}`}>
       <div className="badges">
-        <span className={`badge ${f.badge}`}>{f.badge}</span>
+        <span className={`badge ${f.badge}`}>{f.badge_label}</span>
         {f.robustness.map((r) => (
           <span key={r.pair} className={`badge rob-${r.verdict.replace(' ', '-')}`} title={`${r.pair}${r.pid ? ` · from ${r.pid}` : ''}`}>
             {f.robustness.length > 1 ? `${r.pair}: ` : ''}{r.label}
@@ -104,6 +104,12 @@ export function ReportView() {
         <>
           <h3>Observed</h3>
           <ul className="findings">{rep.findings.map((f) => <FindingCard key={f.id} f={f} run={run} />)}</ul>
+          {rep.background.length > 0 && (
+            <div className="background">
+              <h3>Background <span className="badge">{rep.background_label}</span></h3>
+              <ul className="plain">{rep.background.map((x, i) => <li key={i}><Segments segs={x.segments} run={run} /></li>)}</ul>
+            </div>
+          )}
           {rep.statistical_support.length > 0 && (
             <>
               <h3>Statistical support</h3>

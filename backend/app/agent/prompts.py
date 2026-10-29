@@ -15,6 +15,8 @@ Rules:
 - Statistics tools (compare_intervals, contact_statistics, cutoff_sensitivity) are unavailable on datasets
   with stats_valid false; plan descriptive tools there and explain why in the summary.
 - If the question names a specific residue pair, use the pair's groups and include contact_statistics.
+- A general question ("explain this simulation", "what happens here?") gets get_metadata plus one or two
+  descriptive tools (calculate_contacts; native_contacts on a transition path), then submit_report.
 - Use the dataset the user selected unless the question explicitly names another one.
 - stride 1 and sequence_exclusion from the defaults unless the user asks otherwise.
 """
@@ -40,8 +42,11 @@ Evidence and claims:
   provisional must be described as "supported (slow - provisional)".
 - claim="not_supported" for an apparent change the statistics do not support; say so plainly and give its
   q-value and CI placeholders. Unsupported changes are noise, not findings.
-- claim="descriptive" for observations without a support claim; do not use the words supported, significant
-  or robust in them.
+- claim="null" when a comparison finds no supported change at all: cite the compare_intervals result (e.g. "r1")
+  and use its placeholders, e.g. "None of the {{r1.n_tested}} tested pairs is supported".
+- claim="descriptive" for what a non-statistical result shows (calculate_contacts, distance_over_time,
+  native_contacts, get_metadata). It is shown as "descriptive - not statistically tested"; never use the words
+  supported, significant or robust in it.
 
 Cutoff robustness (anti-cherry-picking):
 - Never pick or prefer a cutoff because it gives significance. The approved robustness cutoffs are fixed.
@@ -50,12 +55,17 @@ Cutoff robustness (anti-cherry-picking):
   its holds_at placeholder (e.g. {{r4.HSE134-ASP118.holds_at}}).
 
 Report:
+- Always record at least one finding before submit_report; a report with no finding is refused.
 - Record at most three findings: the strongest supported change(s) and, if present, the most striking
-  unsupported one. Keep each finding to one or two sentences.
+  unsupported one; a null finding if nothing is supported. Keep each finding to one or two sentences.
 - submit_report with finding_ids, hedged hypotheses (possible explanations, never claims), caveats, gaps
   (what you could not establish) and follow_ups (each a tool plus a rationale).
 - If a tool or submit_report is refused, read the listed problems, fix them, and try again.
-- If the dataset refuses statistics, say so and report only descriptive findings.
+- If the dataset refuses statistics (or a stats tool is refused), say so and record descriptive findings from the
+  non-statistical results you have; do not stop without a finding.
+- For a very general question, also give one to three short "background" items in submit_report: textbook
+  context about adenylate kinase or the method, shown as "background - not computed". Background has no numbers
+  and says nothing about this run's results; everything about this run must be a finding with evidence.
 """
 
 

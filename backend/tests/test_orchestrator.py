@@ -129,3 +129,62 @@ def test_invalid_plans(kw, msg, monkeypatch):
     assert any(msg in e for e in errs), errs
     with pytest.raises(PlanInvalid):
         to_approved(plan_dict(**kw))
+
+
+# ---------- regression: "Explain this simulation to me" on adk_transition (stats refused) ----------
+
+EXPLAIN_PLAN = [{"tool": t, "rationale": ""} for t in ("get_metadata", "native_contacts", "submit_report")]
+
+
+def explain_plan():
+    return ApprovedPlan(DS, "LID", "NMP", 4.5, [0, 98], None, steps=EXPLAIN_PLAN)
+
+
+def test_explain_transition_without_a_finding_needs_review():
+    """The original failure: no statistical result, so the agent submitted with no finding at all."""
+    script = [("get_metadata", {}), ("compare_intervals", {}), ("submit_report", {"finding_ids": []}),
+              ("submit_report", {"finding_ids": []})]
+    run = orch.run_investigation(ScriptedLLM(script), orch.new_run("Explain this simulation to me", explain_plan()))
+    assert run.turns[1]["status"] == "refused"  # stats refused on the transition path
+    assert run.status == "needs_review" and "cite at least one finding id" in run.problems
+
+
+def test_explain_transition_with_descriptive_finding_and_background():
+    script = [
+        ("get_metadata", {}),
+        ("native_contacts", {}),
+        ("record_finding", {"text": "Along the path, the fraction of native contacts of the first frame falls from "
+                                    "{{r2.ref0.q_first}} to {{r2.ref0.q_last}} over {{r1.n_frames}} path steps.",
+                            "evidence_ids": ["r2", "r1"], "claim": "descriptive"}),
+        ("submit_report", {"finding_ids": ["f1"],
+                           "background": ["Adenylate kinase closes its LID and NMP domains over ATP and AMP and reopens."],
+                           "gaps": ["Statistics are not meaningful on this biased path."]}),
+    ]
+    run = orch.run_investigation(ScriptedLLM(script), orch.new_run("Explain this simulation to me", explain_plan()))
+    assert run.status == "awaiting_verification", run.problems
+    rep = run.state.report
+    f = rep["findings"][0]
+    assert f["badge"] == "descriptive" and f["badge_label"] == "descriptive — not statistically tested"
+    assert "{{" not in f["rendered"] and not f["robustness"]
+    assert rep["background"][0]["text"].startswith("Adenylate kinase") and rep["background_label"] == "background — not computed"
+    assert any("no statistics were computed" in c["text"] for c in rep["caveats"])
+
+
+@pytest.mark.parametrize("text", ["The path shows a significant loss of native contacts {{r1.ref0.q_last}}",
+                                  "A robust drop to {{r1.ref0.q_last}}", "The drop to {{r1.ref0.q_last}} is supported"])
+def test_descriptive_findings_cannot_claim_support(text):
+    script = [("native_contacts", {}), ("record_finding", {"text": text, "evidence_ids": ["r1"], "claim": "descriptive"}),
+              ("submit_report", {"finding_ids": ["f1"]}), ("submit_report", {"finding_ids": ["f1"]})]
+    run = orch.run_investigation(ScriptedLLM(script), orch.new_run("q", explain_plan()))
+    assert run.status == "needs_review"
+    assert any("descriptive finding is not statistically tested" in p for p in run.problems)
+
+
+# ---------- persistence: runs are saved as they progress and read back from disk ----------
+
+def test_run_saved_from_the_start_and_listed(tmp_investigations):
+    run = orch.new_run("q", plan())
+    orch.run_investigation(ScriptedLLM(GOOD[:1]), run, max_turns=1)
+    listed = orch.list_runs()
+    assert listed[0]["run_id"] == run.run_id and listed[0]["dataset"] == DS and listed[0]["question"] == "q"
+    assert not list(tmp_investigations.glob("*.tmp"))

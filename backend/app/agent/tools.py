@@ -322,11 +322,15 @@ SCHEMAS = [
     _tool("record_finding", "Record one finding. Text uses placeholders like {{r2.HSE134-ASP118.delta}} for every number; never write numbers. Cite evidence ids (a result 'r2' or a pair 'r2.HSE134-ASP118').", {
         "text": {"type": "string"},
         "evidence_ids": {"type": "array", "items": {"type": "string"}},
-        "claim": {"type": "string", "enum": ["supported", "not_supported", "descriptive"],
-                  "description": "supported: a statistically supported change; not_supported: an apparent change the statistics do not support; descriptive: an observation with no support claim."}},
+        "claim": {"type": "string", "enum": ["supported", "not_supported", "null", "descriptive"],
+                  "description": "supported: a statistically supported change; not_supported: an apparent change the statistics do not support; "
+                                 "null: no supported change at all, citing the compare_intervals result that shows it; "
+                                 "descriptive: what a non-statistical result (contacts, distances, native contacts, metadata) shows, not statistically tested."}},
         ["text", "evidence_ids", "claim"]),
-    _tool("submit_report", "Submit the report from recorded findings. Runs the full deterministic check; if it fails, fix the listed problems and resubmit.", {
+    _tool("submit_report", "Submit the report from recorded findings (at least one). Runs the full deterministic check; if it fails, fix the listed problems and resubmit.", {
         "finding_ids": {"type": "array", "items": {"type": "string"}},
+        "background": {"type": "array", "items": {"type": "string"},
+                       "description": "For general questions only: brief textbook context, shown as 'background — not computed'. No numbers, no claims about this run."},
         "hypotheses": {"type": "array", "items": {"type": "string"}, "description": "Possible explanations, hedged."},
         "caveats": {"type": "array", "items": {"type": "string"}},
         "gaps": {"type": "array", "items": {"type": "string"}, "description": "What could not be established."},

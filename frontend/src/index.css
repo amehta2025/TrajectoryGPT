@@ -150,7 +150,12 @@ code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-siz
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
 .badge.proven { color: var(--ok); border-color: #1f5b44; }
 .badge.unsupported { color: #b8c0d0; }
-.badge.observed { color: var(--accent); }
+.badge.descriptive { color: var(--accent); border-color: #1f4a5a; }
+.badge.null { color: #b8c0d0; border-color: #3a4459; }
+.finding.descriptive { border-left: 3px solid #2a7891; }
+.finding.null { border-left: 3px solid #7d869a; }
+.background { margin-top: 6px; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; color: #b8c0d0; }
+.background h3 { display: flex; gap: 8px; align-items: center; }
 .badge.rob-robust { color: var(--ok); border-color: #1f5b44; }
 .badge.rob-cutoff-sensitive { color: #ffb347; border-color: #5a4723; }
 .badge.rob-not-checked { color: var(--muted); }

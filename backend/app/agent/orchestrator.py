@@ -6,6 +6,7 @@ investigations/<run_id>.json and sent to on_event for the live step log.
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -20,7 +21,8 @@ from app.config import REPO_ROOT
 
 MAX_TURNS = 8
 MAX_REFUSALS = 2
-INVESTIGATIONS_DIR = REPO_ROOT / "investigations"
+# Runs are saved here as they progress; on Modal this is on the Volume (/cache/investigations).
+INVESTIGATIONS_DIR = Path(os.environ.get("INVESTIGATIONS_DIR") or REPO_ROOT / "investigations")
 
 
 @dataclass
@@ -57,7 +59,9 @@ class Run:
         directory = directory or INVESTIGATIONS_DIR
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{self.run_id}.json"
-        path.write_text(json.dumps(self.as_dict(), ensure_ascii=False), encoding="utf-8")
+        tmp = path.with_suffix(".json.tmp")  # write then rename, so a reader never sees half a file
+        tmp.write_text(json.dumps(self.as_dict(), ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
         return path
 
 
@@ -103,6 +107,7 @@ def run_investigation(
                            {"role": "user", "content": prompts.agent_user(run.question, plan.as_dict())}]
     refusals = sum(1 for t in run.turns if t["tool"] == "submit_report" and t["status"] == "refused")
     seen_at_start = 0 if not run.turns else len(run.input_items)  # timeline shows only what is new each turn
+    run.save()
     emit({"type": "run_started", "run_id": run.run_id, "checklist": state.checklist})
 
     try:
@@ -174,6 +179,20 @@ def load_run(run_id: str, directory: Path | None = None) -> Run:
                      extra_steps=d.get("extra_steps", []))
     return Run(d["run_id"], d["question"], plan, state, status=d["status"], turns=d["turns"],
                plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"])
+
+
+def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:
+    """Saved runs, newest first: id, created, question, dataset, status, cost (for curation and replay)."""
+    d = directory or INVESTIGATIONS_DIR
+    out = []
+    for p in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        out.append({k: r.get(k) for k in ("run_id", "created", "question", "status", "cost_usd", "wall_s")}
+                   | {"dataset": r["plan"]["dataset"]})
+    return out
 
 
 def resume_run(llm: LLM, run_id: str, **kwargs) -> Run:

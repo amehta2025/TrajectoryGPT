@@ -42,6 +42,7 @@ API_ENV = {
     "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "3"),
     "REQUIRE_PASSCODE": "1",  # fail closed if the passcode secret is empty
     "APP_MODE": "live",
+    "INVESTIGATIONS_DIR": "/cache/investigations",  # runs persist on the Volume (replay curation, restarts)
 }
 
 
@@ -51,7 +52,9 @@ API_ENV = {
 @modal.concurrent(max_inputs=32)
 @modal.asgi_app(label="trajectorygpt-api")
 def api():
+    from app.agent import session
     from app.main import app as fastapi_app
+    session.ON_RUN_FINISHED = volume.commit  # make a finished run durable right away
     return fastapi_app
 
 

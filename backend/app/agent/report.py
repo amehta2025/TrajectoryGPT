@@ -18,6 +18,17 @@ SUPPORT_WORDS = re.compile(r"\b(supported|significant(?:ly)?|robust(?:ly)?)\b", 
 NEGATION = re.compile(r"(?:\bnot|\bno|\bun|n't|\bnor|\bwithout)\s*(?:\w+\s+){0,2}$", re.I)
 TEXT_LIMIT = 1200
 
+# claim -> (badge, label shown next to the finding)
+CLAIMS = {
+    "supported": ("proven", "proven"),
+    "not_supported": ("unsupported", "not supported — consistent with noise"),
+    "null": ("null", "no supported change found"),
+    "descriptive": ("descriptive", "descriptive — not statistically tested"),
+}
+BACKGROUND_LABEL = "background — not computed"
+UNTESTED_CAVEAT = ("This dataset is a biased, non-stationary transition path, so no statistics were computed; "
+                   "findings here are descriptive only.")
+
 STANDARD_CAVEATS = [
     "Single trajectory: these findings describe this one simulation, not the protein's behaviour in general.",
     "Limited sampling: frames are correlated, so the effective number of independent observations is much "
@@ -173,11 +184,26 @@ def finding_problems(state, fid: str, f: dict) -> list[str]:
         for pid, pair, res in cited:
             if res["pairs"][pair].get("supported"):
                 p.append(f"{fid}: says not supported but {pid}.{pair} is supported")
-    if f["claim"] != "supported":
-        words = [w for w in _unnegated_support_words(f["text"]) if not w.lower().startswith("robust")]
-        if words:
-            p.append(f"{fid}: uses {words} without claim='supported'")
-    if any(w.lower().startswith("robust") for w in _unnegated_support_words(f["text"])):
+    elif f["claim"] == "null":
+        # "No supported change" must cite the comparison that shows it: a compare_intervals result with none supported.
+        comps = [state.results[e] for e in f["evidence_ids"]
+                 if e in state.results and state.results[e]["tool"] == "compare_intervals"]
+        if not comps:
+            p.append(f"{fid}: a null finding must cite the compare_intervals result (e.g. 'r1') that shows no supported change")
+        for res in comps:
+            n = res["values"].get("n_supported", {}).get("v")
+            if n:
+                p.append(f"{fid}: claims no supported change but {res['provenance_id']} has supported pairs")
+    words = _unnegated_support_words(f["text"])
+    if f["claim"] == "descriptive" and words:
+        p.append(f"{fid}: a descriptive finding is not statistically tested and cannot use {words}")
+    elif f["claim"] == "not_supported":
+        bad = [w for w in words if not w.lower().startswith("robust")]
+        if bad:
+            p.append(f"{fid}: uses {bad} without claim='supported'")
+    elif f["claim"] == "null" and any(w.lower().startswith("robust") for w in words):
+        p.append(f"{fid}: a null finding cannot call anything robust")
+    if f["claim"] in ("supported", "not_supported") and any(w.lower().startswith("robust") for w in words):
         for _, pair, _ in cited:
             if robustness(state, pair)["verdict"] != "robust":
                 p.append(f"{fid}: calls {pair} robust, but no cutoff_sensitivity result shows it robust")
@@ -208,8 +234,8 @@ def record_finding(state, args: dict) -> dict:
         problems.append(f"text must be 1-{TEXT_LIMIT} characters")
     if not ids:
         problems.append("cite at least one evidence id")
-    if claim not in ("supported", "not_supported", "descriptive"):
-        problems.append("claim must be supported, not_supported or descriptive")
+    if claim not in CLAIMS:
+        problems.append(f"claim must be one of {sorted(CLAIMS)}")
     problems += evidence_problems(state, ids)
     problems += [f"placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
     if problems:
@@ -221,7 +247,7 @@ def record_finding(state, args: dict) -> dict:
 
 def _text_items(args: dict) -> list[tuple[str, str]]:
     out = []
-    for sec in ("hypotheses", "caveats", "gaps"):
+    for sec in ("background", "hypotheses", "caveats", "gaps"):
         out += [(f"{sec}[{i}]", t) for i, t in enumerate(args.get(sec) or []) if isinstance(t, str)]
     out += [(f"follow_ups[{i}]", fu.get("rationale", "")) for i, fu in enumerate(args.get("follow_ups") or [])
             if isinstance(fu, dict)]
@@ -241,8 +267,8 @@ def report_problems(state, args: dict) -> list[str]:
         nums = bare_numbers(state, text)
         if nums:
             problems.append(f"{where}: bare numbers {nums} - use placeholders")
-        if where.startswith("hypotheses") and _unnegated_support_words(text):
-            problems.append(f"{where}: a hypothesis cannot claim statistical support")
+        if where.startswith(("hypotheses", "background")) and _unnegated_support_words(text):
+            problems.append(f"{where}: {where.split('[')[0]} cannot claim statistical support")
     # Anti-cherry-picking (SPEC §4): supported findings need a robustness verdict before submission.
     if state.plan.window_b is not None:
         for fid in fids:
@@ -271,8 +297,8 @@ def build_report(state, args: dict) -> dict:
         text, segments = render(state, f["text"])
         pairs = sorted({pair for _, pair, _ in _cited_pairs(state, f["evidence_ids"])})
         rob = [{"pair": p, **robustness(state, p)} for p in pairs] if f["claim"] == "supported" else []
-        findings.append({**f, "rendered": text, "segments": segments,
-                         "badge": "proven" if f["claim"] == "supported" else "unsupported" if f["claim"] == "not_supported" else "observed",
+        badge, label = CLAIMS[f["claim"]]
+        findings.append({**f, "rendered": text, "segments": segments, "badge": badge, "badge_label": label,
                          "pairs": pairs, "robustness": rob})
     stat_rows = []
     for fid in args["finding_ids"]:
@@ -286,13 +312,17 @@ def build_report(state, args: dict) -> dict:
                        for k in ("delta", "ci", "q", "n_blocks_a", "n_blocks_b", "tau_ns_a", "tau_ns_b")},
                     "supported": res["pairs"][pair]["supported"], "provisional": res["pairs"][pair]["provisional"],
                     "robustness": robustness(state, pair)["label"]})
+    caveats = STANDARD_CAVEATS + ([] if dataset_config(state.plan.dataset)["stats_valid"] else [UNTESTED_CAVEAT])
+
     def section(key):
         return [dict(zip(("text", "segments"), render(state, t))) for t in (args.get(key) or [])]
     return {
         "findings": findings,
         "statistical_support": stat_rows,
+        "background": section("background"),
+        "background_label": BACKGROUND_LABEL,
         "hypotheses": section("hypotheses"),
-        "caveats": [{"text": c, "segments": [{"text": c}]} for c in STANDARD_CAVEATS] + section("caveats"),
+        "caveats": [{"text": c, "segments": [{"text": c}]} for c in caveats] + section("caveats"),
         "gaps": section("gaps"),
         "follow_ups": [fu for fu in (args.get("follow_ups") or []) if isinstance(fu, dict)],
     }

@@ -256,16 +256,32 @@ def _handle(run_id: str):
         raise HTTPException(404, str(e)) from None
 
 
+@app.get("/runs", dependencies=[Depends(require_passcode)])
+def list_runs(limit: int = Query(50, ge=1, le=500)):
+    from app.agent.orchestrator import list_runs as _list
+    return _list(limit)
+
+
 @app.get("/runs/{run_id}")
 def get_run(run_id: str):
-    _handle(run_id)
-    return session.run_view(run_id)
+    if "/" in run_id or ".." in run_id:
+        raise HTTPException(404, "unknown run")
+    try:
+        return session.run_view(run_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
 
 
 @app.get("/runs/{run_id}/events")
 def run_events(run_id: str, after: int = 0):
-    """Server-sent events: one `data:` line per step-log event; ends after run_finished."""
-    h = _handle(run_id)
+    """Server-sent events: one `data:` line per step-log event; ends after run_finished.
+    A run that is no longer in memory (saved on disk) streams one run_finished event."""
+    try:
+        h = session.get_handle(run_id)
+    except KeyError:
+        v = get_run(run_id)
+        done = {"seq": 0, "type": "run_finished", **{k: v[k] for k in ("status", "problems", "cost_usd", "wall_s", "error")}}
+        return StreamingResponse(iter([f"data: {json.dumps(done)}\n\n"]), media_type="text/event-stream")
 
     def gen():
         for e in h.stream(after):

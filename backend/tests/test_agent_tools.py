@@ -130,7 +130,7 @@ def test_submit_full_check(pretend_stats_valid):
     assert r["status"] == "refused" and "is not supported" in r["summary_for_model"]
 
     f_words = finding(f"{uns} is significantly different", [f"{pid}.{uns}"], "descriptive")
-    assert "without claim='supported'" in call(s, "submit_report", finding_ids=[f_words])["summary_for_model"]
+    assert "cannot use" in call(s, "submit_report", finding_ids=[f_words])["summary_for_model"]
 
     f_null = finding(f"{uns} is not supported (q = {{{{{pid}.{uns}.q}}}})", [f"{pid}.{uns}"], "not_supported")
     f_ok = finding(f"{sup} changes by {{{{{pid}.{sup}.delta}}}}, CI {{{{{pid}.{sup}.ci}}}}, supported",
@@ -156,3 +156,20 @@ def test_submit_full_check(pretend_stats_valid):
     assert f0["robustness"][0]["verdict"] == verdict
     assert rep["findings"][1]["badge"] == "unsupported"
     assert rep["statistical_support"] and len(rep["caveats"]) >= 2
+
+
+def test_null_finding_needs_a_comparison_with_nothing_supported(pretend_stats_valid):
+    s = new_state()
+    r = call(s, "compare_intervals")
+    pid = r["provenance_id"]
+    n_sup = r["values"]["n_supported"]["v"]
+    assert n_sup == 0  # no transition pair is supported at 4.5 Å
+    ok = json.loads(call(s, "record_finding", text=f"None of the {{{{{pid}.n_tested}}}} tested pairs is supported.",
+                         evidence_ids=[pid], claim="null")["summary_for_model"])["finding_id"]
+    contacts = call(s, "calculate_contacts")["provenance_id"]
+    bad = json.loads(call(s, "record_finding", text="No pair is supported.", evidence_ids=[contacts],
+                          claim="null")["summary_for_model"])["finding_id"]
+    r = call(s, "submit_report", finding_ids=[bad])
+    assert r["status"] == "refused" and "must cite the compare_intervals result" in r["summary_for_model"]
+    r = call(s, "submit_report", finding_ids=[ok])
+    assert r["status"] == "submitted" and s.report["findings"][0]["badge"] == "null"

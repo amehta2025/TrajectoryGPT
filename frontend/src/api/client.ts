@@ -149,7 +149,8 @@ export type Finding = {
   evidence_ids: string[]
   rendered: string
   segments: Segment[]
-  badge: 'proven' | 'unsupported' | 'observed'
+  badge: 'proven' | 'unsupported' | 'null' | 'descriptive'
+  badge_label: string
   pairs: string[]
   robustness: Robustness[]
 }
@@ -175,6 +176,8 @@ export type TextItem = { text: string; segments: Segment[] }
 export type Report = {
   findings: Finding[]
   statistical_support: StatRow[]
+  background: TextItem[]
+  background_label: string
   hypotheses: TextItem[]
   caveats: TextItem[]
   gaps: TextItem[]
