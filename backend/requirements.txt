@@ -9,6 +9,9 @@ PyYAML==6.0.3
 # API
 fastapi==0.162.0
 uvicorn==0.54.0
+# LLM (SPEC §6b)
+openai==3.41.0
+python-dotenv==1.2.4
 # Deploy (SPEC §12)
 modal==1.6.3
 # Tests
