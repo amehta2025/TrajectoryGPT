@@ -71,7 +71,7 @@ def test_finished_run_is_read_back_from_disk_after_restart():
     list(events(c, rid))
     session.RUNS.clear()  # as after a container restart
     view = c.get(f"/runs/{rid}").json()
-    assert view["status"] == "awaiting_verification" and view["report"]["findings"]
+    assert view["status"] == "awaiting_verification" and view["report"]["findings"] and view["wall_s"] > 0
     evs = list(events(c, rid))
     assert evs == [{**evs[0], "type": "run_finished", "status": "awaiting_verification"}]
     assert c.get("/runs/nope").status_code == 404

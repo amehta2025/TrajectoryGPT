@@ -178,7 +178,8 @@ def load_run(run_id: str, directory: Path | None = None) -> Run:
     state = RunState(plan, results=d["results"], findings=d["findings"], checklist=d["checklist"], report=d["report"],
                      extra_steps=d.get("extra_steps", []))
     return Run(d["run_id"], d["question"], plan, state, status=d["status"], turns=d["turns"],
-               plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"])
+               plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"],
+               wall_s=d.get("wall_s", 0.0), error=d.get("error"))
 
 
 def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:
