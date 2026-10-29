@@ -49,9 +49,11 @@ An AI research copilot for protein simulations. It turns a researcher's question
   - frame window and stride,
   - contact definition,
   - sequence exclusion (pairs with |Δresid| ≤ N are skipped; default `sequence_exclusion: 2` in `config/dataset.yaml`),
-  - dataset.
+  - dataset,
+  - the cutoff-robustness range (§7 `cutoff_sensitivity`).
 
   The backend enforces this; it is not left to the prompt.
+- **No cutoff cherry-picking.** A cutoff is never chosen because it gives significance. A supported finding is reported as **robust** only if it is supported at *every* cutoff in the approved robustness range; otherwise it is **cutoff-sensitive**, and the cutoffs where it holds are shown. The agent's system prompt states this rule, and the deterministic check (§9 step 7) enforces it.
 - **Units.** Distance is in Å. Time is in ns for the equilibrium dataset; the transition dataset has **no physical time**, so show "path step" and never invent ns. Frame index is always kept alongside.
 - **Keep model context small.** The LLM receives *summaries* of tool results: top-N rows, statistics, provenance ids, and shapes. Full matrices go to the UI only. A tool result sent to the model must stay under about 2,000 tokens.
 
@@ -179,7 +181,25 @@ Every tool:
 | `compare_intervals` | per-pair frequency change between two windows, autocorrelation-corrected CI, **BH-FDR q-values**, supported or not |
 | `contact_statistics` | for one pair: τ, N_eff, autocorrelation-corrected CI of the frequency (block bootstrap as a cross-check) |
 | `native_contacts` | fraction of native contacts vs frame against chosen reference frames (wraps `MDAnalysis.analysis.contacts`), for the §5c exact reproduction |
-| `cutoff_sensitivity` | contact frequency per pair across cutoffs (stretch) |
+| `cutoff_sensitivity` | cutoff robustness for one or more pairs (below) |
+
+**`cutoff_sensitivity` (core, Day 4):**
+- Default range **4.0 / 4.5 / 5.0 Å**. The user can edit it on the PlanCard; every value must lie within **3.5–6.0 Å**, and the plan's main cutoff must be one of them.
+- At each cutoff it reruns the same comparison (`compare_intervals`, or `contact_statistics` for one pair) on the **cached `min_dist`** with the **frozen §8a statistics**. No new statistics: BH-FDR is applied per cutoff, over the pairs tested at that cutoff, exactly as in a normal run.
+- Per pair it returns Δ, CI, q, and supported / provisional at each cutoff, plus a verdict:
+  - **robust:** supported at every cutoff in the range, with the same sign of Δ;
+  - **cutoff-sensitive:** anything else, listing the cutoffs where it holds (e.g. "holds at 4.0, 4.5").
+- Refuses on datasets with `stats_valid: false`, like the other stats tools.
+
+**Analysis-view tools (post-checkpoint, §10b).** Same return shape; each one also feeds a UI view.
+
+| Tool | Purpose |
+|---|---|
+| `contact_difference_map` | per-pair frequency change, window B − window A, for two groups; joins `compare_intervals` results so non-supported pairs can be de-emphasized |
+| `contact_timeline` | 0/1 in-contact raster for up to ~20 pairs (top by \|Δ\|, or a given list) over a frame window |
+| `domain_opening` | one opening coordinate per frame: centre-of-mass distance between LID or NMP and CORE (optionally the standard AdK domain angles, if a citable definition is found) |
+| `contact_lifetimes` | lengths of contiguous in-contact runs for one pair or the top pairs; histogram and median lifetime |
+| `residue_flexibility` | RMSF per residue over a frame window |
 
 **Bookkeeping tools**
 
@@ -263,6 +283,14 @@ Every tool:
 2. **Plan:** structured output (schema enforced) with up to 5 steps. Each step has a tool, params, rationale, and optional references to earlier steps' results.
    - In figure mode, the agent first returns an **extracted spec**: each field with its value, confidence, and source (caption / methods / axis / assumed).
    - It also declares whether this is an **exact reproduction** (the figure's data is one of our datasets) or a **method transfer**.
+   - **Example plan** for "Which LID–CORE contacts change between the first and second half?":
+     1. `calculate_contacts` — LID–CORE, both halves, main cutoff
+     2. `compare_intervals` — first vs second half (BH-FDR)
+     3. `contact_statistics` — the top supported pair
+     4. `cutoff_sensitivity` — the supported pairs, across the approved range (default 4.0 / 4.5 / 5.0 Å)
+     5. `submit_report`
+
+     After finding a supported pair, the agent checks cutoff robustness **before** submitting. The system prompt says so, along with the §4 no-cherry-picking rule.
 3. **Validate (code):**
    - schema check
    - groups exist
@@ -292,6 +320,7 @@ Every tool:
      - every placeholder resolves;
      - no bare numerals remain except residue numbers and approved params;
      - every "supported/significant/changed" claim cites a result where supported = true;
+     - every "robust" claim cites a `cutoff_sensitivity` result whose verdict is robust; a supported finding without one is labelled "robustness not checked";
      - findings citing refused or errored results are flagged.
    - **Inside the loop:** `record_finding` runs the first two checks on each finding and refuses a bad one with the reason. `submit_report` runs the full check before accepting; if it fails, the tool result lists the specific problems so the model can fix them and resubmit.
    - **Refusal limit:** `MAX_REFUSALS = 2` refused `submit_report` calls. After the second refusal, or if the loop reaches `MAX_TURNS` without an accepted report, the run stops with status `needs_review` and the UI lists the unresolved problems.
@@ -351,15 +380,24 @@ run_investigation(session, question, approved_plan):
 ## 10. UI
 
 Components:
+- **StartScreen** (Day 4): what the user sees before any investigation.
+  - A prominent input: "Ask a question about this simulation, or drop in a figure to reproduce."
+  - The dataset picker beside it, with one line describing the protein and the dataset.
+  - Three example-question buttons:
+    1. "Which LID–CORE contacts change between the first and second half?"
+    2. "Reproduce the native contacts figure", with the §5c sample figure pre-attached (only a figure cleared in `ATTRIBUTION.md`, §5c)
+    3. "Is the SER30–ASP84 drop real?"
+  - The viewer and charts move into a **results area** that appears once an investigation starts.
 - **Chat**
-- **PlanCard:** the plan checklist shows progress ("3/4 done")
+- **PlanCard:** the plan checklist shows progress ("3/4 done"); the cutoff-robustness range is editable here (3.5–6.0 Å)
 - **StepLog**
 - **Timeline:** click any turn to see what the model saw and what it called. A **"Step through turns"** toggle pauses the loop after each turn until the user clicks Next (§9b).
 - **Heatmap:** clicking a cell highlights the residues and suggests a follow-up
 - **DistancePlot:** with a cutoff line; clicking a point jumps to that frame
 - **CompareChart:** CI bars; unsupported pairs greyed; shows the "N tested, FDR 5%" note
 - **ReportView:** placeholders rendered with values; hovering a value shows its provenance
-  - Each finding shows a "proven" / "unsupported" badge and an expandable "N citations" list. Clicking a citation highlights it in the chart or 3D view and shows its provenance.
+  - Each finding shows a "proven" / "unsupported" badge and an expandable "N citations" list.
+  - Each supported finding shows a **robustness badge**: "robust 4.0–5.0 Å", "cutoff-sensitive: holds at 4.0, 4.5", or "robustness not checked". Clicking a citation highlights it in the chart or 3D view and shows its provenance.
   - A "Gaps" section lists what the agent could not establish.
   - A `needs_review` run lists its unresolved problems instead of a finished report.
 - **ReproduceView:** their figure on the left, ours on the right, the spec table, and the match result (exact mode) or the "method applied" label (transfer mode)
@@ -376,6 +414,19 @@ One shared selection store drives the plots and the viewer. The UI never calls a
   - Playback targets about 150 frames (stride 28 on the equilibrium set; set on Day 2 to keep the payload near 3 MB, which gzip barely shrinks). Jump-to-frame always fetches the exact frame, even if it isn't in the playback set. Responses are gzipped.
 - **Atom order:** the PDB and the coordinate arrays are written by the **same** MDAnalysis AtomGroup, so atom order matches. This has a test.
 - **Selection mapping:** `residueKeyToNglSelection(key)` returns `"<resid> and .CA"` (or the sidechain for licorice), from one function with a test fixture. Verify visually for 5 residues on Day 2.
+
+### 10b. Analysis views (post-checkpoint; priority a → e)
+Each view reuses the cached `min_dist` / contact data where possible, is linked to the shared selection store (click → highlight in 3D + distance plot + jump to frame), and is exposed to the agent as a tool (§7). Time axes use ns on `adk_equilibrium` and path step on `adk_transition` (§4).
+
+- **a) Difference heatmap** (`contact_difference_map`). Window B minus window A contact frequency per pair (default: second half − first half), diverging colours for lost vs gained. Pairs that are not supported by `compare_intervals` are de-emphasized. On a dataset with `stats_valid: false` there is no "supported", so the map shows raw differences labelled "not statistically tested".
+- **b) Contact timeline** (`contact_timeline`). A raster: the top ~20 pairs (by |Δ| or the user's selection) as rows, time on x, a mark wherever the pair is in contact. It shows coordinated breaking and forming. Clicking a mark jumps to that frame.
+- **c) Domain opening over time** (`domain_opening`). One coordinate per frame: the centre-of-mass distance between LID (or NMP) and CORE, plotted with the viewer's current frame marked. The standard AdK domain angles are optional and used only if a citable definition is found (record it in `config/dataset.yaml`). Test: matches a hand calculation on a few `adk_transition` frames. The COM distance doesn't change under the CORE fit, since fitting is a rigid motion.
+- **d) Contact lifetimes** (`contact_lifetimes`). A histogram of contiguous in-contact durations for a selected pair or the top pairs, and the median lifetime.
+  - Durations are in ns on `adk_equilibrium` (run length × 0.24 ns × stride). Lifetimes shorter than one frame can't be seen, and runs touching the window edges are cut short (censored); both are stated next to the plot.
+  - On `adk_transition` it **refuses**: path steps are biased and unevenly spaced in time, so a "lifetime" there has no meaning.
+- **e) Flexibility** (`residue_flexibility`). RMSF per residue, coloured onto the 3D structure, plus a per-residue line plot.
+  - On `adk_equilibrium` the frames are already fit to CORE, so RMSF is relative to CORE and LID/NMP motion shows up as flexibility; the plot says so.
+  - On `adk_transition` the RMSF reflects the biased closed→open path, not equilibrium fluctuations; the plot is labelled "path RMSF, not equilibrium flexibility".
 
 ## 11. Provenance and export
 
@@ -425,7 +476,8 @@ One shared selection store drives the plots and the viewer. The UI never calls a
   tests/
   requirements.txt  modal_app.py
 /frontend  (Vite React TS)
-  src/components/ Chat PlanCard StepLog Heatmap DistancePlot CompareChart ReportView ReproduceView Viewer VerifierBadge DatasetBadge ModelToggle CostMeter
+  src/components/ StartScreen Chat PlanCard StepLog Heatmap DistancePlot CompareChart ReportView ReproduceView Viewer VerifierBadge DatasetBadge ModelToggle CostMeter
+                  (post-checkpoint, §10b) DifferenceHeatmap ContactTimeline DomainOpening ContactLifetimes Flexibility
   src/state/  src/api/
 /config/dataset.yaml
 /assets/figures/  (+ ATTRIBUTION.md)
@@ -444,20 +496,24 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 | 1 | Tue Oct 27 night – Wed Oct 28 | venv + requirements; `dataset.yaml` with confirmed domain ranges; loaders for both datasets; residue keys; precompute + cache; `calculate_contacts`; `distance_over_time`; **recon (§5d)**; pick the reproduction target (§5c) | `pytest -q` passes (fast tests on the transition set); 3 pairs match a direct hand calculation; the equilibrium precompute runs and its timing is recorded; `notes/recon.md` written |
 | 2 | Thu Oct 29 | FastAPI endpoints for metadata/contacts/distances/structure/frames; frontend scaffold; NGL viewer (§10a); heatmap + distance plot; click→highlight; jump-to-frame | 5 heatmap clicks highlight the correct residues (checked by eye against residue labels); clicking a distance point moves the viewer |
 | 3 | Fri Oct 30 | `stats.py` + tests; `compare_intervals` (BH-FDR); `contact_statistics`; refusal on the transition set; CompareChart; `native_contacts`; **skeleton deploy (Modal + Vercel)** | all stats validation tests pass; the live URL shows the heatmap from the deployed backend |
-| 4 | Sat Oct 31 | LLM wrapper (smoke-test Meta + Baseten first); planner with schema; PlanCard; turn loop with guardrails; bookkeeping tools; placeholders; StepLog streaming; ReportView; deterministic check; usage/cost logging | CLI and UI: question → plan → edit → run → live step log → report with filled values, in < 90 s, with the cost shown |
-| 5 | Sun Nov 1 | Figure mode: image + PDF → extracted spec → plan → exact reproduction of the §5c target with a numeric match; method-transfer label; ReproduceView. **Checkpoint: the full demo path works on the deployed app.** | the reproduction matches the target within tolerance; the deployed app runs one full investigation |
+| 4 | Sat Oct 31 | LLM wrapper (smoke-test Meta + Baseten first); planner with schema; PlanCard; turn loop with guardrails; bookkeeping tools; placeholders; StepLog streaming; ReportView; deterministic check; usage/cost logging; **StartScreen** (§10); **`cutoff_sensitivity`** + robustness badge + no-cherry-picking rule in the prompt and the check (§4, §7) | CLI and UI: question → plan → edit → run → live step log → report with filled values, in < 90 s, with the cost shown; the start screen's example buttons start investigations; a supported pair gets a robustness verdict |
+| 5 | Sun Nov 1 | Figure mode: image + PDF → extracted spec → plan → exact reproduction of the §5c target with a numeric match; method-transfer label; ReproduceView. **Checkpoint: the full demo path works on the deployed app.** Then, after the checkpoint, the §10b analysis views in priority order: (a) difference heatmap → (b) contact timeline → (c) domain opening → (d) contact lifetimes → (e) flexibility | the reproduction matches the target within tolerance; the deployed app runs one full investigation; each built view is linked to the 3D viewer and callable by the agent |
 | 6 | Mon Nov 2 | Muse Wonder verifier + overclaim toggle; follow-ups with session state; export script + Modal Sandbox verify; rate limit, budget, replay mode; record replay runs. **Feature freeze at midnight.** | the verifier flags the planted overclaim; the exported script reproduces the numbers in the sandbox; replay mode works with the LLM disabled |
 | 7 | Tue Nov 3 | Baseten toggle (if the smoke test passed); README (setup, architecture diagram, built-during-hackathon, attributions, limitations); final video; **submit by 10 PM CT** | submission confirmed; repo public; video link works in a private window |
 | 8 | Wed Nov 4 | Buffer: bug fixes only, X post, community vote push | — |
 
 **Cut order if behind:**
 1. §9d stretch items
-2. `cutoff_sensitivity`
-3. Baseten toggle
-4. Modal Sandbox button (keep the export)
-5. agent "add one step" adaptation
-6. Muse Wonder model check (keep the deterministic check)
-7. method-transfer mode (keep exact reproduction)
+2. §10b (e) flexibility
+3. §10b (d) contact lifetimes
+4. §10b (c) domain opening
+5. §10b (b) contact timeline
+6. §10b (a) difference heatmap
+7. Baseten toggle
+8. Modal Sandbox button (keep the export)
+9. agent "add one step" adaptation
+10. Muse Wonder model check (keep the deterministic check)
+11. method-transfer mode (keep exact reproduction)
 
 **Never cut:** linked viewer, statistics + FDR, the multi-step agent with evidence, exact figure reproduction, export, replay mode.
 
@@ -466,14 +522,14 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 Demo story (set after Day 3, see §5d and `notes/recon.md`):
 - The live investigation (beats 2–3) centers on **LID–CORE**, featuring **HSE134–ASP118**.
   - First vs second half at 4.5 Å: frequency 0.527 → 0.399, Δ −0.127, CI [−0.185, −0.070], q = 4e-4, supported and firm (hundreds of independent chunks per window).
-  - It stays supported and firm at 4.0 Å (q = 0.001) and 5.0 Å (q = 0.006), but **not at 5.5 Å**, where the contact is almost always formed (0.98 → 0.97). So the beat-2 cutoff edit goes to 4.0 or 5.0 Å, never ≥ 5.5 Å.
+  - It stays supported and firm at 4.0 Å (q = 0.001) and 5.0 Å (q = 0.006), so it is **robust across 4.0–5.0 Å** (the default range). It is **not** supported at 5.5 Å, where the contact is almost always formed (0.98 → 0.97); if a range reaching 5.5 Å is used, it shows as cutoff-sensitive, and we say so rather than avoid it.
 - **NMP–CORE is the honest null** in beat 4.
 
 The skeleton:
 
 1. **0:00–0:25.** Drop in the published figure. The extracted spec appears, our figure appears next to theirs, and the numbers match.
-2. **0:25–1:05.** Ask a real question on the equilibrium data about **LID–CORE** contacts (e.g. "Which LID–CORE contacts change between the first and second half of the run?"). The plan appears; edit the cutoff (4.0 or 5.0 Å) and approve. The step log runs, and the chart shows the few supported pairs vs greyed noise, with the "N tested, FDR 5%" note.
-3. **1:05–1:40.** Click **HSE134–ASP118** and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame.
+2. **0:25–1:05.** Ask a real question on the equilibrium data about **LID–CORE** contacts (e.g. "Which LID–CORE contacts change between the first and second half of the run?"). The plan appears, showing the cutoff-robustness range (4.0 / 4.5 / 5.0 Å); approve it. The step log runs, and the chart shows the few supported pairs vs greyed noise, with the "N tested, FDR 5%" note. If built, the **difference heatmap** (§10b a) shows lost vs gained contacts with noise de-emphasized. The report's robustness badge reads **"robust 4.0–5.0 Å"** for HSE134–ASP118.
+3. **1:05–1:40.** Click **HSE134–ASP118** and it highlights in 3D. Ask "does that persist?" The distance plot appears; click a point and the viewer jumps to that frame. If built, the **domain-opening plot** (§10b c) marks the same frame, showing how open LID is at that moment.
 4. **1:40–2:05.** Show the honesty:
    - **The honest null: NMP–CORE.** **SER30–ASP84** looks like a big drop (0.46 → 0.15, Δ = −0.31), and its own 95% CI [−0.57, −0.06] excludes 0. But its contacts change slowly (τ ≈ 10–14 ns), so each half holds only about 25 / 18 independent chunks. After correcting for 53 pairs tested, q = 0.31: **not supported**, labelled provisional.
      - Show the CI and q side by side (the CompareChart hover shows both).
@@ -500,4 +556,4 @@ Record with replay mode available as a fallback, but use **real live runs** for 
 
 ## 17. Out of scope
 
-Running simulations; trajectory uploads; other proteins or formats; RMSD/RMSF; accounts; a database; executing model-written code; lab or private data; the C++ kernel (post-hackathon).
+Running simulations; trajectory uploads; other proteins or formats; RMSD; accounts; a database; executing model-written code; lab or private data; the C++ kernel (post-hackathon).
