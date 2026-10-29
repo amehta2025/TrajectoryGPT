@@ -74,6 +74,7 @@ class CostTracker:
     """Running $ for one run; raises BudgetExceeded once the estimate passes limit_usd."""
     limit_usd: float | None = None
     calls: list[Usage] = field(default_factory=list)
+    on_usage: Callable[[dict], None] | None = None  # e.g. the daily budget ledger
 
     @property
     def total_usd(self) -> float:
@@ -81,6 +82,8 @@ class CostTracker:
 
     def add(self, usage: Usage) -> None:
         self.calls.append(usage)
+        if self.on_usage:
+            self.on_usage(usage.as_dict())
         if self.limit_usd is not None and self.total_usd > self.limit_usd:
             raise BudgetExceeded(f"estimated cost ${self.total_usd:.4f} exceeds the run limit ${self.limit_usd:.2f}")
 

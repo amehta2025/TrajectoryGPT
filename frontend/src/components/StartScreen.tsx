@@ -1,7 +1,7 @@
 // What the user sees before any investigation: one prominent input, the dataset picker, three examples.
 import { useState } from 'react'
 import type { DatasetInfo } from '../api/client'
-import { ask, useInvestigation } from '../state/investigation'
+import { ask, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
 
 const EXAMPLES = [
@@ -14,8 +14,28 @@ const EXAMPLES = [
     question: 'Is the drop in the SER30–ASP84 contact between the first and second half of the run real?' },
 ]
 
+/** Shown after a 401: AI investigations need the demo passcode; charts and 3D stay open. */
+function PasscodePrompt() {
+  const { error } = useInvestigation()
+  const [code, setCode] = useState('')
+  const [checking, setChecking] = useState(false)
+  return (
+    <form className="passcode" onSubmit={async (e) => {
+      e.preventDefault()
+      setChecking(true)
+      await submitPasscode(code)
+      setChecking(false)
+    }}>
+      <span className="small">AI investigations need the demo passcode.</span>
+      <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Demo passcode" aria-label="Demo passcode" autoFocus />
+      <button type="submit" className="primary" disabled={!code.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
+      {error && <span className="warn small">{error}</span>}
+    </form>
+  )
+}
+
 export function StartScreen({ datasets, dataset, compact = false }: { datasets: DatasetInfo[]; dataset: string; compact?: boolean }) {
-  const { phase } = useInvestigation()
+  const { phase, needPasscode } = useInvestigation()
   const [text, setText] = useState('')
   const busy = phase === 'planning'
   const info = datasets.find((d) => d.id === dataset)
@@ -41,6 +61,7 @@ export function StartScreen({ datasets, dataset, compact = false }: { datasets: 
         </select>
         <button type="submit" className="primary" disabled={busy || !text.trim()}>{busy ? 'Planning…' : 'Plan'}</button>
       </form>
+      {needPasscode && <PasscodePrompt />}
       {info && <p className="muted small dataset-line">{info.description}{info.stats_valid ? '' : ' Statistics are refused on this dataset.'}</p>}
       {!compact && (
         <div className="examples">

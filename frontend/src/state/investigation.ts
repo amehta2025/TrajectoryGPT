@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, type Plan, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, setPasscode, type Plan, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { setSelection } from './selection'
 
 export type Investigation = {
@@ -14,10 +14,11 @@ export type Investigation = {
   run: RunView | null
   paused: boolean
   error: string | null
+  needPasscode: boolean // set by a 401; the start screen asks for the passcode, then retries
 }
 
 const empty: Investigation = {
-  phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null,
+  phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
@@ -45,7 +46,8 @@ export async function ask(question: string, dataset: string) {
     const proposal = await api.plan(question, dataset)
     set({ phase: 'plan', proposal })
   } catch (e) {
-    set({ phase: 'idle', error: `Planning failed: ${(e as Error).message}` })
+    if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
+    else set({ phase: 'idle', error: `Planning failed: ${(e as Error).message}` })
   }
 }
 
@@ -76,8 +78,22 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean) {
       if (e.type === 'run_finished') set({ phase: 'finished' })
     })
   } catch (e) {
-    set({ error: `Could not start: ${(e as Error).message}` })
+    set(e instanceof PasscodeRequired ? { needPasscode: true, error: 'Demo passcode required.' } : { error: `Could not start: ${(e as Error).message}` })
   }
+}
+
+/** Store the passcode for this tab, check it, and retry the question that needed it. */
+export async function submitPasscode(code: string): Promise<boolean> {
+  setPasscode(code.trim())
+  try {
+    await api.checkPasscode()
+  } catch {
+    set({ needPasscode: true, error: 'That passcode was not accepted.' })
+    return false
+  }
+  set({ needPasscode: false, error: null })
+  if (state.question) await ask(state.question, state.dataset)
+  return true
 }
 
 export async function nextTurn(stepThrough?: boolean) {

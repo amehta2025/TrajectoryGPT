@@ -74,7 +74,7 @@ export default function App() {
         </div>
       </header>
       {error && <div className="error banner">{error}</div>}
-      {inv.error && !asking && <div className="error banner">{inv.error}</div>}
+      {inv.error && !asking && !inv.needPasscode && <div className="error banner">{inv.error}</div>}
 
       {!asking && <StartScreen datasets={datasets} dataset={dataset} />}
       {asking && (

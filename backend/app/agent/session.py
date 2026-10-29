@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from app.agent.llm import LLM, CostTracker
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import make_plan, to_approved
+from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
 EDITABLE = ("cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b")
@@ -70,7 +71,7 @@ _lock = threading.Lock()
 
 
 def propose_plan(question: str, dataset: str, llm: LLM | None = None) -> dict:
-    llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD))
+    llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
     plan, usages = make_plan(llm, question, dataset)
     pid = uuid.uuid4().hex[:12]
     with _lock:

@@ -3,7 +3,7 @@ import json
 import os
 
 import numpy as np
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
@@ -11,6 +11,8 @@ from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from app.agent import session
 from app.agent.planner import PlanInvalid
 from app.config import dataset_config, load_config
+from app.safety import budget
+from app.safety.passcode import HEADER as PASSCODE_HEADER, passcode_ok
 from app.science.contact_stats import StatsRefused, compare_intervals, contact_statistics
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts
 from app.science.distances import distance_over_time
@@ -29,7 +31,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", PASSCODE_HEADER],
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
 
@@ -66,7 +68,9 @@ def _round(a: np.ndarray, nd: int = 4) -> list:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "datasets": sorted(load_config()["datasets"])}
+    return {"status": "ok", "datasets": sorted(load_config()["datasets"]),
+            "model": os.environ.get("META_MODEL", "muse-spark-1.3"), "mode": os.environ.get("APP_MODE", "live"),
+            "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd()}
 
 
 @app.get("/datasets")
@@ -204,8 +208,27 @@ def native_contacts_endpoint(dataset: str, selection: str = "name CA", radius: f
 
 
 # ---------- agent (SPEC §9): plan -> approve -> run with a live step log ----------
+# Starting AI work needs the demo passcode and budget left today (SPEC §12). Reading a run (GET, by its
+# random id) and the science endpoints above stay public.
 
-@app.post("/plan")
+def require_passcode(x_demo_passcode: str | None = Header(None)):
+    if not passcode_ok(x_demo_passcode):
+        raise HTTPException(401, "Demo passcode required for AI investigations.")
+
+
+def require_budget():
+    try:
+        budget.check()
+    except budget.BudgetReached as e:
+        raise HTTPException(503, str(e)) from None
+
+
+@app.post("/auth/check", dependencies=[Depends(require_passcode)])
+def auth_check():
+    return {"ok": True}
+
+
+@app.post("/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
     _check_dataset(dataset)
     if not question.strip() or len(question) > 2000:
@@ -216,7 +239,7 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 
 
-@app.post("/runs")
+@app.post("/runs", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False)):
     try:
         return {"run_id": session.start_run(plan_id, edits, step_through)}
@@ -252,7 +275,7 @@ def run_events(run_id: str, after: int = 0):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@app.post("/runs/{run_id}/next")
+@app.post("/runs/{run_id}/next", dependencies=[Depends(require_passcode)])
 def run_next(run_id: str, step_through: bool | None = Body(None, embed=True)):
     _handle(run_id)
     session.next_turn(run_id, step_through)

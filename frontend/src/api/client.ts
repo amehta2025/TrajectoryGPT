@@ -232,8 +232,35 @@ export type RunEvent =
   | { seq: number; type: 'paused' }
   | { seq: number; type: 'run_finished'; status: RunStatus; problems: string[]; cost_usd: number | null; wall_s: number; error: string | null }
 
+// Demo passcode for the AI endpoints (SPEC §12): asked once, kept for this browser tab only.
+const PASSCODE_KEY = 'trajectorygpt.passcode'
+
+export function getPasscode(): string {
+  try {
+    return sessionStorage.getItem(PASSCODE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setPasscode(code: string) {
+  try {
+    sessionStorage.setItem(PASSCODE_KEY, code)
+  } catch {
+    /* storage blocked: the code is asked again next time */
+  }
+}
+
+/** Thrown on HTTP 401 so the UI can ask for the passcode and retry. */
+export class PasscodeRequired extends Error {}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(new URL(path, BASE), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const r = await fetch(new URL(path, BASE), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Demo-Passcode': getPasscode() },
+    body: JSON.stringify(body),
+  })
+  if (r.status === 401) throw new PasscodeRequired('Demo passcode required')
   if (!r.ok) {
     let detail: unknown = r.statusText
     try {
@@ -272,6 +299,7 @@ export const api = {
     (await get(`/distances/${ds}`, { key_a: keyA, key_b: keyB })).json(),
   compare: async (ds: string, groupA: string, groupB: string, a: [number, number], b: [number, number], cutoff = 4.5): Promise<Compare> =>
     (await get(`/compare/${ds}`, { group_a: groupA, group_b: groupB, a_start: a[0], a_stop: a[1], b_start: b[0], b_stop: b[1], cutoff })).json(),
+  checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
   plan: (question: string, dataset: string) => post<PlanResponse>('/plan', { question, dataset }),
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean) =>
     post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough }),

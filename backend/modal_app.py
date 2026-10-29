@@ -8,6 +8,8 @@ Layout inside the container (app/config.py finds the repo root two levels above 
 Deploy:  cd backend && modal deploy modal_app.py
 Warm:    cd backend && modal run modal_app.py::warm   (downloads the dataset, fills the caches once)
 CORS:    set ALLOWED_ORIGINS (comma-separated, e.g. the Vercel URL) in your shell before deploying.
+Secrets: trajectorygpt-meta (META_API_KEY) and trajectorygpt-passcode (DEMO_PASSCODE) must exist in Modal.
+         The deploy always uses the Standard model (users upload figures; Contributor mode trains on inputs).
 """
 import os
 from pathlib import Path
@@ -24,6 +26,7 @@ image = (
     .add_local_dir(HERE / "app", "/root/app", ignore=IGNORE)
     .add_local_dir(HERE.parent / "config", "/config")
 )
+SECRETS = [modal.Secret.from_name("trajectorygpt-meta"), modal.Secret.from_name("trajectorygpt-passcode")]
 app = modal.App("trajectorygpt", image=image)
 FUNCTION_KW = dict(
     volumes={"/cache": volume},
@@ -31,9 +34,21 @@ FUNCTION_KW = dict(
     timeout=600,
     env={"ALLOWED_ORIGINS": os.environ.get("ALLOWED_ORIGINS", "")},
 )
+API_ENV = {
+    **FUNCTION_KW["env"],
+    "MODEL_PROVIDER": "meta",
+    "META_MODEL": "muse-spark-1.3",  # Standard mode on every deploy (SPEC §6b)
+    "META_API_BASE_URL": "https://api.meta.ai/v1",
+    "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "3"),
+    "REQUIRE_PASSCODE": "1",  # fail closed if the passcode secret is empty
+    "APP_MODE": "live",
+}
 
 
-@app.function(**FUNCTION_KW)
+# One container: plans and running investigations live in its memory, and the live step log (SSE)
+# must reach the same container, so it serves many requests concurrently instead of scaling out.
+@app.function(**{**FUNCTION_KW, "env": API_ENV}, secrets=SECRETS, max_containers=1)
+@modal.concurrent(max_inputs=32)
 @modal.asgi_app(label="trajectorygpt-api")
 def api():
     from app.main import app as fastapi_app
