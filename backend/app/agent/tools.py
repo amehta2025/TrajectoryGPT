@@ -416,7 +416,7 @@ def _store(state, name, args, status, summary, data=None, values=None, pairs=Non
         summary["placeholders"] = f"{{{{{pid}.<name>}}}} for: " + ", ".join(sorted({k.split('.')[-1] for k in values}))
     result = {
         "status": status, "tool": name, "provenance_id": pid,
-        "params": {**args, "dataset": state.plan.dataset, "cutoff": state.plan.cutoff},
+        "params": {**args, **{k: v for k, v in state.plan.as_dict().items() if k != "steps"}},
         "units": units,
         "summary_for_model": json.dumps(jsonable(summary)),
         "data_for_ui": jsonable(data),

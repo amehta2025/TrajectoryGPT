@@ -9,9 +9,11 @@ export type Selection = {
   groupB: string
   pair: Pair | null
   frame: number // trajectory frame index (always kept, whatever the time unit)
+  cutoff: number // Å; the approved plan's cutoff once an investigation runs
+  windows: [[number, number], [number, number]] | null // approved comparison windows; null = halves
 }
 
-let state: Selection = { dataset: 'adk_equilibrium', groupA: 'NMP', groupB: 'CORE', pair: null, frame: 0 }
+let state: Selection = { dataset: 'adk_equilibrium', groupA: 'NMP', groupB: 'CORE', pair: null, frame: 0, cutoff: 4.5, windows: null }
 const listeners = new Set<() => void>()
 
 export function setSelection(patch: Partial<Selection>) {

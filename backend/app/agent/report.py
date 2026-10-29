@@ -70,16 +70,18 @@ def resolve(state, path: str) -> dict | None:
 
 
 def render(state, text: str) -> tuple[str, list[dict]]:
-    """Fill placeholders; returns (text, spans with provenance for the UI)."""
-    spans = []
-
-    def sub(m):
+    """Fill placeholders; returns (text, segments). Segments alternate plain text {"text"} and filled
+    values {"text", "pid", "path", "kind", "v"} so the UI can show each value's provenance on hover."""
+    segments, pos = [], 0
+    for m in PLACEHOLDER.finditer(text):
+        if m.start() > pos:
+            segments.append({"text": text[pos:m.start()]})
         r = resolve(state, m[1])
-        if r is None:
-            return m[0]
-        spans.append(r)
-        return r["text"]
-    return PLACEHOLDER.sub(sub, text), spans
+        segments.append(r if r is not None else {"text": m[0]})
+        pos = m.end()
+    if pos < len(text):
+        segments.append({"text": text[pos:]})
+    return "".join(s["text"] for s in segments), segments
 
 
 # ---------- individual checks ----------
@@ -266,10 +268,10 @@ def build_report(state, args: dict) -> dict:
     findings = []
     for fid in args["finding_ids"]:
         f = state.findings[fid]
-        text, spans = render(state, f["text"])
+        text, segments = render(state, f["text"])
         pairs = sorted({pair for _, pair, _ in _cited_pairs(state, f["evidence_ids"])})
         rob = [{"pair": p, **robustness(state, p)} for p in pairs] if f["claim"] == "supported" else []
-        findings.append({**f, "rendered": text, "spans": spans,
+        findings.append({**f, "rendered": text, "segments": segments,
                          "badge": "proven" if f["claim"] == "supported" else "unsupported" if f["claim"] == "not_supported" else "observed",
                          "pairs": pairs, "robustness": rob})
     stat_rows = []
@@ -284,12 +286,13 @@ def build_report(state, args: dict) -> dict:
                        for k in ("delta", "ci", "q", "n_blocks_a", "n_blocks_b", "tau_ns_a", "tau_ns_b")},
                     "supported": res["pairs"][pair]["supported"], "provisional": res["pairs"][pair]["provisional"],
                     "robustness": robustness(state, pair)["label"]})
-    section = lambda key: [{"text": render(state, t)[0], "spans": render(state, t)[1]} for t in (args.get(key) or [])]
+    def section(key):
+        return [dict(zip(("text", "segments"), render(state, t))) for t in (args.get(key) or [])]
     return {
         "findings": findings,
         "statistical_support": stat_rows,
         "hypotheses": section("hypotheses"),
-        "caveats": [{"text": c, "spans": []} for c in STANDARD_CAVEATS] + section("caveats"),
+        "caveats": [{"text": c, "segments": [{"text": c}]} for c in STANDARD_CAVEATS] + section("caveats"),
         "gaps": section("gaps"),
         "follow_ups": [fu for fu in (args.get("follow_ups") or []) if isinstance(fu, dict)],
     }

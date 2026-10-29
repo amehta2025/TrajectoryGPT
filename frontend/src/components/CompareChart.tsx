@@ -11,12 +11,11 @@ import { frameTimeLabel } from '../state/time'
 import { EXCLUDED_GREY } from '../theme'
 import { Plot, axisStyle, baseLayout } from './Plot'
 
-const CUTOFF = 4.5 // same as the heatmap until cutoff becomes an approved plan parameter (Day 4)
 const MAX_ROWS = 40
 const UP = '#3ecf8e'
 const DOWN = '#ff7a59'
 
-/** Default windows until the plan sets them (Day 4): first half vs second half. */
+/** Default windows when no plan has set them: first half vs second half. */
 function halves(nFrames: number): [[number, number], [number, number]] {
   const mid = Math.floor(nFrames / 2)
   return [[0, mid], [mid, nFrames]]
@@ -64,24 +63,24 @@ function provisionalHelp(minChunks: number): string {
 }
 
 export function CompareChart({ meta }: { meta: Metadata }) {
-  const { dataset, groupA, groupB, pair } = useSelection()
+  const { dataset, groupA, groupB, pair, cutoff, windows } = useSelection()
   const [data, setData] = useState<Compare | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [winA, winB] = halves(meta.n_frames)
+  const [winA, winB] = windows ?? halves(meta.n_frames)
 
   useEffect(() => {
     setData(null)
     setError(null)
     let cancelled = false
-    const [a, b] = halves(meta.n_frames)
-    api.compare(dataset, groupA, groupB, a, b, CUTOFF).then(
+    const [a, b] = windows ?? halves(meta.n_frames)
+    api.compare(dataset, groupA, groupB, a, b, cutoff).then(
       (d) => !cancelled && setData(d),
       (e) => !cancelled && setError((e as Error).message),
     )
     return () => {
       cancelled = true
     }
-  }, [dataset, groupA, groupB, meta.n_frames])
+  }, [dataset, groupA, groupB, meta.n_frames, cutoff, windows])
 
   const rows = useMemo(() => (data?.status === 'ok' ? data.rows.slice(0, MAX_ROWS).reverse() : []), [data])
 
@@ -142,7 +141,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
         )}
       </header>
       <p className="card-sub">
-        {groupA}–{groupB} · cutoff {CUTOFF} Å · Δ = window B − window A, {ok ? ok.ci_level * 100 : 95}% CI (autocorrelation-corrected) ·
+        {groupA}–{groupB} · cutoff {cutoff} Å · Δ = window B − window A, {ok ? ok.ci_level * 100 : 95}% CI (autocorrelation-corrected) ·
         A: {windowLabel(meta, winA)} · B: {windowLabel(meta, winB)}
         <br />
         <span className="swatch" style={{ background: UP }} />more contact

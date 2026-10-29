@@ -103,6 +103,150 @@ export type Compare =
 
 export type Frames = { frames: number[]; nAtoms: number; coords: Float32Array }
 
+// ---------- agent (SPEC §9) ----------
+
+export type PlanStep = { tool: string; rationale: string }
+
+export type Plan = {
+  summary: string
+  dataset: string
+  group_a: string
+  group_b: string
+  cutoff: number
+  window_a: [number, number]
+  window_b: [number, number] | null
+  stride: number
+  sequence_exclusion: number
+  robustness_cutoffs: number[]
+  steps: PlanStep[]
+}
+
+export type Usage = {
+  provider: string
+  model: string
+  effort: string
+  input_tokens: number
+  cached_tokens: number
+  output_tokens: number
+  reasoning_tokens: number
+  latency_s: number
+  cost_usd: number | null
+}
+
+export type PlanResponse = { plan_id: string; plan: Plan; usage: Usage[]; model: string }
+
+export type ChecklistItem = { item: number; tool: string; text: string; status: 'pending' | 'in_progress' | 'done' | 'skipped'; note: string }
+
+/** A filled placeholder value (has pid) or plain text. */
+export type Segment = { text: string; pid?: string; path?: string; kind?: string }
+
+export type Robustness = { pair: string; verdict: 'robust' | 'cutoff-sensitive' | 'not checked'; pid: string | null; label: string }
+
+export type Finding = {
+  id: string
+  text: string
+  claim: 'supported' | 'not_supported' | 'descriptive'
+  evidence_ids: string[]
+  rendered: string
+  segments: Segment[]
+  badge: 'proven' | 'unsupported' | 'observed'
+  pairs: string[]
+  robustness: Robustness[]
+}
+
+export type StatRow = {
+  finding: string
+  pair: string
+  pid: string
+  delta: string
+  ci: string
+  q: string
+  n_blocks_a: string
+  n_blocks_b: string
+  tau_ns_a: string
+  tau_ns_b: string
+  supported: boolean
+  provisional: boolean
+  robustness: string
+}
+
+export type TextItem = { text: string; segments: Segment[] }
+
+export type Report = {
+  findings: Finding[]
+  statistical_support: StatRow[]
+  hypotheses: TextItem[]
+  caveats: TextItem[]
+  gaps: TextItem[]
+  follow_ups: { tool: string; pair?: string; rationale: string }[]
+}
+
+export type ResultPair = { key_a: string; key_b: string; supported?: boolean; provisional?: boolean; verdict?: string }
+
+export type ToolResult = {
+  status: 'ok' | 'refused' | 'error'
+  tool: string
+  provenance_id: string
+  params: Record<string, unknown>
+  units: Record<string, string>
+  summary_for_model: string
+  pairs: Record<string, ResultPair>
+}
+
+export type Turn = {
+  turn: number
+  tool: string | null
+  arguments?: string
+  status: string
+  provenance_id?: string | null
+  summary: string
+  saw: Record<string, unknown>[]
+  output: Record<string, unknown>[]
+  usage: Usage
+  model_s: number
+  tool_s: number
+}
+
+export type RunStatus = 'running' | 'needs_review' | 'awaiting_verification' | 'aborted_budget' | 'error'
+
+export type RunView = {
+  run_id: string
+  question: string
+  status: RunStatus
+  checklist: ChecklistItem[]
+  turns: Turn[]
+  plan_usage: Usage[]
+  results: Record<string, ToolResult>
+  report: Report | null
+  problems: string[]
+  wall_s: number
+  cost_usd: number | null
+  error: string | null
+  step_through: boolean
+}
+
+export type RunEvent =
+  | { seq: number; type: 'run_started'; run_id: string; checklist: ChecklistItem[] }
+  | { seq: number; type: 'turn_started'; turn: number }
+  | { seq: number; type: 'turn'; turn: number; tool: string | null; status: string; model_s: number; tool_s: number; cost_usd: number | null; effort: string; provenance_id: string | null; checklist: ChecklistItem[]; progress: string }
+  | { seq: number; type: 'paused' }
+  | { seq: number; type: 'run_finished'; status: RunStatus; problems: string[]; cost_usd: number | null; wall_s: number; error: string | null }
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(new URL(path, BASE), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (!r.ok) {
+    let detail: unknown = r.statusText
+    try {
+      detail = (await r.json()).detail
+    } catch {
+      /* not JSON */
+    }
+    const errors = (detail as { errors?: string[] } | null)?.errors
+    throw new Error(errors ? errors.join('; ') : `${r.status} ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
+  }
+  return r.json() as Promise<T>
+}
+
 async function get(path: string, params: Record<string, string | number | undefined> = {}): Promise<Response> {
   const url = new URL(path, BASE)
   for (const [k, v] of Object.entries(params)) if (v !== undefined) url.searchParams.set(k, String(v))
@@ -128,6 +272,21 @@ export const api = {
     (await get(`/distances/${ds}`, { key_a: keyA, key_b: keyB })).json(),
   compare: async (ds: string, groupA: string, groupB: string, a: [number, number], b: [number, number], cutoff = 4.5): Promise<Compare> =>
     (await get(`/compare/${ds}`, { group_a: groupA, group_b: groupB, a_start: a[0], a_stop: a[1], b_start: b[0], b_stop: b[1], cutoff })).json(),
+  plan: (question: string, dataset: string) => post<PlanResponse>('/plan', { question, dataset }),
+  startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean) =>
+    post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough }),
+  run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
+  next: (runId: string, stepThrough?: boolean) => post<{ ok: boolean }>(`/runs/${runId}/next`, { step_through: stepThrough ?? null }),
+  /** Live step log (server-sent events). Returns a function that closes the stream. */
+  runEvents: (runId: string, onEvent: (e: RunEvent) => void): (() => void) => {
+    const es = new EventSource(new URL(`/runs/${runId}/events`, BASE))
+    es.onmessage = (m) => {
+      const e = JSON.parse(m.data) as RunEvent
+      onEvent(e)
+      if (e.type === 'run_finished') es.close()
+    }
+    return () => es.close()
+  },
   structure: async (ds: string): Promise<string> => (await get(`/structure/${ds}`)).text(),
   frames: async (ds: string, start: number, stop: number, stride: number): Promise<Frames> => {
     const r = await get(`/frames/${ds}`, { start, stop, stride })

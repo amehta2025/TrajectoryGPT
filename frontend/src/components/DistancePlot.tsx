@@ -7,10 +7,9 @@ import { residueLabel } from '../state/residueKey'
 import { frameTimeLabel, timeAxisTitle } from '../state/time'
 import { Plot, axisStyle, baseLayout } from './Plot'
 
-const CUTOFF = 4.5 // matches the heatmap until cutoff becomes an approved plan parameter (Day 4)
 
 export function DistancePlot({ meta }: { meta: Metadata }) {
-  const { dataset, pair, frame } = useSelection()
+  const { dataset, pair, frame, cutoff } = useSelection()
   const [data, setData] = useState<Distances | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,10 +42,10 @@ export function DistancePlot({ meta }: { meta: Metadata }) {
     if (!data) return []
     const xf = meta.dt_ns === null ? frame : frame * meta.dt_ns
     return [
-      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: CUTOFF, y1: CUTOFF, line: { color: '#ff9f43', dash: 'dash', width: 1.5 } },
+      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: cutoff, y1: cutoff, line: { color: '#ff9f43', dash: 'dash', width: 1.5 } },
       { type: 'line', yref: 'paper', y0: 0, y1: 1, x0: xf, x1: xf, line: { color: '#ffffff', width: 1 } },
     ]
-  }, [data, frame, meta.dt_ns])
+  }, [data, frame, meta.dt_ns, cutoff])
 
   return (
     <section className="card">
@@ -55,7 +54,7 @@ export function DistancePlot({ meta }: { meta: Metadata }) {
         {pair && <span className="muted">{residueLabel(pair.keyA)} – {residueLabel(pair.keyB)} · min heavy-atom distance</span>}
       </header>
       <p className="card-sub">
-        Dashed line: cutoff {CUTOFF} Å · white line: viewer frame {frame} ({frameTimeLabel(meta, frame)}) · click any point to jump
+        Dashed line: cutoff {cutoff} Å · white line: viewer frame {frame} ({frameTimeLabel(meta, frame)}) · click any point to jump
         {pair?.excluded && <span className="warn"> · this pair is sequence-local (excluded from contact counts)</span>}
       </p>
       {error && <div className="error">{error}</div>}

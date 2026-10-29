@@ -14,7 +14,7 @@ function ticks(keys: string[], every: number) {
 }
 
 export function Heatmap({ meta }: { meta: Metadata }) {
-  const { dataset, groupA, groupB, pair } = useSelection()
+  const { dataset, groupA, groupB, pair, cutoff } = useSelection()
   const [data, setData] = useState<Contacts | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -24,14 +24,14 @@ export function Heatmap({ meta }: { meta: Metadata }) {
     let cancelled = false
     setLoading(true)
     setError(null)
-    api.contacts(dataset, groupA, groupB).then(
+    api.contacts(dataset, groupA, groupB, cutoff).then(
       (c) => !cancelled && (setData(c), setLoading(false)),
       (e) => !cancelled && (setError((e as Error).message), setLoading(false)),
     )
     return () => {
       cancelled = true
     }
-  }, [dataset, groupA, groupB])
+  }, [dataset, groupA, groupB, cutoff])
 
   const traces = useMemo<Data[]>(() => {
     if (!data || data.dataset !== dataset) return []
@@ -85,7 +85,7 @@ export function Heatmap({ meta }: { meta: Metadata }) {
         </div>
       </header>
       <p className="card-sub">
-        {meta.contact_definition}, cutoff {data?.cutoff ?? 4.5} Å · {data ? `${data.n_frames} frames · ${nPairs} pairs` : '…'} ·{' '}
+        {meta.contact_definition}, cutoff {data?.cutoff ?? cutoff} Å · {data ? `${data.n_frames} frames · ${nPairs} pairs` : '…'} ·{' '}
         <span className="swatch" style={{ background: EXCLUDED_GREY }} /> excluded (|Δresid| ≤ {data?.sequence_exclusion ?? meta.sequence_exclusion_default})
       </p>
       {error && <div className="error">{error}</div>}

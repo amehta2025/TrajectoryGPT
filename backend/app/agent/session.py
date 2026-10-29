@@ -113,10 +113,13 @@ def get_handle(run_id: str) -> RunHandle:
 
 
 def next_turn(run_id: str, step_through: bool | None = None) -> None:
+    """Next (step_through None) releases a paused turn; the toggle only sets the mode, and switching it
+    off also releases a pause so the run continues."""
     h = get_handle(run_id)
     if step_through is not None:
         h.step_through = step_through
-    h.go.set()
+    if not step_through:
+        h.go.set()
 
 
 def run_view(run_id: str) -> dict:
