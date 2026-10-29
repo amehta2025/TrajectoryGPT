@@ -1,12 +1,15 @@
 """FastAPI app: thin HTTP wrappers around the science functions. No science here."""
+import json
 import os
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 
+from app.agent import session
+from app.agent.planner import PlanInvalid
 from app.config import dataset_config, load_config
 from app.science.contact_stats import StatsRefused, compare_intervals, contact_statistics
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts
@@ -25,7 +28,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
 
@@ -197,3 +201,59 @@ def native_contacts_endpoint(dataset: str, selection: str = "name CA", radius: f
         "time_ns": None if r["time_ns"] is None else _round(r["time_ns"]),
         "q": _round(r["q"].T, 6),  # one list per reference frame
     }
+
+
+# ---------- agent (SPEC §9): plan -> approve -> run with a live step log ----------
+
+@app.post("/plan")
+def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
+    _check_dataset(dataset)
+    if not question.strip() or len(question) > 2000:
+        raise HTTPException(400, "question must be 1-2000 characters")
+    try:
+        return session.propose_plan(question.strip(), dataset)
+    except PlanInvalid as e:
+        raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
+
+
+@app.post("/runs")
+def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False)):
+    try:
+        return {"run_id": session.start_run(plan_id, edits, step_through)}
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+    except PlanInvalid as e:
+        raise HTTPException(422, {"errors": e.errors}) from None
+
+
+def _handle(run_id: str):
+    try:
+        return session.get_handle(run_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+
+
+@app.get("/runs/{run_id}")
+def get_run(run_id: str):
+    _handle(run_id)
+    return session.run_view(run_id)
+
+
+@app.get("/runs/{run_id}/events")
+def run_events(run_id: str, after: int = 0):
+    """Server-sent events: one `data:` line per step-log event; ends after run_finished."""
+    h = _handle(run_id)
+
+    def gen():
+        for e in h.stream(after):
+            yield ": keep-alive\n\n" if e is None else f"data: {json.dumps(e)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/runs/{run_id}/next")
+def run_next(run_id: str, step_through: bool | None = Body(None, embed=True)):
+    _handle(run_id)
+    session.next_turn(run_id, step_through)
+    return {"ok": True}
