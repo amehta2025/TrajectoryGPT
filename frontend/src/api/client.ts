@@ -133,7 +133,25 @@ export type Usage = {
   cost_usd: number | null
 }
 
-export type PlanResponse = { plan_id: string; plan: Plan; usage: Usage[]; model: string }
+export type SpecField = { name: string; value: string; confidence: 'high' | 'medium' | 'low'; source: 'caption' | 'methods' | 'axis' | 'assumed' }
+
+export type FigureSpec = {
+  summary: string
+  kind: 'native_contacts' | 'contact_map' | 'distance_trace' | 'other'
+  mode: 'exact' | 'transfer'
+  dataset: string
+  mode_reason: string
+  fields: SpecField[]
+  question: string
+  pdf_fallback: boolean
+}
+
+export type Figure = { figure_id: string; filename: string; mime: string; spec: FigureSpec }
+
+/** A file for figure mode: base64 content plus its type (PNG, JPEG or PDF). */
+export type UploadFile = { filename: string; mime: string; data: string }
+
+export type PlanResponse = { plan_id: string; plan: Plan; usage: Usage[]; model: string; figure?: Figure; question?: string }
 
 export type ChecklistItem = { item: number; tool: string; text: string; status: 'pending' | 'in_progress' | 'done' | 'skipped'; note: string }
 
@@ -193,6 +211,7 @@ export type ToolResult = {
   params: Record<string, unknown>
   units: Record<string, string>
   summary_for_model: string
+  data_for_ui?: unknown
   pairs: Record<string, ResultPair>
 }
 
@@ -226,6 +245,7 @@ export type RunView = {
   cost_usd: number | null
   error: string | null
   step_through: boolean
+  figure: Figure | null
 }
 
 export type RunEvent =
@@ -303,6 +323,9 @@ export const api = {
   compare: async (ds: string, groupA: string, groupB: string, a: [number, number], b: [number, number], cutoff = 4.5): Promise<Compare> =>
     (await get(`/compare/${ds}`, { group_a: groupA, group_b: groupB, a_start: a[0], a_stop: a[1], b_start: b[0], b_stop: b[1], cutoff })).json(),
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
+  figurePlan: (files: UploadFile[], dataset: string, note: string) =>
+    post<PlanResponse>('/figure/plan', { files, dataset, note }),
+  figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
   plan: (question: string, dataset: string) => post<PlanResponse>('/plan', { question, dataset }),
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean) =>
     post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough }),

@@ -170,3 +170,20 @@ table.stats tr.greyed td { color: var(--muted); }
 ul.plain { margin: 0; padding-left: 18px; line-height: 1.5; }
 .passcode { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid #5a4723; background: #2a2212; border-radius: 8px; }
 .passcode input { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+
+/* ---------- figure mode (Day 5) ---------- */
+.ask.dragging { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
+.attach { display: grid; place-items: center; width: 38px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); cursor: pointer; }
+.attached { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.repro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+@media (max-width: 900px) { .repro-grid { grid-template-columns: 1fr; } }
+.repro-grid figure { margin: 0; min-width: 0; }
+.repro-grid img { width: 100%; border-radius: 6px; background: #fff; }
+.repro-grid .placeholder { height: 200px; display: grid; place-items: center; border: 1px dashed var(--border); border-radius: 6px; }
+.match { margin-top: 8px; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+.match.ok { color: var(--ok); background: #10261d; border: 1px solid #1f5b44; }
+.match.no { color: var(--no); background: #2a1414; border: 1px solid #5a2323; }
+.match.transfer { color: #ffd59a; background: #2a2212; border: 1px solid #5a4723; }
+.reproduce details { margin-top: 8px; }
+.reproduce summary { cursor: pointer; color: var(--muted); }
+table.spec { margin-top: 6px; }

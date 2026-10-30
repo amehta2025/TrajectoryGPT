@@ -13,6 +13,7 @@ import { StepLog } from './components/StepLog'
 import { Timeline } from './components/Timeline'
 import { ReportView } from './components/ReportView'
 import { CostMeter } from './components/CostMeter'
+import { ReproduceView } from './components/ReproduceView'
 import { DOMAIN_COLORS } from './theme'
 
 function Results({ meta }: { meta: Metadata }) {
@@ -83,6 +84,7 @@ export default function App() {
             <StartScreen datasets={datasets} dataset={dataset} compact />
             <div className="question card"><span className="muted small">Question</span>{inv.question}</div>
             <PlanCard />
+            <ReproduceView />
             <ReportView />
             <StepLog />
             <Timeline />

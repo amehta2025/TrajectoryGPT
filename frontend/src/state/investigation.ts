@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, setPasscode, type Plan, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, setPasscode, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { setSelection } from './selection'
 
 export type Investigation = {
@@ -22,6 +22,7 @@ const empty: Investigation = {
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
+let retry: (() => Promise<void>) | null = null // the last question or figure, re-sent after the passcode
 const listeners = new Set<() => void>()
 
 function set(patch: Partial<Investigation>) {
@@ -41,6 +42,7 @@ export function useInvestigation(): Investigation {
 
 export async function ask(question: string, dataset: string) {
   closeStream?.()
+  retry = () => ask(question, dataset)
   set({ ...empty, phase: 'planning', question, dataset })
   try {
     const proposal = await api.plan(question, dataset)
@@ -48,6 +50,35 @@ export async function ask(question: string, dataset: string) {
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else set({ phase: 'idle', error: `Planning failed: ${(e as Error).message}` })
+  }
+}
+
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+const UPLOAD_TYPES = ['image/png', 'image/jpeg', 'application/pdf']
+
+/** Read a browser File as base64; rejects types and sizes the backend would refuse. */
+export async function toUpload(file: File): Promise<UploadFile> {
+  if (!UPLOAD_TYPES.includes(file.type)) throw new Error(`${file.name}: only PNG, JPEG or PDF files are accepted`)
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error(`${file.name}: larger than 10 MB`)
+  const buf = new Uint8Array(await file.arrayBuffer())
+  let bin = ''
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+  return { filename: file.name, mime: file.type, data: btoa(bin) }
+}
+
+/** Figure mode: figure image and/or methods PDF -> extracted spec -> plan. */
+export async function askFigure(files: File[], dataset: string, note: string) {
+  closeStream?.()
+  retry = () => askFigure(files, dataset, note)
+  const label = note.trim() || `Reproduce ${files.map((f) => f.name).join(' + ')}`
+  set({ ...empty, phase: 'planning', question: label, dataset })
+  try {
+    const uploads = await Promise.all(files.map(toUpload))
+    const proposal = await api.figurePlan(uploads, dataset, note)
+    set({ phase: 'plan', proposal })
+  } catch (e) {
+    if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
+    else set({ phase: 'idle', error: `Figure planning failed: ${(e as Error).message}` })
   }
 }
 
@@ -92,7 +123,7 @@ export async function submitPasscode(code: string): Promise<boolean> {
     return false
   }
   set({ needPasscode: false, error: null })
-  if (state.question) await ask(state.question, state.dataset)
+  if (retry) await retry()
   return true
 }
 
