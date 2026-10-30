@@ -396,7 +396,7 @@ Components:
 - **DistancePlot:** with a cutoff line; clicking a point jumps to that frame
 - **CompareChart:** CI bars; unsupported pairs greyed; shows the "N tested, FDR 5%" note
 - **ReportView:** placeholders rendered with values; hovering a value shows its provenance
-  - Each finding shows a "proven" / "unsupported" badge and an expandable "N citations" list.
+  - Each finding shows a "supported" / "not supported" badge (renamed from "proven" on 2026-10-30) and an expandable "N citations" list.
   - Each supported finding shows a **robustness badge**: "robust 4.0–5.0 Å", "cutoff-sensitive: holds at 4.0, 4.5", or "robustness not checked". Clicking a citation highlights it in the chart or 3D view and shows its provenance.
   - A "Gaps" section lists what the agent could not establish.
   - A `needs_review` run lists its unresolved problems instead of a finished report.

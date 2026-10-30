@@ -20,7 +20,7 @@ TEXT_LIMIT = 1200
 
 # claim -> (badge, label shown next to the finding)
 CLAIMS = {
-    "supported": ("proven", "proven"),
+    "supported": ("supported", "supported"),
     "not_supported": ("unsupported", "not supported — consistent with noise"),
     "null": ("null", "no supported change found"),
     "descriptive": ("descriptive", "descriptive — not statistically tested"),

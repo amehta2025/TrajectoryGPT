@@ -167,7 +167,7 @@ export type Finding = {
   evidence_ids: string[]
   rendered: string
   segments: Segment[]
-  badge: 'proven' | 'unsupported' | 'null' | 'descriptive'
+  badge: 'supported' | 'proven' | 'unsupported' | 'null' | 'descriptive' // 'proven' = runs saved before 2026-10-30
   badge_label: string
   pairs: string[]
   robustness: Robustness[]

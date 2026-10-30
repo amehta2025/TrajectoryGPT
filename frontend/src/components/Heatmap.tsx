@@ -1,5 +1,7 @@
 // Contact-frequency heatmap for two groups. Clicking a cell selects that residue pair.
 // Sequence-local pairs (|Δresid| <= sequence_exclusion) are drawn grey, not as zero.
+// By default the axes zoom to the residues that are ever in contact (frequency >= 1%), plus a margin;
+// "Show all residues" restores the full block. Only the view changes, never the data.
 import { useEffect, useMemo, useState } from 'react'
 import type { Data, Shape } from 'plotly.js'
 import { api, type Contacts, type Metadata } from '../api/client'
@@ -8,9 +10,24 @@ import { parseResidueKey, residueLabel } from '../state/residueKey'
 import { DOMAIN_COLORS, EXCLUDED_GREY } from '../theme'
 import { Plot, axisStyle, baseLayout } from './Plot'
 
-function ticks(keys: string[], every: number) {
-  const idx = keys.map((_, i) => i).filter((i) => i % every === 0)
+const ZOOM_MIN_FREQ = 0.01
+const ZOOM_MARGIN = 2
+
+function ticks(keys: string[], [lo, hi]: [number, number]) {
+  const every = Math.max(1, Math.ceil((hi - lo) / 12))
+  const idx = keys.map((_, i) => i).filter((i) => i >= lo && i <= hi && (i - Math.ceil(lo)) % every === 0)
   return { tickvals: idx, ticktext: idx.map((i) => String(parseResidueKey(keys[i]).resid)) }
+}
+
+/** Index span [lo, hi] of rows (axis 0) or columns (axis 1) with any contact, padded; null if none. */
+function activeSpan(c: Contacts, axis: 0 | 1, extra: number[]): [number, number] | null {
+  const n = axis === 0 ? c.keys_a.length : c.keys_b.length
+  const hit: number[] = [...extra.filter((i) => i >= 0)]
+  c.frequency.forEach((row, i) => row.forEach((v, j) => {
+    if (!c.excluded[i][j] && v >= ZOOM_MIN_FREQ) hit.push(axis === 0 ? i : j)
+  }))
+  if (!hit.length) return null
+  return [Math.max(0, Math.min(...hit) - ZOOM_MARGIN) - 0.5, Math.min(n - 1, Math.max(...hit) + ZOOM_MARGIN) + 0.5]
 }
 
 export function Heatmap({ meta }: { meta: Metadata }) {
@@ -18,6 +35,7 @@ export function Heatmap({ meta }: { meta: Metadata }) {
   const [data, setData] = useState<Contacts | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const groups = Object.keys(meta.groups)
 
   useEffect(() => {
@@ -63,6 +81,12 @@ export function Heatmap({ meta }: { meta: Metadata }) {
   }, [data, pair])
 
   const nPairs = data ? data.excluded.flat().filter((e) => !e).length : 0
+  const selI = data && pair ? data.keys_a.indexOf(pair.keyA) : -1
+  const selJ = data && pair ? data.keys_b.indexOf(pair.keyB) : -1
+  const full = (n: number): [number, number] => [-0.5, n - 0.5]
+  const yRange = data ? (!showAll && activeSpan(data, 0, [selI])) || full(data.keys_a.length) : full(1)
+  const xRange = data ? (!showAll && activeSpan(data, 1, [selJ])) || full(data.keys_b.length) : full(1)
+  const zoomed = data !== null && !showAll && (yRange[1] - yRange[0] < data.keys_a.length || xRange[1] - xRange[0] < data.keys_b.length)
 
   return (
     <section className="card">
@@ -87,6 +111,11 @@ export function Heatmap({ meta }: { meta: Metadata }) {
       <p className="card-sub">
         {meta.contact_definition}, cutoff {data?.cutoff ?? cutoff} Å · {data ? `${data.n_frames} frames · ${nPairs} pairs` : '…'} ·{' '}
         <span className="swatch" style={{ background: EXCLUDED_GREY }} /> excluded (|Δresid| ≤ {data?.sequence_exclusion ?? meta.sequence_exclusion_default})
+        {data && (
+          <> · {zoomed ? 'zoomed to residues ever in contact (≥1%)' : 'all residues'}{' '}
+            <button className="link small" onClick={() => setShowAll(!showAll)}>{showAll ? 'Zoom to contacts' : 'Show all residues'}</button>
+          </>
+        )}
       </p>
       {error && <div className="error">{error}</div>}
       <div className="plot-wrap heatmap-wrap">
@@ -97,8 +126,8 @@ export function Heatmap({ meta }: { meta: Metadata }) {
             layout={{
               ...baseLayout,
               margin: { l: 56, r: 10, t: 6, b: 46 },
-              xaxis: { ...axisStyle, title: { text: `${groupB} residue`, font: { color: DOMAIN_COLORS[groupB] } }, ...ticks(data.keys_b, 10), showgrid: false },
-              yaxis: { ...axisStyle, title: { text: `${groupA} residue`, font: { color: DOMAIN_COLORS[groupA] } }, ...ticks(data.keys_a, 5), showgrid: false },
+              xaxis: { ...axisStyle, title: { text: `${groupB} residue`, font: { color: DOMAIN_COLORS[groupB] } }, ...ticks(data.keys_b, xRange), range: xRange, showgrid: false },
+              yaxis: { ...axisStyle, title: { text: `${groupA} residue`, font: { color: DOMAIN_COLORS[groupA] } }, ...ticks(data.keys_a, yRange), range: yRange, showgrid: false },
               shapes,
             }}
             config={{ displaylogo: false, responsive: true, modeBarButtonsToRemove: ['select2d', 'lasso2d'] }}

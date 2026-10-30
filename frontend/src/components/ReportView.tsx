@@ -1,14 +1,16 @@
-// The report: a headline built by code from the stored tool results, then findings with
-// proven/unsupported badges, robustness badges, values filled by code with provenance on hover,
-// expandable citations (click -> highlight in 3D + show provenance). Statistics, hypotheses,
-// caveats, gaps and follow-ups follow, the longer ones collapsed with their counts shown.
+// The report: a headline built by code from the stored tool results, then one card per contact
+// (pair, before -> after bar, supported / not supported badge, robustness badge; CI, q, the finding
+// text with provenance on hover, and sources under Details). Clicking a card highlights the pair in 3D
+// and jumps to a frame that shows the change. Statistics, hypotheses, caveats, gaps and follow-ups
+// follow, collapsed with their counts shown.
 // A needs_review run shows its unresolved problems instead.
 // Verification is not shown until a verifier result exists (SPEC §9 step 7, Day 6).
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, type Finding, type Metadata, type RunView, type Segment, type TextItem } from '../api/client'
 import { useInvestigation } from '../state/investigation'
-import { getSelection, setSelection } from '../state/selection'
-import { residueLabel } from '../state/residueKey'
+import { getSelection, setSelection, useSelection } from '../state/selection'
+import { hisNote, hisText } from '../state/residueKey'
+import { buildCards, type Card } from '../state/cards'
 
 type CompareData = {
   group_a: string; group_b: string; n_tested: number; n_filtered: number; n_supported: number
@@ -77,7 +79,7 @@ export function Headline() {
     )
   }
   const parts = [
-    count('proven') && `${count('proven')} supported`,
+    count('supported') + count('proven') && `${count('supported') + count('proven')} supported`,
     count('unsupported') + count('null') && `${count('unsupported') + count('null')} not supported`,
     descriptive && `${descriptive} descriptive`,
   ].filter(Boolean)
@@ -90,76 +92,37 @@ export function Headline() {
 }
 
 /**
- * The top finding's residue pair: the first supported finding with a pair (else any finding with one),
- * resolved to residue keys through its cited results. Descriptive findings may name a pair only in
- * their text (contact maps carry no per-pair entries); then the first pair named in the text is
- * matched against the cited contact map's residue keys.
+ * Point the 3D view at a contact: highlight the pair and jump to a frame in the window that shows the
+ * change (apart if the contact weakened, in contact if it strengthened; the median-distance frame among
+ * those). The caption says why that frame was picked.
  */
-function topPair(run: RunView): { label: string; keys: { key_a: string; key_b: string; delta?: number } } | null {
-  const findings = run.report?.findings ?? []
-  const f = findings.find((x) => x.badge === 'proven' && x.pairs.length) ?? findings.find((x) => x.pairs.length)
-  if (f) {
-    const label = f.pairs[0]
-    const pid = f.evidence_ids.map((e) => e.split('.')[0]).find((p) => run.results[p]?.pairs[label])
-    if (pid) return { label, keys: run.results[pid].pairs[label] as { key_a: string; key_b: string; delta?: number } }
+async function focusCard(card: Card, meta: Metadata) {
+  setSelection({ pair: { keyA: card.keyA, keyB: card.keyB, excluded: false } })
+  const d = await api.distances(meta.dataset, card.keyA, card.keyB)
+  const { cutoff, pair } = getSelection()
+  if (pair?.keyA !== card.keyA || pair?.keyB !== card.keyB) return // the user picked something else meanwhile
+  const mid = Math.floor(meta.n_frames / 2)
+  const [w0, w1] = card.focusWindow ?? [mid, meta.n_frames]
+  const change = card.stats ? card.stats.delta : card.freqs.length === 2 ? card.freqs[1].freq - card.freqs[0].freq : 0
+  let idx = d.frames.map((_, i) => i).filter((i) => d.frames[i] >= w0 && d.frames[i] < w1)
+  if (change !== 0) {
+    const want = idx.filter((i) => (change < 0 ? d.distance[i] > cutoff : d.distance[i] <= cutoff))
+    if (want.length) idx = want
   }
-  for (const g of findings) {
-    const m = g.text.match(/\b([A-Z]{3}\d+)[-–]([A-Z]{3}\d+)\b/)
-    if (!m) continue
-    for (const e of g.evidence_ids) {
-      const ui = run.results[e.split('.')[0]]?.data_for_ui as { keys_a?: string[]; keys_b?: string[] } | undefined
-      const all = [...(ui?.keys_a ?? []), ...(ui?.keys_b ?? [])]
-      const a = all.find((k) => residueLabel(k) === m[1])
-      const b = all.find((k) => residueLabel(k) === m[2])
-      if (a && b) return { label: `${m[1]}-${m[2]}`, keys: { key_a: a, key_b: b } }
-    }
-  }
-  return null
-}
-
-/**
- * When a report opens, point the 3D view at its top finding: highlight that pair and jump to a
- * window-B frame that shows the change (apart if the contact weakened, in contact if it strengthened),
- * the frame with the median distance among those. The caption says why this frame was picked.
- */
-function useFocusTopFinding(run: RunView | null, meta: Metadata | null) {
-  useEffect(() => {
-    if (!run?.report || !meta) return
-    const target = topPair(run)
-    if (!target) return
-    const { label, keys } = target
-    setSelection({ pair: { keyA: keys.key_a, keyB: keys.key_b, excluded: false } })
-    const delta = keys.delta
-    let cancelled = false
-    api.distances(meta.dataset, keys.key_a, keys.key_b).then((d) => {
-      if (cancelled) return
-      const { windows, cutoff } = getSelection()
-      const mid = Math.floor(meta.n_frames / 2)
-      const [w0, w1] = windows ? windows[1] : [mid, meta.n_frames]
-      const apart = delta === undefined ? null : delta < 0
-      let idx = d.frames.map((_, i) => i).filter((i) => d.frames[i] >= w0 && d.frames[i] < w1)
-      if (apart !== null) {
-        const want = idx.filter((i) => (apart ? d.distance[i] > cutoff : d.distance[i] <= cutoff))
-        if (want.length) idx = want
-      }
-      if (!idx.length) return
-      idx.sort((a, b) => d.distance[a] - d.distance[b])
-      const i = idx[Math.floor(idx.length / 2)]
-      const where = meta.dt_ns === null ? 'Late-path step' : w0 === mid && w1 === meta.n_frames ? 'Second-half frame' : 'Window B frame'
-      const state = d.distance[i] > cutoff ? 'apart' : 'in contact'
-      setSelection({ frame: d.frames[i], focus: { frame: d.frames[i], text: `${where} where ${label} is ${state} (${d.distance[i].toFixed(1)} Å)` } })
-    }, () => {})
-    return () => {
-      cancelled = true
-    }
-  }, [run?.run_id, run?.report, meta]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!idx.length) return
+  idx.sort((a, b) => d.distance[a] - d.distance[b])
+  const i = idx[Math.floor(idx.length / 2)]
+  const where = card.freqs.length === 2 ? card.freqs[1].name : 'Frame'
+  const state = d.distance[i] > cutoff ? 'apart' : 'in contact'
+  const text = `${where[0].toUpperCase()}${where.slice(1)}: ${hisText(card.label)} ${state} (${d.distance[i].toFixed(1)} Å)`
+  setSelection({ frame: d.frames[i], focus: { frame: d.frames[i], text } })
 }
 
 function Segments({ segs, run }: { segs: Segment[]; run: RunView }) {
   return (
     <>
       {segs.map((s, i) => {
-        if (!s.pid) return <span key={i}>{s.text}</span>
+        if (!s.pid) return <span key={i} title={hisNote(s.text) ?? undefined}>{hisText(s.text)}</span>
         const r = run.results[s.pid]
         return (
           <span key={i} className="value" title={`${s.path} — from ${s.pid}: ${r?.tool ?? '?'} (${r?.status ?? '?'})`}>
@@ -180,7 +143,7 @@ function Citation({ id, run, onShow }: { id: string; run: RunView; onShow: (id: 
       if (keys) setSelection({ pair: { keyA: keys.key_a, keyB: keys.key_b, excluded: false } })
       onShow(pid)
     }} title={keys ? 'Highlight this pair in 3D and show provenance' : 'Show provenance'}>
-      {id} <span className="muted small">{res?.tool}</span>
+      {hisText(id)} <span className="muted small">{res?.tool}</span>
     </button>
   )
 }
@@ -196,29 +159,87 @@ function Provenance({ pid, run }: { pid: string; run: RunView }) {
   )
 }
 
-function FindingCard({ f, run }: { f: Finding; run: RunView }) {
-  const [open, setOpen] = useState(false)
+function Sources({ f, run }: { f: Finding; run: RunView }) {
   const [shown, setShown] = useState<string | null>(null)
   return (
-    <li className={`finding ${f.badge}`}>
-      <div className="badges">
-        <span className={`badge ${f.badge}`}>{f.badge_label}</span>
-        {f.robustness.map((r) => (
-          <span key={r.pair} className={`badge rob-${r.verdict.replace(' ', '-')}`} title={`${r.pair}${r.pid ? ` · from ${r.pid}` : ''}`}>
-            {f.robustness.length > 1 ? `${r.pair}: ` : ''}{r.label}
+    <div className="citations">
+      {f.evidence_ids.map((e) => <Citation key={e} id={e} run={run} onShow={setShown} />)}
+      {shown && <Provenance pid={shown} run={run} />}
+    </div>
+  )
+}
+
+const pct = (x: number) => `${Math.round(x * 100)}%`
+const signed = (x: number) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(3)}`
+
+/** Before -> after contact frequency as two thin bars; the after bar is coloured only for a supported change. */
+function FreqBars({ card }: { card: Card }) {
+  const changed = card.badge === 'supported' && card.freqs.length === 2
+  const lost = card.freqs.length === 2 && card.freqs[1].freq < card.freqs[0].freq
+  return (
+    <div className="fbars" aria-label={`in contact ${card.freqs.map((f) => `${f.name} ${pct(f.freq)}`).join(', ')}`}>
+      {card.freqs.map((f, i) => (
+        <div key={i} className="fbar">
+          <span className="fbar-name">{f.name}</span>
+          <span className="fbar-track">
+            <span className={`fbar-fill ${i === 1 && changed ? (lost ? 'lost-bg' : 'gained-bg') : ''}`} style={{ width: `${Math.max(1, f.freq * 100)}%` }} />
           </span>
-        ))}
-        <button className="link small cite-toggle" onClick={() => setOpen(!open)}>
-          {f.evidence_ids.length} source{f.evidence_ids.length === 1 ? '' : 's'} {open ? '▾' : '▸'}
-        </button>
-      </div>
-      <p><Segments segs={f.segments} run={run} /></p>
+          <span className="fbar-val">{pct(f.freq)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ContactCard({ card, run, meta, selected }: { card: Card; run: RunView; meta: Metadata; selected: boolean }) {
+  const [open, setOpen] = useState(false)
+  const s = card.stats
+  return (
+    <li className={`ccard ${card.badge} ${selected ? 'selected' : ''}`}>
+      <button className="ccard-main" onClick={() => void focusCard(card, meta)} title="Show this contact in 3D">
+        <span className="ccard-head">
+          <span className="ccard-pair" title={hisNote(card.label) ?? undefined}>{hisText(card.label)}</span>
+          <span className={`badge ${card.badge}`}>{card.badgeLabel}</span>
+        </span>
+        {card.freqs.length > 0 && <FreqBars card={card} />}
+        {card.robustness && (
+          <span className={`badge rob-${card.robustness.verdict.replace(' ', '-')}`} title={card.robustness.pid ? `from ${card.robustness.pid}` : undefined}>
+            {card.robustness.label}
+          </span>
+        )}
+      </button>
+      <button className="link small ccard-more" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? 'Hide details ▾' : 'Details ▸'}
+      </button>
       {open && (
-        <div className="citations">
-          {f.evidence_ids.map((e) => <Citation key={e} id={e} run={run} onShow={setShown} />)}
-          {shown && <Provenance pid={shown} run={run} />}
+        <div className="ccard-detail">
+          {s && (
+            <dl className="kv">
+              <dt>Δ frequency</dt><dd>{signed(s.delta)}</dd>
+              <dt>95% CI</dt><dd>[{signed(s.ci_low)}, {signed(s.ci_high)}]</dd>
+              <dt>q (FDR)</dt><dd>{s.q.toPrecision(2)}</dd>
+              <dt title="independent chunks of data (N / 2τ) per window">chunks</dt><dd>{s.n_blocks_a?.toFixed(0) ?? '–'} / {s.n_blocks_b?.toFixed(0) ?? '–'}</dd>
+              <dt>τ</dt><dd>{s.tau_ns_a?.toFixed(1) ?? '–'} / {s.tau_ns_b?.toFixed(1) ?? '–'} ns</dd>
+            </dl>
+          )}
+          <p className="ccard-text"><Segments segs={card.finding.segments} run={run} /></p>
+          <Sources f={card.finding} run={run} />
         </div>
       )}
+    </li>
+  )
+}
+
+function NoteCard({ f, run }: { f: Finding; run: RunView }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <li className={`ccard note-card ${f.badge}`}>
+      <div className="ccard-head"><span className={`badge ${f.badge}`}>{f.badge === 'proven' ? 'supported' : f.badge_label}</span></div>
+      <p className="ccard-text"><Segments segs={f.segments} run={run} /></p>
+      <button className="link small ccard-more" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {f.evidence_ids.length} source{f.evidence_ids.length === 1 ? '' : 's'} {open ? '▾' : '▸'}
+      </button>
+      {open && <Sources f={f} run={run} />}
     </li>
   )
 }
@@ -233,12 +254,22 @@ function Fold({ title, items, run, open = false }: { title: string; items: TextI
   )
 }
 
+/** One card per contact (click: highlight in 3D and jump to its frame), then notes, statistics and the folds. */
 export function ReportView({ meta }: { meta: Metadata | null }) {
   const { run, phase } = useInvestigation()
-  useFocusTopFinding(phase === 'finished' ? run : null, meta)
-  if (!run || phase !== 'finished') return null
+  const { pair } = useSelection()
+  const built = useMemo(
+    () => (run?.report && meta ? buildCards(run, meta.n_frames, meta.dt_ns !== null) : null),
+    [run, meta],
+  )
+  const top = built?.cards.find((c) => c.badge === 'supported') ?? built?.cards[0]
+  useEffect(() => {
+    if (top && meta && phase === 'finished') void focusCard(top, meta).catch(() => {})
+  }, [run?.run_id, top?.id, meta, phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!run || phase !== 'finished' || !meta) return null
   const rep = run.report
-  if (!rep) {
+  if (!rep || !built) {
     return (
       <section className="card report">
         <header className="card-head"><h2>{run.status === 'needs_review' ? 'Needs review' : 'Run ended'}</h2></header>
@@ -246,50 +277,55 @@ export function ReportView({ meta }: { meta: Metadata | null }) {
           <p>{run.status === 'needs_review'
             ? 'The agent’s report failed the automatic checks and was not accepted. These problems were left unresolved:'
             : `The run stopped before a report: ${run.error ?? run.status}.`}</p>
-          {run.problems.length > 0 && <ul className="plain">{run.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+          {run.problems.length > 0 && <ul className="plain">{run.problems.map((p, i) => <li key={i}>{hisText(p)}</li>)}</ul>}
           <p className="muted small">The analyses that did run are still in the charts and in the agent trace above.</p>
         </div>
       </section>
     )
   }
   return (
-    <section className="card report">
-      <ul className="findings">{rep.findings.map((f) => <FindingCard key={f.id} f={f} run={run} />)}</ul>
+    <section className="report">
+      <ul className="ccards">
+        {built.cards.map((c) => (
+          <ContactCard key={c.id} card={c} run={run} meta={meta} selected={pair?.keyA === c.keyA && pair?.keyB === c.keyB} />
+        ))}
+        {built.notes.map((f) => <NoteCard key={f.id} f={f} run={run} />)}
+      </ul>
       {rep.background.length > 0 && (
         <div className="background">
           <h3>Background <span className="badge">{rep.background_label}</span></h3>
           <ul className="plain">{rep.background.map((x, i) => <li key={i}><Segments segs={x.segments} run={run} /></li>)}</ul>
         </div>
       )}
-      {rep.statistical_support.length > 0 && (
-        <>
-          <h3>Statistical support</h3>
-          <div className="table-wrap">
-            <table className="stats">
-              <thead><tr><th>Pair</th><th>Δ [95% CI]</th><th>q</th><th title="independent chunks of data (N / 2τ) per window">chunks A / B</th><th title="autocorrelation time per window">τ A / B</th><th>status</th></tr></thead>
-              <tbody>
-                {rep.statistical_support.map((s) => (
-                  <tr key={`${s.finding}-${s.pair}`} className={s.supported ? '' : 'greyed'}>
-                    <td className="nowrap">{s.pair}</td><td className="nowrap">{s.delta} {s.ci}</td><td>{s.q}</td>
-                    <td className="nowrap">{s.n_blocks_a} / {s.n_blocks_b}</td>
-                    <td className="nowrap">{s.tau_ns_a} / {s.tau_ns_b}</td>
-                    <td>{s.supported ? (s.provisional ? 'supported (slow — provisional)' : 'supported') : 'not supported'}
-                      {s.robustness && <div className="muted small">{s.robustness}</div>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
       <div className="folds">
+        {rep.statistical_support.length > 0 && (
+          <details className="fold">
+            <summary>Show statistics <span className="muted">({rep.statistical_support.length} {rep.statistical_support.length === 1 ? 'pair' : 'pairs'})</span></summary>
+            <div className="table-wrap">
+              <table className="stats">
+                <thead><tr><th>Pair</th><th>Δ [95% CI]</th><th>q</th><th title="independent chunks of data (N / 2τ) per window">chunks A / B</th><th title="autocorrelation time per window">τ A / B</th><th>status</th></tr></thead>
+                <tbody>
+                  {rep.statistical_support.map((s) => (
+                    <tr key={`${s.finding}-${s.pair}`} className={s.supported ? '' : 'greyed'}>
+                      <td className="nowrap" title={hisNote(s.pair) ?? undefined}>{hisText(s.pair)}</td><td className="nowrap">{s.delta} {s.ci}</td><td>{s.q}</td>
+                      <td className="nowrap">{s.n_blocks_a} / {s.n_blocks_b}</td>
+                      <td className="nowrap">{s.tau_ns_a} / {s.tau_ns_b}</td>
+                      <td>{s.supported ? (s.provisional ? 'supported (slow — provisional)' : 'supported') : 'not supported'}
+                        {s.robustness && <div className="muted small">{s.robustness}</div>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
         <Fold title="Caveats" items={rep.caveats} run={run} />
         <Fold title="Not established" items={rep.gaps.length ? rep.gaps : [{ text: 'None listed.', segments: [{ text: 'None listed.' }] }]} run={run} />
         <Fold title="Possible explanations (hypotheses)" items={rep.hypotheses} run={run} />
         {rep.follow_ups.length > 0 && (
           <details className="fold">
             <summary>Follow-ups <span className="muted">({rep.follow_ups.length})</span></summary>
-            <ul className="plain">{rep.follow_ups.map((fu, i) => <li key={i}>{fu.pair && <b>{fu.pair}: </b>}{fu.rationale} <span className="tool-tag">{fu.tool}</span></li>)}</ul>
+            <ul className="plain">{rep.follow_ups.map((fu, i) => <li key={i}>{fu.pair && <b>{hisText(fu.pair)}: </b>}{hisText(fu.rationale)} <span className="tool-tag">{fu.tool}</span></li>)}</ul>
           </details>
         )}
       </div>

@@ -15,24 +15,21 @@ import { CostMeter } from './components/CostMeter'
 import { ReproduceView } from './components/ReproduceView'
 import { DOMAIN_COLORS } from './theme'
 
-function Evidence({ meta }: { meta: Metadata }) {
+function Structure({ meta }: { meta: Metadata }) {
   return (
-    <div className="results">
-      <section className="card viewer-card">
-        <header className="card-head">
-          <h2>Structure</h2>
-          <div className="legend">
-            {Object.entries(meta.groups).map(([g, { ranges }]) => (
-              <span key={g} title={ranges.map(([a, b]) => `${a}–${b}`).join(', ')}>
-                <i style={{ background: DOMAIN_COLORS[g] }} /> {g}
-              </span>
-            ))}
-          </div>
-        </header>
-        <Viewer meta={meta} />
-      </section>
-      <CompareChart meta={meta} />
-    </div>
+    <section className="card viewer-card">
+      <header className="card-head">
+        <h2>Structure</h2>
+        <div className="legend">
+          {Object.entries(meta.groups).map(([g, { ranges }]) => (
+            <span key={g} title={ranges.map(([a, b]) => `${a}–${b}`).join(', ')}>
+              <i style={{ background: DOMAIN_COLORS[g] }} /> {g}
+            </span>
+          ))}
+        </div>
+      </header>
+      <Viewer meta={meta} />
+    </section>
   )
 }
 
@@ -88,17 +85,20 @@ export default function App() {
           {started && (
             <>
               <div className="inv-body">
+                {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
                 <div className="inv-col">
                   <ReproduceView />
                   <ReportView meta={meta} />
                   {inv.phase === 'running' && <PlanCard meta={meta} />}
                 </div>
-                {meta ? <Evidence meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
               </div>
               {meta && (
                 <div className="evidence-more">
-                  <Heatmap meta={meta} />
-                  <DistancePlot meta={meta} />
+                  <CompareChart meta={meta} />
+                  <div className="inv-col">
+                    <DistancePlot meta={meta} />
+                    <Heatmap meta={meta} />
+                  </div>
                 </div>
               )}
             </>

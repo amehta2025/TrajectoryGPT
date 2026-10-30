@@ -11,10 +11,34 @@ export function parseResidueKey(key: string): ResidueKey {
   return { dataset, segid, resid: Number(resid), resname }
 }
 
-/** Short display label, e.g. "LYS40". */
+// CHARMM names histidine by protonation state; people read it as HIS. Keys keep the CHARMM name.
+const HIS_STATES: Record<string, string> = {
+  HSD: 'histidine protonated on Nδ (CHARMM name HSD)',
+  HSE: 'histidine protonated on Nε (CHARMM name HSE)',
+  HSP: 'histidine protonated on both Nδ and Nε (CHARMM name HSP)',
+}
+
+/** Short display label, e.g. "LYS40"; CHARMM histidines show as HIS ("HSE134" -> "HIS134"). */
 export function residueLabel(key: string): string {
   const k = parseResidueKey(key)
-  return `${k.resname}${k.resid}`
+  return `${HIS_STATES[k.resname] ? 'HIS' : k.resname}${k.resid}`
+}
+
+/** Tooltip for a residue: the CHARMM histidine state, or the plain label. */
+export function residueTitle(key: string): string {
+  const k = parseResidueKey(key)
+  return HIS_STATES[k.resname] ? `${k.resname}${k.resid}: ${HIS_STATES[k.resname]}` : `${k.resname}${k.resid}`
+}
+
+/** Display text with CHARMM histidine names replaced ("HSE134-ASP118" -> "HIS134-ASP118"). */
+export function hisText(text: string): string {
+  return text.replace(/\bHS[DEP](\d+)/g, 'HIS$1')
+}
+
+/** True if the text names a CHARMM histidine, so callers can add the explanatory tooltip. */
+export function hisNote(text: string): string | null {
+  const m = text.match(/\b(HS[DEP])(\d+)/)
+  return m ? `${m[1]}${m[2]}: ${HIS_STATES[m[1]]}` : null
 }
 
 /** NGL selection for a residue (single chain, so resid is enough). */

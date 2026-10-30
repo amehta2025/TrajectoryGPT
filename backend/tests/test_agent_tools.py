@@ -151,7 +151,7 @@ def test_submit_full_check(pretend_stats_valid):
     assert r["status"] == "submitted"
     rep = s.report
     f0 = rep["findings"][0]
-    assert "{{" not in f0["rendered"] and f0["badge"] == "proven" and next(x for x in f0["segments"] if "pid" in x)["pid"] == pid
+    assert "{{" not in f0["rendered"] and f0["badge"] == "supported" and next(x for x in f0["segments"] if "pid" in x)["pid"] == pid
     assert "".join(x["text"] for x in f0["segments"]) == f0["rendered"]
     assert f0["robustness"][0]["verdict"] == verdict
     assert rep["findings"][1]["badge"] == "unsupported"

@@ -10,7 +10,7 @@ import { frameTimeLabel } from '../state/time'
 import { DOMAIN_COLORS, PAIR_COLORS } from '../theme'
 
 type Playback = { frames: number[]; nAtoms: number; coords: Float32Array }
-type Rep = { setSelection: (s: string) => void; setVisibility: (v: boolean) => void }
+type Rep = { setSelection: (s: string) => void; setVisibility: (v: boolean) => void; setParameters: (p: object) => void }
 
 const NONE = 'none'
 
@@ -82,7 +82,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
         const a = c.addRepresentation('licorice', { sele: NONE, color: PAIR_COLORS.a, radius: 0.35 })
         const b = c.addRepresentation('licorice', { sele: NONE, color: PAIR_COLORS.b, radius: 0.35 })
         const label = c.addRepresentation('label', {
-          sele: NONE, labelType: 'format', labelFormat: '%(resname)s%(resno)s',
+          sele: NONE, labelType: 'text', labelText: [] as string[],
           color: '#ffffff', xOffset: 0.6, fixedSize: true, radiusType: 'size', radiusSize: 1.6,
           showBorder: true, borderColor: '#000000', borderWidth: 0.4,
         })
@@ -127,6 +127,14 @@ export function Viewer({ meta }: { meta: Metadata }) {
     }
     r.a.setSelection(residueKeyToNglSelection(pair.keyA, 'sidechain'))
     r.b.setSelection(residueKeyToNglSelection(pair.keyB, 'sidechain'))
+    // Label text set per atom so CHARMM histidines read HIS134, as everywhere else in the UI.
+    const labelText: string[] = []
+    for (const key of [pair.keyA, pair.keyB]) {
+      const c = comp.current
+      if (!c) continue
+      for (const i of c.structure.getAtomIndices(new NGL.Selection(residueKeyToNglSelection(key))) ?? []) labelText[i] = residueLabel(key)
+    }
+    r.label.setParameters({ labelText })
     r.label.setSelection(`(${residueKeyToNglSelection(pair.keyA)}) or (${residueKeyToNglSelection(pair.keyB)})`)
   }, [pair, loadedFor, meta.dataset])
 
