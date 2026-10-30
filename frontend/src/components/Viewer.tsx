@@ -230,3 +230,40 @@ function getFrameIndex(frames: number[], f: number): number {
   for (let i = 0; i < frames.length; i++) if (frames[i] <= f) lo = i
   return lo
 }
+
+/** Start screen: the AdK cartoon, domain-coloured, turning slowly. Structure only (no trajectory frames). */
+export function SpinningStructure({ meta }: { meta: Metadata }) {
+  const host = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = host.current
+    if (!el) return
+    let cancelled = false
+    const s = new NGL.Stage(el, { backgroundColor: '#0b0e14', tooltip: false })
+    const ro = new ResizeObserver(() => s.handleResize())
+    ro.observe(el)
+    ;(async () => {
+      try {
+        const pdb = await api.structure(meta.dataset)
+        if (cancelled) return
+        const c = (await s.loadFile(new Blob([pdb], { type: 'text/plain' }), { ext: 'pdb' })) as NGL.StructureComponent
+        if (cancelled) return
+        c.addRepresentation('cartoon', { color: domainScheme(meta), opacity: 0.95 })
+        c.autoView()
+        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        if (!reduce) {
+          s.setSpin(true)
+          ;(s.spinAnimation as unknown as { angle: number }).angle = 0.004
+        }
+      } catch {
+        // Decorative only: if it fails to load, the start screen simply shows no structure.
+      }
+    })()
+    return () => {
+      cancelled = true
+      ro.disconnect()
+      s.dispose()
+      el.replaceChildren()
+    }
+  }, [meta])
+  return <div ref={host} className="spin-structure" aria-hidden="true" />
+}

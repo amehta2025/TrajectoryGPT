@@ -1,16 +1,22 @@
-// What the user sees before any investigation: one prominent input, the dataset picker, three examples.
+// What the user sees before any investigation. Figure mode leads: drop in a figure from a paper and the
+// agent reads its method and runs it on our preloaded AdK simulations. Asking a question is the second
+// entry point. The dataset picker is a small detail. Users never upload trajectories (README: Known
+// limitations), and the copy never implies they can.
 import { useState } from 'react'
-import type { DatasetInfo } from '../api/client'
+import type { DatasetInfo, Metadata } from '../api/client'
 import { ask, askFigure, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
 import { datasetLine, datasetName } from './DatasetBadge'
+import { SpinningStructure } from './Viewer'
 
-const EXAMPLES = [
+const FIGURE_EXAMPLES = [
+  { label: 'Native contacts (MDAnalysis User Guide)', sub: 'exact reproduction on the same data', dataset: 'adk_transition',
+    figure: '/figures/userguide_q1q2_replot.png', question: 'Reproduce this figure.',
+    note: 'Attaches the MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).' },
+]
+const QUESTION_EXAMPLES = [
   { label: 'Which LID–CORE contacts change between the first and second half?', dataset: 'adk_equilibrium',
     question: 'Which LID–CORE contacts change between the first and second half of the run?' },
-  { label: 'Reproduce the native contacts figure', dataset: 'adk_transition', figure: '/figures/userguide_q1q2_replot.png',
-    question: 'Reproduce this figure.',
-    note: 'Attaches the MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).' },
   { label: 'Is the SER30–ASP84 drop real?', dataset: 'adk_equilibrium',
     question: 'Is the drop in the SER30–ASP84 contact between the first and second half of the run real?' },
 ]
@@ -38,9 +44,10 @@ export function PasscodePrompt() {
   )
 }
 
-export function StartScreen({ datasets, dataset }: { datasets: DatasetInfo[]; dataset: string }) {
+export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo[]; dataset: string; meta: Metadata | null }) {
   const { phase, needPasscode } = useInvestigation()
-  const [text, setText] = useState('')
+  const [question, setQuestion] = useState('')
+  const [note, setNote] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -54,69 +61,108 @@ export function StartScreen({ datasets, dataset }: { datasets: DatasetInfo[]; da
     if (!bad) setFiles(picked)
   }
 
-  const submit = (q: string, ds = dataset, attached = files) => {
-    if (busy || (!q.trim() && !attached.length)) return
+  const startFigure = (attached: File[], ds = dataset, text = note) => {
+    if (busy || !attached.length) return
     if (ds !== dataset) setSelection({ dataset: ds })
-    if (attached.length) void askFigure(attached, ds, q.trim())
-    else void ask(q.trim(), ds)
-    setText('')
+    void askFigure(attached, ds, text.trim())
     setFiles([])
+    setNote('')
   }
 
-  const runExample = async (ex: (typeof EXAMPLES)[number]) => {
-    if (!('figure' in ex) || !ex.figure) return submit(ex.question, ex.dataset, [])
+  const startQuestion = (q: string, ds = dataset) => {
+    if (busy || !q.trim()) return
+    if (ds !== dataset) setSelection({ dataset: ds })
+    void ask(q.trim(), ds)
+    setQuestion('')
+  }
+
+  const runFigureExample = async (ex: (typeof FIGURE_EXAMPLES)[number]) => {
     const blob = await (await fetch(ex.figure)).blob()
     const file = new File([blob], ex.figure.split('/').pop() ?? 'figure.png', { type: 'image/png' })
-    submit(ex.question, ex.dataset, [file])
+    startFigure([file], ex.dataset, ex.question)
   }
 
   return (
     <section className="start">
-      <h1 className="start-title">What do you want to know about this simulation?</h1>
-      <form
-        className={dragging ? 'ask dragging' : 'ask'}
-        onSubmit={(e) => { e.preventDefault(); submit(text) }}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
-      >
-        <input
-          className="ask-input" value={text} onChange={(e) => setText(e.target.value)} disabled={busy}
-          placeholder="Ask a question about this simulation, or drop in a figure to reproduce."
-          aria-label="Question"
-        />
-        <label className="attach" title="Attach a figure (PNG/JPEG) and/or its methods (PDF), up to 10 MB each">
-          Attach figure
+      <div className="start-main">
+        <h1 className="start-title">Drop in a figure from any paper.</h1>
+        <p className="start-lede">
+          TrajectoryGPT reads its method and runs it on real simulation data: two preloaded simulations of the enzyme
+          adenylate kinase (AdK).
+        </p>
+
+        <label
+          className={`dropzone ${dragging ? 'dragging' : ''} ${files.length ? 'has-files' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
+        >
           <input type="file" accept="image/png,image/jpeg,application/pdf" multiple hidden disabled={busy}
             onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
+          {files.length === 0
+            ? <>
+                <span className="dz-main">Drop a figure here, or <u>choose a file</u></span>
+                <span className="muted small">
+                  PNG or JPEG, plus the methods as a PDF if you have them · up to 10 MB each ·
+                  works with contact maps, distance traces and native contacts
+                </span>
+              </>
+            : <span className="attached">
+                {files.map((f) => (
+                  <span key={f.name} className="pill">
+                    {f.name}{' '}
+                    <button type="button" className="link" onClick={(e) => { e.preventDefault(); setFiles(files.filter((x) => x !== f)) }} aria-label={`Remove ${f.name}`}>×</button>
+                  </span>
+                ))}
+                <span className="muted small">Add the methods PDF too, if you have it</span>
+              </span>}
         </label>
-        <button type="submit" className="primary" disabled={busy || (!text.trim() && !files.length)}>{busy ? 'Planning…' : 'Plan'}</button>
-      </form>
-      <div className="ds-picker">
-        <label className="muted small" htmlFor="ds">Dataset</label>
-        <select id="ds" value={dataset} onChange={(e) => setSelection({ dataset: e.target.value })} disabled={busy}>
-          {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
-        </select>
-        {info && <p className="muted small dataset-line">{datasetLine(info)}</p>}
-      </div>
-      {(files.length > 0 || fileError) && (
-        <div className="attached small">
-          {files.map((f) => (
-            <span key={f.name} className="pill">{f.name} <button type="button" className="link" onClick={() => setFiles(files.filter((x) => x !== f))} aria-label={`Remove ${f.name}`}>×</button></span>
+        {fileError && <span className="error-text small">{fileError}</span>}
+        {files.length > 0 && (
+          <div className="figure-go">
+            <input className="ask-input" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}
+              placeholder="Optional: what should we take from it?" aria-label="Note about the figure" />
+            <button className="primary" disabled={busy} onClick={() => startFigure(files)}>{busy ? 'Reading…' : 'Read the figure'}</button>
+          </div>
+        )}
+        <div className="example-row">
+          <span className="muted small">Try a sample:</span>
+          {FIGURE_EXAMPLES.map((ex) => (
+            <button key={ex.label} className="example-chip" disabled={busy} onClick={() => void runFigureExample(ex)} title={ex.note}>
+              {ex.label} <span className="muted small">· {ex.sub}</span>
+            </button>
           ))}
-          {fileError && <span className="warn">{fileError}</span>}
         </div>
-      )}
-      {needPasscode && <PasscodePrompt />}
-      <div className="examples-head muted small">Or try an example</div>
-      <div className="examples">
-        {EXAMPLES.map((ex) => (
-          <button key={ex.label} className="example" disabled={busy} onClick={() => void runExample(ex)} title={ex.note ?? ex.question}>
-            {ex.label}
-            <span className="muted small">{datasetName(ex.dataset)}{'figure' in ex ? ' · sample figure attached' : ''}</span>
-          </button>
-        ))}
+
+        <div className="or-ask">
+          <h2 className="or-title">Or ask a question about the simulations</h2>
+          <form className="ask" onSubmit={(e) => { e.preventDefault(); startQuestion(question) }}>
+            <input
+              className="ask-input" value={question} onChange={(e) => setQuestion(e.target.value)} disabled={busy}
+              placeholder="Which contacts change between the first and second half?" aria-label="Question"
+            />
+            <button type="submit" disabled={busy || !question.trim()}>{busy ? 'Planning…' : 'Plan'}</button>
+          </form>
+          <div className="example-row">
+            {QUESTION_EXAMPLES.map((ex) => (
+              <button key={ex.label} className="example-chip" disabled={busy} onClick={() => startQuestion(ex.question, ex.dataset)} title={ex.question}>
+                {ex.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {needPasscode && <PasscodePrompt />}
+
+        <div className="ds-picker">
+          <label className="muted small" htmlFor="ds">Data</label>
+          <select id="ds" value={dataset} onChange={(e) => setSelection({ dataset: e.target.value })} disabled={busy}>
+            {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
+          </select>
+          {info && <p className="muted small dataset-line">{datasetLine(info)} Analyses use these preloaded public simulations only.</p>}
+        </div>
       </div>
+      <div className="start-art">{meta && <SpinningStructure meta={meta} />}</div>
     </section>
   )
 }
