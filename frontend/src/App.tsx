@@ -7,7 +7,7 @@ import { Heatmap } from './components/Heatmap'
 import { CompareChart } from './components/CompareChart'
 import { DistancePlot } from './components/DistancePlot'
 import { Viewer } from './components/Viewer'
-import { StartScreen } from './components/StartScreen'
+import { PasscodePrompt, StartScreen } from './components/StartScreen'
 import { PlanCard } from './components/PlanCard'
 import { StepLog } from './components/StepLog'
 import { Timeline } from './components/Timeline'
@@ -65,13 +65,13 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <button className="brand link" onClick={reset} title="New investigation">
-          <span className="logo">◆</span> TrajectoryGPT
-          <span className="muted small">adenylate kinase · MD research copilot</span>
+        <button className="brand link" onClick={reset} title="Back to the start screen">
+          TrajectoryGPT <span className="muted brand-sub">MD research copilot</span>
         </button>
         <div className="topbar-right">
           <CostMeter />
-          <DatasetBadge datasets={datasets} meta={meta} dataset={dataset} />
+          {asking && <DatasetBadge meta={meta} dataset={dataset} />}
+          {asking && <button className="new-q" onClick={reset}>New question</button>}
         </div>
       </header>
       {error && <div className="error banner">{error}</div>}
@@ -81,7 +81,7 @@ export default function App() {
       {asking && (
         <main className={started ? 'inv-layout' : 'inv-layout plan-only'}>
           <div className="inv-col">
-            <StartScreen datasets={datasets} dataset={dataset} compact />
+            {inv.needPasscode && <PasscodePrompt />}
             <div className="question card"><span className="muted small">Question</span>{inv.question}</div>
             <PlanCard />
             <ReproduceView />
@@ -94,7 +94,12 @@ export default function App() {
       )}
 
       <footer className="foot muted small">
-        {meta && <>Data: {meta.citation} ({meta.license}). Domains: {meta.groups_source}</>}
+        {meta && (
+          <>
+            <p><span className="foot-label">Data</span>{meta.citation} ({meta.license})</p>
+            <p><span className="foot-label">Domains</span>{meta.groups_source}</p>
+          </>
+        )}
       </footer>
     </div>
   )

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { DatasetInfo } from '../api/client'
 import { ask, askFigure, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
+import { datasetLine, datasetName } from './DatasetBadge'
 
 const EXAMPLES = [
   { label: 'Which LID–CORE contacts change between the first and second half?', dataset: 'adk_equilibrium',
@@ -15,8 +16,8 @@ const EXAMPLES = [
 ]
 
 /** Shown after a 401: AI investigations need the demo passcode; charts and 3D stay open. */
-function PasscodePrompt() {
-  const { error } = useInvestigation()
+export function PasscodePrompt() {
+  const { error, question } = useInvestigation()
   const [code, setCode] = useState('')
   const [checking, setChecking] = useState(false)
   return (
@@ -26,15 +27,18 @@ function PasscodePrompt() {
       await submitPasscode(code)
       setChecking(false)
     }}>
-      <span className="small">AI investigations need the demo passcode.</span>
-      <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Demo passcode" aria-label="Demo passcode" autoFocus />
+      <div className="passcode-text">
+        <b>Enter the demo passcode to run AI investigations.</b>
+        <span className="muted small">{question ? <>Your question will run right after: “{question}”</> : 'Charts and the 3D view stay open without it.'}</span>
+      </div>
+      <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Passcode" aria-label="Demo passcode" autoFocus />
       <button type="submit" className="primary" disabled={!code.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
-      {error && <span className="warn small">{error}</span>}
+      {error && <span className="error-text small">{error}</span>}
     </form>
   )
 }
 
-export function StartScreen({ datasets, dataset, compact = false }: { datasets: DatasetInfo[]; dataset: string; compact?: boolean }) {
+export function StartScreen({ datasets, dataset }: { datasets: DatasetInfo[]; dataset: string }) {
   const { phase, needPasscode } = useInvestigation()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -67,8 +71,8 @@ export function StartScreen({ datasets, dataset, compact = false }: { datasets: 
   }
 
   return (
-    <section className={compact ? 'start compact' : 'start'}>
-      {!compact && <h1 className="start-title">What do you want to know about this simulation?</h1>}
+    <section className="start">
+      <h1 className="start-title">What do you want to know about this simulation?</h1>
       <form
         className={dragging ? 'ask dragging' : 'ask'}
         onSubmit={(e) => { e.preventDefault(); submit(text) }}
@@ -81,16 +85,20 @@ export function StartScreen({ datasets, dataset, compact = false }: { datasets: 
           placeholder="Ask a question about this simulation, or drop in a figure to reproduce."
           aria-label="Question"
         />
-        <select value={dataset} onChange={(e) => setSelection({ dataset: e.target.value })} aria-label="Dataset" disabled={busy}>
-          {datasets.map((d) => <option key={d.id} value={d.id}>{d.id}</option>)}
-        </select>
         <label className="attach" title="Attach a figure (PNG/JPEG) and/or its methods (PDF), up to 10 MB each">
-          📎
+          Attach figure
           <input type="file" accept="image/png,image/jpeg,application/pdf" multiple hidden disabled={busy}
             onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
         </label>
         <button type="submit" className="primary" disabled={busy || (!text.trim() && !files.length)}>{busy ? 'Planning…' : 'Plan'}</button>
       </form>
+      <div className="ds-picker">
+        <label className="muted small" htmlFor="ds">Dataset</label>
+        <select id="ds" value={dataset} onChange={(e) => setSelection({ dataset: e.target.value })} disabled={busy}>
+          {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
+        </select>
+        {info && <p className="muted small dataset-line">{datasetLine(info)}</p>}
+      </div>
       {(files.length > 0 || fileError) && (
         <div className="attached small">
           {files.map((f) => (
@@ -100,17 +108,15 @@ export function StartScreen({ datasets, dataset, compact = false }: { datasets: 
         </div>
       )}
       {needPasscode && <PasscodePrompt />}
-      {info && <p className="muted small dataset-line">{info.description}{info.stats_valid ? '' : ' Statistics are refused on this dataset.'}</p>}
-      {!compact && (
-        <div className="examples">
-          {EXAMPLES.map((ex) => (
-            <button key={ex.label} className="example" disabled={busy} onClick={() => void runExample(ex)} title={ex.note ?? ex.question}>
-              {ex.label}
-              <span className="muted small">{ex.dataset}{'figure' in ex ? ' · sample figure attached' : ''}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="examples-head muted small">Or try an example</div>
+      <div className="examples">
+        {EXAMPLES.map((ex) => (
+          <button key={ex.label} className="example" disabled={busy} onClick={() => void runExample(ex)} title={ex.note ?? ex.question}>
+            {ex.label}
+            <span className="muted small">{datasetName(ex.dataset)}{'figure' in ex ? ' · sample figure attached' : ''}</span>
+          </button>
+        ))}
+      </div>
     </section>
   )
 }
