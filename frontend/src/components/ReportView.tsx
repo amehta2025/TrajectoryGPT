@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { api, type Finding, type Metadata, type RunView, type Segment, type TextItem } from '../api/client'
 import { useInvestigation } from '../state/investigation'
 import { getSelection, setSelection } from '../state/selection'
+import { residueLabel } from '../state/residueKey'
 
 type CompareData = {
   group_a: string; group_b: string; n_tested: number; n_filtered: number; n_supported: number
@@ -89,6 +90,34 @@ export function Headline() {
 }
 
 /**
+ * The top finding's residue pair: the first supported finding with a pair (else any finding with one),
+ * resolved to residue keys through its cited results. Descriptive findings may name a pair only in
+ * their text (contact maps carry no per-pair entries); then the first pair named in the text is
+ * matched against the cited contact map's residue keys.
+ */
+function topPair(run: RunView): { label: string; keys: { key_a: string; key_b: string; delta?: number } } | null {
+  const findings = run.report?.findings ?? []
+  const f = findings.find((x) => x.badge === 'proven' && x.pairs.length) ?? findings.find((x) => x.pairs.length)
+  if (f) {
+    const label = f.pairs[0]
+    const pid = f.evidence_ids.map((e) => e.split('.')[0]).find((p) => run.results[p]?.pairs[label])
+    if (pid) return { label, keys: run.results[pid].pairs[label] as { key_a: string; key_b: string; delta?: number } }
+  }
+  for (const g of findings) {
+    const m = g.text.match(/\b([A-Z]{3}\d+)[-–]([A-Z]{3}\d+)\b/)
+    if (!m) continue
+    for (const e of g.evidence_ids) {
+      const ui = run.results[e.split('.')[0]]?.data_for_ui as { keys_a?: string[]; keys_b?: string[] } | undefined
+      const all = [...(ui?.keys_a ?? []), ...(ui?.keys_b ?? [])]
+      const a = all.find((k) => residueLabel(k) === m[1])
+      const b = all.find((k) => residueLabel(k) === m[2])
+      if (a && b) return { label: `${m[1]}-${m[2]}`, keys: { key_a: a, key_b: b } }
+    }
+  }
+  return null
+}
+
+/**
  * When a report opens, point the 3D view at its top finding: highlight that pair and jump to a
  * window-B frame that shows the change (apart if the contact weakened, in contact if it strengthened),
  * the frame with the median distance among those. The caption says why this frame was picked.
@@ -96,14 +125,11 @@ export function Headline() {
 function useFocusTopFinding(run: RunView | null, meta: Metadata | null) {
   useEffect(() => {
     if (!run?.report || !meta) return
-    const f = run.report.findings.find((x) => x.badge === 'proven' && x.pairs.length) ?? run.report.findings.find((x) => x.pairs.length)
-    if (!f) return
-    const label = f.pairs[0]
-    const pid = f.evidence_ids.map((e) => e.split('.')[0]).find((p) => run.results[p]?.pairs[label])
-    const keys = pid && run.results[pid].pairs[label]
-    if (!keys) return
+    const target = topPair(run)
+    if (!target) return
+    const { label, keys } = target
     setSelection({ pair: { keyA: keys.key_a, keyB: keys.key_b, excluded: false } })
-    const delta = (keys as { delta?: number }).delta
+    const delta = keys.delta
     let cancelled = false
     api.distances(meta.dataset, keys.key_a, keys.key_b).then((d) => {
       if (cancelled) return
@@ -119,9 +145,9 @@ function useFocusTopFinding(run: RunView | null, meta: Metadata | null) {
       if (!idx.length) return
       idx.sort((a, b) => d.distance[a] - d.distance[b])
       const i = idx[Math.floor(idx.length / 2)]
-      const where = w0 === mid && w1 === meta.n_frames ? 'Second-half' : 'Window B'
+      const where = meta.dt_ns === null ? 'Late-path step' : w0 === mid && w1 === meta.n_frames ? 'Second-half frame' : 'Window B frame'
       const state = d.distance[i] > cutoff ? 'apart' : 'in contact'
-      setSelection({ frame: d.frames[i], focus: { frame: d.frames[i], text: `${where} frame where ${label} is ${state} (${d.distance[i].toFixed(1)} Å)` } })
+      setSelection({ frame: d.frames[i], focus: { frame: d.frames[i], text: `${where} where ${label} is ${state} (${d.distance[i].toFixed(1)} Å)` } })
     }, () => {})
     return () => {
       cancelled = true
