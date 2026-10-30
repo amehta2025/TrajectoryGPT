@@ -79,17 +79,25 @@ export default function App() {
 
       {!asking && <StartScreen datasets={datasets} dataset={dataset} />}
       {asking && (
-        <main className={started ? 'inv-layout' : 'inv-layout plan-only'}>
-          <div className="inv-col">
+        <main className="inv">
+          <div className="inv-head">
             {inv.needPasscode && <PasscodePrompt />}
-            <div className="question card"><span className="muted small">Question</span>{inv.question}</div>
-            <PlanCard />
-            <ReproduceView />
-            <ReportView />
-            <StepLog />
-            <Timeline />
+            <span className="muted small">You asked</span>
+            <h1 className="inv-question">{inv.question}</h1>
           </div>
-          {started && (meta ? <Results meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>)}
+          {!started && <div className="plan-only"><PlanCard meta={meta} /></div>}
+          {started && (
+            <div className="inv-body">
+              <div className="inv-col">
+                <ReproduceView />
+                <ReportView />
+                <PlanCard meta={meta} />
+                <StepLog />
+                <Timeline />
+              </div>
+              {meta ? <Results meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
+            </div>
+          )}
         </main>
       )}
 

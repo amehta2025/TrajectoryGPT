@@ -118,27 +118,38 @@ button.small, .small button { font-size: 12px; padding: 2px 8px; }
 @media (max-width: 760px) { .examples { grid-template-columns: 1fr; } }
 .example { text-align: left; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 12px 14px; border-radius: 8px; background: var(--panel); line-height: 1.4; font-size: 14px; }
 
-.inv-layout { flex: 1; display: grid; grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.5fr); gap: 12px; padding: 12px 16px; align-items: start; }
-.inv-layout.plan-only { grid-template-columns: minmax(0, 760px); justify-content: center; }
-@media (max-width: 1100px) { .inv-layout { grid-template-columns: 1fr; } }
+.inv { flex: 1; width: 100%; max-width: 1600px; margin: 0 auto; padding: 18px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+.inv-head { display: flex; flex-direction: column; gap: 4px; }
+.inv-question { font-family: var(--serif); font-size: 24px; font-weight: 400; line-height: 1.25; margin: 0; color: #eef1f5; }
+.plan-only { width: 100%; max-width: 760px; }
+.inv-body { display: grid; grid-template-columns: minmax(380px, 0.85fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .inv-body { grid-template-columns: 1fr; } }
 .inv-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .results { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .results .viewer-card { align-self: stretch; }
 .results .viewer-canvas { height: 460px; }
-.question { flex-direction: row; gap: 10px; align-items: baseline; font-size: 14px; }
 
-.plan-summary { margin: 6px 0; }
-.plan-params { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.param-grid { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; color: var(--muted); }
+.plan-card { gap: 6px; }
+.plan-scope { margin: 6px 0 0; font-size: 14px; line-height: 1.5; }
+.plan-scope b { font-weight: 600; }
+.plan-def { margin: 0; }
+.param-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--muted); padding-top: 8px; }
 .param-grid label { display: flex; align-items: center; gap: 4px; }
-.param-grid input { background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 5px; }
-.steps { margin: 10px 0 4px; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.steps li { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.steps li.dropped { opacity: 0.4; text-decoration: line-through; }
+.param-grid input { background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 5px; font-variant-numeric: tabular-nums; }
+.steps { margin: 8px 0 2px; padding-left: 0; list-style: none; display: flex; flex-direction: column; font-size: 14px; border-top: 1px solid var(--border); }
+.steps li { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.steps li.dropped .step-text { opacity: 0.4; text-decoration: line-through; }
 .steps li.st-done .step-icon { color: var(--ok); }
-.steps li.st-skipped .step-icon { color: #ffb347; }
-.step-icon { width: 12px; color: var(--muted); }
-.plan-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 8px; }
+.steps li.st-in_progress .step-icon { color: var(--accent); }
+.steps li.st-skipped .step-icon { color: var(--muted); }
+.step-icon { width: 14px; flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.step-text { flex: 1; min-width: 0; line-height: 1.4; }
+.tool-tag { font-family: var(--mono); font-size: 11px; color: #6f788b; white-space: nowrap; }
+.step-drop { font-size: 12px; }
+.settings summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+.settings[open] summary { color: var(--text); }
+.plan-actions { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 6px; }
+.plan-actions button.primary { padding: 6px 18px; }
 code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12px; color: #9fd8ea; }
 
 .steplog { list-style: none; margin: 6px 0 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }

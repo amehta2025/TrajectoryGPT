@@ -1,11 +1,48 @@
 // The proposed plan with editable consequential parameters. One Run click approves it all; the backend
-// re-validates the edits. Once running, the same card shows the checklist and "3/4 done".
+// re-validates the edits. Once running, the same card shows the checklist and "3 of 4 done".
+// Primary text is plain language built by code from the plan's own parameters; advanced parameters
+// sit under a collapsed "Settings"; tool names are small secondary tags.
 import { useEffect, useState } from 'react'
-import type { ChecklistItem, Plan } from '../api/client'
+import type { ChecklistItem, Metadata, Plan } from '../api/client'
 import { approve, useInvestigation } from '../state/investigation'
 
-const CONTACT_DEFINITION = 'min heavy-atom distance ≤ cutoff (Å)'
+const CONTACT_DEFINITION = 'two residues are in contact when their closest heavy atoms are within the cutoff'
 const STATUS_ICON: Record<ChecklistItem['status'], string> = { pending: '○', in_progress: '◐', done: '●', skipped: '⊘' }
+
+/** Plain sentence for a plan step, from the tool and the plan's groups. */
+export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | null): string {
+  const pair = p ? `${p.group_a}–${p.group_b}` : ''
+  switch (tool) {
+    case 'get_metadata': return 'Check the dataset: length, time step and domains'
+    case 'list_groups': return 'Look up the domain definitions'
+    case 'calculate_contacts': return `Measure how often each ${pair} residue pair is in contact`
+    case 'distance_over_time': return 'Track one residue pair’s distance frame by frame'
+    case 'compare_intervals': return `Compare ${pair} contacts between the two windows`
+    case 'contact_statistics': return 'Estimate one pair’s contact frequency with its uncertainty'
+    case 'native_contacts': return 'Compute the fraction of native contacts per frame'
+    case 'cutoff_sensitivity': return 'Re-check each supported change at every robustness cutoff'
+    case 'submit_report': return 'Write the report from the recorded findings'
+    default: return tool
+  }
+}
+
+/** "first half (0–502 ns)" when the windows are the halves, otherwise the frame range with its time. */
+export function windowText(meta: Metadata | null, w: [number, number], which: 'A' | 'B', halves: boolean): string {
+  const time = !meta
+    ? ''
+    : meta.dt_ns === null
+      ? `path steps ${w[0]}–${w[1] - 1}`
+      : `${Math.round(w[0] * meta.dt_ns)}–${Math.round(w[1] * meta.dt_ns)} ns`
+  if (halves) return `${which === 'A' ? 'first half' : 'second half'} (${time})`
+  if (meta?.dt_ns === null) return `window ${which}: ${time}`
+  return `window ${which}: frames ${w[0]}–${w[1] - 1}${time ? ` (${time})` : ''}`
+}
+
+export function isHalves(p: Pick<Plan, 'window_a' | 'window_b'>, nFrames: number | undefined): boolean {
+  if (!nFrames || !p.window_b) return false
+  const mid = Math.floor(nFrames / 2)
+  return p.window_a[0] === 0 && p.window_a[1] === mid && p.window_b[0] === mid && p.window_b[1] === nFrames
+}
 
 type Draft = { cutoff: string; robust: string; a0: string; a1: string; b0: string; b1: string; stride: string; seq: string; drop: Set<number> }
 
@@ -31,7 +68,7 @@ function editsOf(p: Plan, d: Draft): Partial<Plan> {
   }
 }
 
-export function PlanCard() {
+export function PlanCard({ meta }: { meta: Metadata | null }) {
   const { phase, proposal, run, error } = useInvestigation()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [stepThrough, setStepThrough] = useState(false)
@@ -41,12 +78,14 @@ export function PlanCard() {
     if (proposal) setDraft(draftOf(proposal.plan))
   }, [proposal])
 
-  if (phase === 'planning') return <section className="card"><h2>Plan</h2><p className="muted">Planning… (medium reasoning, ~10 s)</p></section>
+  if (phase === 'planning') return <section className="card plan-card"><h2>Plan</h2><p className="muted">Drafting a plan… (about 10 s)</p></section>
   if (!proposal || !draft) return null
   const p = proposal.plan
   const locked = phase !== 'plan'
   const checklist = run?.checklist
   const done = checklist ? checklist.filter((c) => c.status === 'done' || c.status === 'skipped').length : 0
+  const halves = isHalves(p, meta?.n_frames)
+  const robustStep = p.steps.some((s) => s.tool === 'cutoff_sensitivity')
   const field = (k: keyof Omit<Draft, 'drop'>, w = 56) => (
     <input value={draft[k]} disabled={locked} style={{ width: w }} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
   )
@@ -54,58 +93,64 @@ export function PlanCard() {
   return (
     <section className="card plan-card">
       <header className="card-head">
-        <h2>Plan</h2>
-        {checklist ? <span className="pill">{done}/{checklist.length} done</span> : <span className="pill">awaiting approval</span>}
+        <h2 title={p.summary}>Plan</h2>
+        <span className="pill">{checklist ? `${done} of ${checklist.length} done` : 'Waiting for your approval'}</span>
       </header>
-      <p className="plan-summary">{p.summary}</p>
-      <div className="plan-params">
-        <span className="pill">{p.dataset}</span>
-        <span className="pill">{p.group_a}–{p.group_b}</span>
-        <span className="muted small">Contact: {CONTACT_DEFINITION}</span>
-      </div>
-      <div className="param-grid">
-        <label>Cutoff (Å) {field('cutoff')}</label>
-        <label title="A finding is robust only if supported at every one of these cutoffs (3.5–6.0 Å)">Robustness cutoffs (Å) {field('robust', 110)}</label>
-        <label>Window A (frames) {field('a0', 52)}–{field('a1', 52)}</label>
-        {p.window_b && <label>Window B (frames) {field('b0', 52)}–{field('b1', 52)}</label>}
-        <label>Stride {field('stride', 40)}</label>
-        <label title="Pairs with |Δresid| ≤ N are skipped">Sequence exclusion {field('seq', 40)}</label>
-      </div>
+      <p className="plan-scope">
+        <b>{p.group_a}</b> vs <b>{p.group_b}</b> at a <b>{p.cutoff} Å</b> cutoff
+        {p.window_b
+          ? <>, {windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}</>
+          : <>, {windowText(meta, p.window_a, 'A', false)}</>}
+        {robustStep && <>, robustness checked at {p.robustness_cutoffs.map((c) => c.toFixed(1)).join(", ")} Å</>}.
+      </p>
+      <p className="muted small plan-def">Contact: {CONTACT_DEFINITION}.</p>
       <ol className="steps">
         {checklist
           ? checklist.map((c) => (
-              <li key={c.item} className={`st-${c.status}`}>
+              <li key={c.item} className={`st-${c.status}`} title={c.text}>
                 <span className="step-icon">{STATUS_ICON[c.status]}</span>
-                <code>{c.tool}</code> <span className="muted">{c.text}</span>
-                {c.note && <span className="muted small"> — {c.note}</span>}
+                <span className="step-text">{stepText(c.tool, p)}{c.note && <span className="muted small"> — {c.note}</span>}</span>
+                <span className="tool-tag">{c.tool}</span>
               </li>
             ))
           : p.steps.map((s, i) => {
               const dropped = draft.drop.has(i)
               return (
-                <li key={i} className={dropped ? 'dropped' : ''}>
-                  <span className="step-icon">○</span>
-                  <code>{s.tool}</code> <span className="muted">{s.rationale}</span>
+                <li key={i} className={dropped ? 'dropped' : ''} title={s.rationale}>
+                  <span className="step-icon">{i + 1}</span>
+                  <span className="step-text">{stepText(s.tool, p)}</span>
+                  <span className="tool-tag">{s.tool}</span>
                   {!locked && s.tool !== 'submit_report' && (
-                    <button className="link small" onClick={() => {
+                    <button className="link small step-drop" onClick={() => {
                       const drop = new Set(draft.drop)
                       if (dropped) drop.delete(i)
                       else drop.add(i)
                       setDraft({ ...draft, drop })
-                    }}>{dropped ? 'keep' : 'drop'}</button>
+                    }}>{dropped ? 'Keep' : 'Skip'}</button>
                   )}
                 </li>
               )
             })}
       </ol>
+      <details className="settings">
+        <summary>Settings</summary>
+        <div className="param-grid">
+          <label>Cutoff (Å) {field('cutoff')}</label>
+          {robustStep && <label title="A finding is robust only if supported at every one of these cutoffs (3.5–6.0 Å)">Robustness cutoffs (Å) {field('robust', 110)}</label>}
+          <label>Window A (frames) {field('a0', 52)}–{field('a1', 52)}</label>
+          {p.window_b && <label>Window B (frames) {field('b0', 52)}–{field('b1', 52)}</label>}
+          <label title="Use every Nth frame">Stride {field('stride', 40)}</label>
+          <label title="Pairs with |Δresid| ≤ N are skipped">Sequence exclusion {field('seq', 40)}</label>
+        </div>
+      </details>
       {!locked && (
         <div className="plan-actions">
-          <label className="small muted"><input type="checkbox" checked={stepThrough} onChange={(e) => setStepThrough(e.target.checked)} /> Step through turns</label>
+          <label className="small muted" title="The agent stops after each step until you click Next"><input type="checkbox" checked={stepThrough} onChange={(e) => setStepThrough(e.target.checked)} /> Pause after each step</label>
           <button className="primary" disabled={starting} onClick={async () => {
             setStarting(true)
             await approve(editsOf(p, draft), stepThrough)
             setStarting(false)
-          }}>{starting ? 'Starting…' : 'Run'}</button>
+          }}>{starting ? 'Starting…' : 'Run plan'}</button>
         </div>
       )}
       {error && <div className="error">{error}</div>}
