@@ -497,7 +497,7 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 | 2 | Thu Oct 29 | FastAPI endpoints for metadata/contacts/distances/structure/frames; frontend scaffold; NGL viewer (§10a); heatmap + distance plot; click→highlight; jump-to-frame | 5 heatmap clicks highlight the correct residues (checked by eye against residue labels); clicking a distance point moves the viewer |
 | 3 | Fri Oct 30 | `stats.py` + tests; `compare_intervals` (BH-FDR); `contact_statistics`; refusal on the transition set; CompareChart; `native_contacts`; **skeleton deploy (Modal + Vercel)** | all stats validation tests pass; the live URL shows the heatmap from the deployed backend |
 | 4 | Sat Oct 31 | LLM wrapper (smoke-test Meta + Baseten first); planner with schema; PlanCard; turn loop with guardrails; bookkeeping tools; placeholders; StepLog streaming; ReportView; deterministic check; usage/cost logging; **StartScreen** (§10); **`cutoff_sensitivity`** + robustness badge + no-cherry-picking rule in the prompt and the check (§4, §7) | CLI and UI: question → plan → edit → run → live step log → report with filled values, in < 90 s, with the cost shown; the start screen's example buttons start investigations; a supported pair gets a robustness verdict |
-| 5 | Sun Nov 1 | Figure mode: image + PDF → extracted spec → plan → exact reproduction of the §5c target with a numeric match; method-transfer label; ReproduceView. **Checkpoint: the full demo path works on the deployed app.** Then, after the checkpoint, the §10b analysis views in priority order: (a) difference heatmap → (b) contact timeline → (c) domain opening → (d) contact lifetimes → (e) flexibility | the reproduction matches the target within tolerance; the deployed app runs one full investigation; each built view is linked to the 3D viewer and callable by the agent |
+| 5 | Sun Nov 1 | Figure mode: image + PDF → extracted spec → plan → exact reproduction of the §5c target with a numeric match; method-transfer label; ReproduceView. **Checkpoint: the full demo path works on the deployed app.** Then, after the checkpoint: the **Design pass** (§14a), then the §10b analysis views in priority order: (a) difference heatmap → (b) contact timeline → (c) domain opening → (d) contact lifetimes → (e) flexibility | the reproduction matches the target within tolerance; the deployed app runs one full investigation; the Design pass checks in §14a pass; each built view is linked to the 3D viewer and callable by the agent |
 | 6 | Mon Nov 2 | Muse Wonder verifier + overclaim toggle; follow-ups with session state; export script + Modal Sandbox verify; rate limit, budget, replay mode; record replay runs. **Feature freeze at midnight.** | the verifier flags the planted overclaim; the exported script reproduces the numbers in the sandbox; replay mode works with the LLM disabled |
 | 7 | Tue Nov 3 | Baseten toggle (if the smoke test passed); README (setup, architecture diagram, built-during-hackathon, attributions, limitations); final video; **submit by 10 PM CT** | submission confirmed; repo public; video link works in a private window |
 | 8 | Wed Nov 4 | Buffer: bug fixes only, X post, community vote push | — |
@@ -515,7 +515,18 @@ Each day is one or more Claude Code sessions. Use `/clear` between unrelated tas
 10. Muse Wonder model check (keep the deterministic check)
 11. method-transfer mode (keep exact reproduction)
 
-**Never cut:** linked viewer, statistics + FDR, the multi-step agent with evidence, exact figure reproduction, export, replay mode.
+**Never cut:** linked viewer, statistics + FDR, the multi-step agent with evidence, exact figure reproduction, export, replay mode, the Design pass (§14a; the demo video depends on it).
+
+### 14a. Design pass (Day 5, right after the checkpoint, before the §10b views)
+Protected from cutting: the video (§15) is recorded on this UI.
+- **Answer-first layout.** The question, then the report at the top: headline findings in plain language. The evidence sits below: charts, 3D viewer, plan, step log, timeline.
+- **Plain-language UI.**
+  - No internal names in primary text: no `stats_valid`, `stride`, tool names, provenance ids or run statuses as headings or labels.
+  - Advanced parameters (stride, sequence exclusion, windows in frames, robustness cutoffs) are collapsed under **"Settings"**.
+  - Plan steps are plain sentences (e.g. "Compare contacts between the first and second half"), with the tool name as a small secondary label.
+- **Clear visual hierarchy and a distinctive, non-template look.** Deliberate typography and spacing. Colour is restrained and used only for meaning: lost vs gained contact, supported vs noise, robust vs cutoff-sensitive.
+- **Process.** Use the frontend-design skill if it is available. Check every screen in the browser at 1440 px wide and on a laptop screen (about 1280–1366 px): start screen, passcode prompt, plan, running, report, `needs_review`, and the transition dataset's descriptive report.
+- **Done when:** every screen above is checked at both widths. No internal name appears in primary text. The report's headline is readable without scrolling at 1440 px.
 
 ## 15. Demo video (3 minutes; rough cut Mon Nov 2, final Tue Nov 3)
 
