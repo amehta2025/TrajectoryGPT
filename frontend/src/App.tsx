@@ -9,14 +9,13 @@ import { DistancePlot } from './components/DistancePlot'
 import { Viewer } from './components/Viewer'
 import { PasscodePrompt, StartScreen } from './components/StartScreen'
 import { PlanCard } from './components/PlanCard'
-import { StepLog } from './components/StepLog'
-import { Timeline } from './components/Timeline'
-import { ReportView } from './components/ReportView'
+import { AgentTrace } from './components/StepLog'
+import { Headline, ReportView } from './components/ReportView'
 import { CostMeter } from './components/CostMeter'
 import { ReproduceView } from './components/ReproduceView'
 import { DOMAIN_COLORS } from './theme'
 
-function Results({ meta }: { meta: Metadata }) {
+function Evidence({ meta }: { meta: Metadata }) {
   return (
     <div className="results">
       <section className="card viewer-card">
@@ -33,8 +32,6 @@ function Results({ meta }: { meta: Metadata }) {
         <Viewer meta={meta} />
       </section>
       <CompareChart meta={meta} />
-      <Heatmap meta={meta} />
-      <DistancePlot meta={meta} />
     </div>
   )
 }
@@ -84,19 +81,27 @@ export default function App() {
             {inv.needPasscode && <PasscodePrompt />}
             <span className="muted small">You asked</span>
             <h1 className="inv-question">{inv.question}</h1>
+            <Headline />
+            <AgentTrace meta={meta} />
           </div>
           {!started && <div className="plan-only"><PlanCard meta={meta} /></div>}
           {started && (
-            <div className="inv-body">
-              <div className="inv-col">
-                <ReproduceView />
-                <ReportView />
-                <PlanCard meta={meta} />
-                <StepLog />
-                <Timeline />
+            <>
+              <div className="inv-body">
+                <div className="inv-col">
+                  <ReproduceView />
+                  <ReportView meta={meta} />
+                  {inv.phase === 'running' && <PlanCard meta={meta} />}
+                </div>
+                {meta ? <Evidence meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
               </div>
-              {meta ? <Results meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
-            </div>
+              {meta && (
+                <div className="evidence-more">
+                  <Heatmap meta={meta} />
+                  <DistancePlot meta={meta} />
+                </div>
+              )}
+            </>
           )}
         </main>
       )}

@@ -8,12 +8,14 @@ import { api, type Compare, type CompareRow, type Metadata } from '../api/client
 import { setSelection, useSelection } from '../state/selection'
 import { residueLabel } from '../state/residueKey'
 import { frameTimeLabel } from '../state/time'
-import { EXCLUDED_GREY } from '../theme'
+import { CHANGE_COLORS, EXCLUDED_GREY } from '../theme'
 import { Plot, axisStyle, baseLayout } from './Plot'
 
 const MAX_ROWS = 40
-const UP = '#3ecf8e'
-const DOWN = '#ff7a59'
+const ROW_PX = 24
+const UP = CHANGE_COLORS.gained
+const DOWN = CHANGE_COLORS.lost
+const signed = (x: number) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(3)}`
 
 /** Default windows when no plan has set them: first half vs second half. */
 function halves(nFrames: number): [[number, number], [number, number]] {
@@ -118,16 +120,26 @@ export function CompareChart({ meta }: { meta: Metadata }) {
   }, [rows, pair])
 
   const ok = data?.status === 'ok' ? data : null
+  const [h0, h1] = halves(meta.n_frames)
+  const isHalves = winA[0] === h0[0] && winA[1] === h0[1] && winB[0] === h1[0] && winB[1] === h1[1]
+  const nameA = isHalves ? 'first half' : 'window A'
+  const nameB = isHalves ? 'second half' : 'window B'
+  // Symmetric x range around zero that fits every interval, so the zero line sits in the middle.
+  const xMax = rows.length ? Math.max(0.05, ...rows.map((r) => Math.max(Math.abs(r.ci_low), Math.abs(r.ci_high)))) * 1.08 : 1
+  const annotations = rows.map((r) => ({
+    xref: 'paper' as const, x: 1.01, xanchor: 'left' as const, yref: 'y' as const, y: `${residueLabel(r.key_a)}–${residueLabel(r.key_b)}`,
+    text: `${signed(r.delta)}  [${signed(r.ci_low)}, ${signed(r.ci_high)}]`, showarrow: false,
+    font: { family: 'ui-monospace, Consolas, monospace', size: 11, color: r.supported ? '#dde2ea' : '#6f788b' },
+  }))
 
   return (
     <section className="card">
       <header className="card-head">
-        <h2>Change between windows</h2>
+        <h2>Change in contact frequency, {nameB} − {nameA}</h2>
         {ok && (
           <span className="muted small">
-            {ok.n_tested} tested · {ok.n_filtered} filtered out (rare or never in contact) · FDR {ok.fdr * 100}% ·{' '}
-            <b style={{ color: 'var(--text)' }}>{ok.n_supported} supported</b>: {ok.n_supported_firm} firm ·{' '}
-            {ok.n_supported_provisional} slow — provisional{' '}
+            <b style={{ color: 'var(--text)' }}>{ok.n_supported} of {ok.n_tested} supported</b> ({ok.n_supported_firm} firm,{' '}
+            {ok.n_supported_provisional} provisional) · FDR {ok.fdr * 100}%{' '}
             <span
               className="info"
               tabIndex={0}
@@ -140,20 +152,24 @@ export function CompareChart({ meta }: { meta: Metadata }) {
           </span>
         )}
       </header>
-      <p className="card-sub">
-        {groupA}–{groupB} · cutoff {cutoff} Å · Δ = window B − window A, {ok ? ok.ci_level * 100 : 95}% CI (autocorrelation-corrected) ·
-        A: {windowLabel(meta, winA)} · B: {windowLabel(meta, winB)}
-        <br />
-        <span className="swatch" style={{ background: UP }} />more contact
-        <span className="swatch" style={{ background: DOWN, marginLeft: 8 }} />less contact
-        <span className="swatch hollow" style={{ borderColor: DOWN, marginLeft: 8 }} />supported (slow — provisional)
-        <span className="swatch" style={{ background: EXCLUDED_GREY, marginLeft: 8 }} />not supported (noise)
-        {ok && ok.n_tested > MAX_ROWS && <> · top {MAX_ROWS} of {ok.n_tested} shown</>}
-      </p>
-      {error && <div className="error">{error}</div>}
-      {data?.status === 'refused' && <div className="refusal">Statistics refused: {data.reason}</div>}
       {data?.status !== 'refused' && (
-        <div className="plot-wrap" style={{ height: Math.max(160, rows.length * 18 + 60) }}>
+        <p className="card-sub" title={`A: ${windowLabel(meta, winA)} · B: ${windowLabel(meta, winB)}`}>
+          {groupA}–{groupB} pairs · cutoff {cutoff} Å · dots are Δ, bars the {ok ? ok.ci_level * 100 : 95}% interval corrected for autocorrelation
+          {ok && <> · {ok.n_filtered.toLocaleString()} rarely-formed pairs not tested</>}
+          {ok && ok.n_tested > MAX_ROWS && <> · top {MAX_ROWS} of {ok.n_tested} shown</>}
+          <br />
+          <span className="swatch" style={{ background: DOWN }} />weaker
+          <span className="swatch" style={{ background: UP, marginLeft: 10 }} />stronger
+          <span className="swatch hollow" style={{ borderColor: DOWN, marginLeft: 10 }} />supported, slow (provisional)
+          <span className="swatch" style={{ background: EXCLUDED_GREY, marginLeft: 10 }} />not supported (noise)
+        </p>
+      )}
+      {error && <div className="error">{error}</div>}
+      {data?.status === 'refused' && (
+        <div className="note">No statistics on this dataset, so no intervals are drawn. {data.reason}</div>
+      )}
+      {data?.status !== 'refused' && (
+        <div className="plot-wrap" style={{ height: Math.max(160, rows.length * ROW_PX + 70) }}>
           {!data && !error && <div className="overlay">Computing statistics…</div>}
           {ok && !rows.length && <div className="overlay">No pairs passed the frequency filter.</div>}
           {rows.length > 0 && (
@@ -161,9 +177,14 @@ export function CompareChart({ meta }: { meta: Metadata }) {
               data={traces}
               layout={{
                 ...baseLayout,
-                margin: { ...baseLayout.margin, l: 110 },
-                xaxis: { ...axisStyle, title: { text: 'Δ contact frequency (B − A)' }, zeroline: true, zerolinecolor: '#5d6880' },
-                yaxis: { ...axisStyle, automargin: true },
+                margin: { l: 10, r: 170, t: 6, b: 46 },
+                xaxis: {
+                  ...axisStyle, title: { text: `Δ contact frequency (${nameB} − ${nameA})`, standoff: 8 },
+                  range: [-xMax, xMax], zeroline: true, zerolinecolor: '#6a748a', zerolinewidth: 1.5,
+                  tickformat: '+.2f', ticks: 'outside', ticklen: 4, showline: true, nticks: 9,
+                },
+                yaxis: { ...axisStyle, automargin: true, tickfont: { family: 'ui-monospace, Consolas, monospace', size: 11 }, ticksuffix: '  ', fixedrange: true },
+                annotations,
                 showlegend: false,
               }}
               config={{ displaylogo: false, responsive: true }}

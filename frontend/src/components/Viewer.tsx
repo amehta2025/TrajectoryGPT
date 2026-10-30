@@ -1,5 +1,6 @@
 // NGL 3D viewer (SPEC §10a). Loads the reference PDB, then a strided set of playback
 // frames; any other frame (jump-to-frame) is fetched exactly. Highlights the selected pair.
+// A failed load retries once by itself, then offers a Retry button.
 import { useEffect, useRef, useState } from 'react'
 import * as NGL from 'ngl'
 import { api, type Metadata } from '../api/client'
@@ -24,7 +25,7 @@ function domainScheme(meta: Metadata): string {
 }
 
 export function Viewer({ meta }: { meta: Metadata }) {
-  const { pair, frame } = useSelection()
+  const { pair, frame, focus } = useSelection()
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<NGL.Stage | null>(null)
   const comp = useRef<NGL.StructureComponent | null>(null)
@@ -35,12 +36,14 @@ export function Viewer({ meta }: { meta: Metadata }) {
   const [shownFrame, setShownFrame] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const [failed, setFailed] = useState(false)
 
   // One Stage for the component's life.
   useEffect(() => {
     const el = host.current
     if (!el) return
-    const s = new NGL.Stage(el, { backgroundColor: '#0d1017', tooltip: true })
+    const s = new NGL.Stage(el, { backgroundColor: '#0c0f15', tooltip: true })
     stage.current = s
     if (import.meta.env.DEV) (window as unknown as { __nglStage: NGL.Stage }).__nglStage = s // for manual checks
     const ro = new ResizeObserver(() => s.handleResize())
@@ -66,6 +69,8 @@ export function Viewer({ meta }: { meta: Metadata }) {
     setLoadedFor(null)
     setShownFrame(null)
     setPlaying(false)
+    setFailed(false)
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
     ;(async () => {
       try {
         setStatus('Loading structure…')
@@ -86,8 +91,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
         c.autoView()
 
         const stride = meta.playback_stride
-        const n = Math.ceil(meta.n_frames / stride)
-        setStatus(`Loading ${n} playback frames (every ${stride})…`)
+        setStatus('Loading the trajectory…')
         const fr = await api.frames(meta.dataset, 0, meta.n_frames, stride)
         if (cancelled) return
         if (fr.nAtoms !== c.structure.atomCount) throw new Error(`atom count mismatch: frames ${fr.nAtoms}, PDB ${c.structure.atomCount}`)
@@ -95,13 +99,21 @@ export function Viewer({ meta }: { meta: Metadata }) {
         setStatus('')
         setLoadedFor(meta.dataset)
       } catch (e) {
-        if (!cancelled) setStatus(`Viewer error: ${(e as Error).message}`)
+        if (cancelled) return
+        if (attempt === 0) {
+          setStatus('Loading failed; retrying…')
+          retryTimer = setTimeout(() => setAttempt(1), 1500)
+        } else {
+          setStatus(`The 3D view could not load: ${(e as Error).message}`)
+          setFailed(true)
+        }
       }
     })()
     return () => {
       cancelled = true
+      clearTimeout(retryTimer)
     }
-  }, [meta])
+  }, [meta, attempt])
 
   // Highlight the selected pair.
   useEffect(() => {
@@ -167,7 +179,12 @@ export function Viewer({ meta }: { meta: Metadata }) {
   return (
     <div className="viewer">
       <div ref={host} className="viewer-canvas" />
-      {status && <div className="viewer-status">{status}</div>}
+      {status && (
+        <div className="viewer-status">
+          {status}
+          {failed && <button className="small" style={{ marginLeft: 8 }} onClick={() => setAttempt((a) => a + 1)}>Retry</button>}
+        </div>
+      )}
       <div className="viewer-hud">
         {pair && (
           <div className="pair-chips">
@@ -175,13 +192,14 @@ export function Viewer({ meta }: { meta: Metadata }) {
             <span className="chip" style={{ borderColor: PAIR_COLORS.b }}>{residueLabel(pair.keyB)}</span>
           </div>
         )}
+        {focus && focus.frame === frame && shownFrame === frame && <div className="focus-caption">{focus.text}</div>}
         <div className="frame-readout" data-testid="frame-readout">
           {shownFrame === null ? '—' : <>Frame <b>{shownFrame}</b> · {frameTimeLabel(meta, shownFrame)}</>}
           {shownFrame !== null && shownFrame !== frame && <span className="muted"> (loading {frame})</span>}
         </div>
       </div>
       <div className="viewer-controls">
-        <button disabled={!ready} onClick={() => setPlaying((p) => !p)} title="Play strided frames">
+        <button disabled={!ready} onClick={() => setPlaying((p) => !p)} title="Play through the run" aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? '❚❚' : '▶'}
         </button>
         <input
@@ -192,7 +210,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
           disabled={!ready}
           onChange={(e) => pb && setSelection({ frame: pb.frames[Number(e.target.value)] })}
         />
-        <span className="muted small">{pb ? `${pb.frames.length} playback frames, every ${meta.playback_stride}` : ''}</span>
+        <span className="muted small" title={`Playback shows every ${meta.playback_stride}th frame; jumps load the exact frame`}>{pb ? `${pb.frames.length} frames for playback` : ''}</span>
       </div>
     </div>
   )

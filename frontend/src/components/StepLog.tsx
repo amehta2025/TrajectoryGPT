@@ -1,7 +1,13 @@
-// Live step log from the run's server-sent events: one line per turn, as it happens.
-import type { RunEvent } from '../api/client'
+// The agent trace: one slim always-visible line under the headline ("Planned 3 steps → ran 2 analyses →
+// 3 findings passed checks → report accepted · 38 s · $0.003"), which expands into the plan checklist,
+// the live step log from the run's server-sent events, and the turn timeline.
+import { useState } from 'react'
+import type { Metadata, RunEvent } from '../api/client'
 import { nextTurn, useInvestigation } from '../state/investigation'
+import { PlanCard, stepText } from './PlanCard'
+import { Timeline } from './Timeline'
 
+const BOOKKEEPING = new Set(['update_checklist', 'record_finding', 'submit_report'])
 const cost = (c: number | null) => (c === null ? '' : ` · $${c.toFixed(4)}`)
 
 function line(e: RunEvent): { text: string; cls: string } | null {
@@ -22,16 +28,12 @@ function line(e: RunEvent): { text: string; cls: string } | null {
   }
 }
 
-export function StepLog() {
+function StepLog() {
   const { events, phase, paused } = useInvestigation()
-  if (phase !== 'running' && phase !== 'finished') return null
   const working = phase === 'running' && !paused && events.at(-1)?.type !== 'run_finished'
   return (
-    <section className="card">
-      <header className="card-head">
-        <h2>Step log</h2>
-        {paused && <button className="primary small" onClick={() => void nextTurn()}>Next turn</button>}
-      </header>
+    <div>
+      <h3>Step log</h3>
       <ul className="steplog">
         {events.map((e) => {
           const l = line(e)
@@ -39,6 +41,54 @@ export function StepLog() {
         })}
         {working && <li className="muted">Working…</li>}
       </ul>
-    </section>
+    </div>
+  )
+}
+
+/** The trace's one-line summary, counted from the run's turns. */
+function summary(run: NonNullable<ReturnType<typeof useInvestigation>['run']>, finished: boolean): string[] {
+  const turns = run.turns
+  const analyses = turns.filter((t) => t.tool && !BOOKKEEPING.has(t.tool) && t.status === 'ok').length
+  const findingsOk = turns.filter((t) => t.tool === 'record_finding' && t.status === 'ok').length
+  const findingsRefused = turns.filter((t) => t.tool === 'record_finding' && t.status === 'refused').length
+  const reportRefused = turns.filter((t) => t.tool === 'submit_report' && t.status === 'refused').length
+  const parts = [`Planned ${run.checklist.length} steps`, `ran ${analyses} ${analyses === 1 ? 'analysis' : 'analyses'}`]
+  if (findingsOk || findingsRefused) parts.push(`${findingsOk} ${findingsOk === 1 ? 'finding' : 'findings'} passed checks${findingsRefused ? ` (${findingsRefused} refused and redone)` : ''}`)
+  if (finished) {
+    parts.push(run.report
+      ? `report accepted${reportRefused ? ` after ${reportRefused} ${reportRefused === 1 ? 'fix' : 'fixes'}` : ''}`
+      : 'report not accepted')
+  } else {
+    const cur = run.checklist.find((c) => c.status === 'in_progress') ?? run.checklist.find((c) => c.status === 'pending')
+    if (cur) parts.push(`now: ${stepText(cur.tool, null).toLowerCase()}…`)
+  }
+  return parts
+}
+
+export function AgentTrace({ meta }: { meta: Metadata | null }) {
+  const { run, phase, paused } = useInvestigation()
+  const [open, setOpen] = useState(false)
+  if (!run || (phase !== 'running' && phase !== 'finished')) return null
+  const finished = phase === 'finished'
+  const parts = summary(run, finished)
+  return (
+    <div className={`trace ${open ? 'open' : ''}`}>
+      <div className="trace-line">
+        <button className="trace-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <span className="trace-caret">{open ? '▾' : '▸'}</span>
+          <span className="trace-label">Agent</span>
+          {parts.map((p, i) => <span key={i} className="trace-part">{i > 0 && <span className="arrow">→</span>}{p}</span>)}
+          {finished && <span className="trace-meta">· {run.wall_s.toFixed(0)} s{run.cost_usd !== null ? ` · $${run.cost_usd.toFixed(3)}` : ''}</span>}
+        </button>
+        {paused && <button className="primary small" onClick={() => void nextTurn()}>Next step</button>}
+      </div>
+      {open && (
+        <div className="trace-body">
+          {finished && <PlanCard meta={meta} />}
+          <StepLog />
+          <Timeline />
+        </div>
+      )}
+    </div>
   )
 }
