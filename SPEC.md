@@ -525,7 +525,7 @@ Protected from cutting: the video (§15) is recorded on this UI.
   - Advanced parameters (stride, sequence exclusion, windows in frames, robustness cutoffs) are collapsed under **"Settings"**.
   - Plan steps are plain sentences (e.g. "Compare contacts between the first and second half"), with the tool name as a small secondary label.
 - **Clear visual hierarchy and a distinctive, non-template look.** Deliberate typography and spacing. Colour is restrained and used only for meaning: lost vs gained contact, supported vs noise, robust vs cutoff-sensitive.
-- **Process.** Use the frontend-design skill if it is available. Check every screen in the browser at 1440 px wide and on a laptop screen (about 1280–1366 px): start screen, passcode prompt, plan, running, report, `needs_review`, and the transition dataset's descriptive report.
+- **Process.** Use the `design:ux-copy` skill for labels and plan-step wording, and run `design:design-critique` on each screen after changing it (frontend-design is not required). Check every screen in the browser at 1440 px wide and on a laptop screen (about 1280–1366 px): start screen, passcode prompt, plan, running, report, `needs_review`, and the transition dataset's descriptive report.
 - **Done when:** every screen above is checked at both widths. No internal name appears in primary text. The report's headline is readable without scrolling at 1440 px.
 
 ## 15. Demo video (3 minutes; rough cut Mon Nov 2, final Tue Nov 3)
