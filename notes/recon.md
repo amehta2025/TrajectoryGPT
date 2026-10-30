@@ -56,10 +56,11 @@ https://userguide.mdanalysis.org/stable/examples/analysis/distances_and_contacts
 - **What "exact" means:** the page publishes plots, not a table of numbers. The numeric target is the
   timeseries that their published code produces. The `native_contacts` tool (Day 3) must match it
   (to float tolerance), and our plot should look the same as theirs.
-- **License:** the UserGuide repo (github.com/MDAnalysis/UserGuide) is LGPL-2.1, a software license.
-  It is unclear whether it covers reusing the rendered figure images. **Plan: don't embed their PNG.**
-  Re-plot from their published code and data, and link the page. Record this in `assets/figures/ATTRIBUTION.md`
-  when that folder is created.
+- **License (confirmed 2026-10-30, corrects the Day 1 note):** the User Guide's code is GNU LGPL v2.1+, and
+  its text and images are CC BY-SA 4.0. Sources: the repo README and its `LICENSE` file, which has both texts.
+  The Day 1 note said only "LGPL-2.1", so the image license looked unclear. **Decision:** we still re-plot from
+  their published code (`backend/scripts/make_sample_figure.py`) and link the page. Details are in
+  `assets/figures/ATTRIBUTION.md`.
 
 **Method transfer (secondary):** not chosen yet. It needs a CC-BY paper figure; that's Day 5 scope.
 
