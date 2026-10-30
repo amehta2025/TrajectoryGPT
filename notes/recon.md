@@ -62,7 +62,23 @@ https://userguide.mdanalysis.org/stable/examples/analysis/distances_and_contacts
   their published code (`backend/scripts/make_sample_figure.py`) and link the page. Details are in
   `assets/figures/ATTRIBUTION.md`.
 
-**Method transfer (secondary):** not chosen yet. It needs a CC-BY paper figure; that's Day 5 scope.
+**Method transfer (secondary), chosen 2026-10-30:** Iyer et al. 2020, *PLOS ONE*, Fig 5C (CC BY), a difference
+contact map of E. coli AdK, closed 4jzkB vs open 4akeA. The cropped panel is
+`assets/figures/iyer2020_fig5c_adk_difference_contact_map.png`; its source and license are in `ATTRIBUTION.md`.
+
+- **Axis mapping:** alignment position *p* (0-based) = AdK residue *p* + 1.
+  - Both models resolve residues 1–214, and their SEQRES sequences are identical, so there are no gaps.
+- **Check:** we recomputed their map from the two PDB models with their contact rule: any side-chain heavy atom
+  pair < 5 Å, Cα for Gly.
+  - All 76 coloured dots (46 red, 30 blue blobs) land on a recomputed closed-only or open-only contact at shift 0.
+  - At shifts of −1 and +1, only 21 and 7 of the 46 red dots match.
+  - Matched pairs: 29 closed-only and 17 open-only, against the paper's 31 and 18 (some neighbouring dots merge).
+  - The named Leu58–Glu170 contact is at positions (57, 169): 3.9 Å closed, 10.5 Å open.
+- **Open point:** the paper's "> 5 Å change in inter-residue distance" filter is not reproduced by either minimum
+  side-chain distance or Cα–Cα distance. Several plotted open-only pairs change by less than 5 Å. So for the
+  transfer we use their contact rule and do not claim their filter.
+- **Their closed-only contacts are mostly NMP–LID, NMP–CORE and CORE–LID:** e.g. Leu58–Glu170, Arg36–Arg156,
+  Asp54–Lys157, Gln18–Arg131. Their open-only contacts are mostly within CORE.
 
 ## Statistics check: first half vs second half (Day 3, 2026-10-28; final, stats frozen)
 
