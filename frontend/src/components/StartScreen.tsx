@@ -8,11 +8,15 @@ import { ask, askFigure, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } fr
 import { setSelection } from '../state/selection'
 import { datasetLine, datasetName } from './DatasetBadge'
 import { SpinningStructure } from './Viewer'
+import { UnsupportedNotice } from './ReproduceView'
 
 const FIGURE_EXAMPLES = [
   { label: 'Native contacts (MDAnalysis User Guide)', sub: 'exact reproduction on the same data', dataset: 'adk_transition',
     figure: '/figures/userguide_q1q2_replot.png', question: 'Reproduce this figure.',
     note: 'Attaches the MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).' },
+  { label: 'Difference contact map (Iyer et al. 2020)', sub: 'method applied to our data', dataset: 'adk_transition',
+    figure: '/figures/iyer2020_fig5c_adk_difference_contact_map.png', question: 'Apply this figure’s method to our data.',
+    note: 'Iyer M et al. (2020) PLOS ONE 15(3): e0226702, Fig 5C, CC BY (see assets/figures/ATTRIBUTION.md).' },
 ]
 const QUESTION_EXAMPLES = [
   { label: 'Which LID–CORE contacts change between the first and second half?', dataset: 'adk_equilibrium',
@@ -45,7 +49,7 @@ export function PasscodePrompt() {
 }
 
 export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo[]; dataset: string; meta: Metadata | null }) {
-  const { phase, needPasscode } = useInvestigation()
+  const { phase, needPasscode, unsupported } = useInvestigation()
   const [question, setQuestion] = useState('')
   const [note, setNote] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -104,7 +108,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
                 <span className="dz-main">Drop a figure here, or <u>choose a file</u></span>
                 <span className="muted small">
                   PNG or JPEG, plus the methods as a PDF if you have them · up to 10 MB each ·
-                  works with contact maps, distance traces and native contacts
+                  works with contact maps, difference contact maps, distance traces, native contacts and RMSF
                 </span>
               </>
             : <span className="attached">
@@ -118,6 +122,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               </span>}
         </label>
         {fileError && <span className="error-text small">{fileError}</span>}
+        {unsupported && <UnsupportedNotice message={unsupported.message} figure={unsupported.figure} />}
         {files.length > 0 && (
           <div className="figure-go">
             <input className="ask-input" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}

@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, setPasscode, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, setPasscode, UnsupportedFigure, type Figure, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { setSelection } from './selection'
 
 export type Investigation = {
@@ -15,10 +15,13 @@ export type Investigation = {
   paused: boolean
   error: string | null
   needPasscode: boolean // set by a 401; the start screen asks for the passcode, then retries
+  confirmed: string[] // low-confidence figure settings the user has checked (the backend requires all of them)
+  unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
 }
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
+  confirmed: [], unsupported: null,
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
@@ -78,6 +81,7 @@ export async function askFigure(files: File[], dataset: string, note: string) {
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
+    else if (e instanceof UnsupportedFigure) set({ phase: 'idle', unsupported: { message: e.message, figure: e.figure } })
     else set({ phase: 'idle', error: `Figure planning failed: ${(e as Error).message}` })
   }
 }
@@ -97,7 +101,7 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean) {
   if (!proposal) return
   const p = { ...proposal.plan, ...edits }
   try {
-    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough)
+    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough, state.confirmed)
     setSelection({
       dataset: p.dataset, groupA: p.group_a, groupB: p.group_b, cutoff: p.cutoff,
       windows: p.window_b ? [p.window_a, p.window_b] : null,
@@ -131,6 +135,17 @@ export async function nextTurn(stepThrough?: boolean) {
   if (!state.runId) return
   set({ paused: false })
   await api.next(state.runId, stepThrough)
+}
+
+/** Tick or untick one low-confidence figure setting. */
+export function toggleConfirmed(name: string) {
+  set({ confirmed: state.confirmed.includes(name) ? state.confirmed.filter((n) => n !== name) : [...state.confirmed, name] })
+}
+
+/** Low-confidence settings of the proposed figure plan that are not confirmed yet. */
+export function pendingConfirmations(s: Investigation): string[] {
+  const f = s.proposal?.figure
+  return f ? f.spec.fields.filter((x) => x.confidence === 'low' && !s.confirmed.includes(x.name)).map((x) => x.name) : []
 }
 
 export function reset() {

@@ -4,9 +4,11 @@
 // sit under a collapsed "Settings"; tool names are small secondary tags.
 import { useEffect, useState } from 'react'
 import type { ChecklistItem, Metadata, Plan } from '../api/client'
-import { approve, useInvestigation } from '../state/investigation'
+import { approve, pendingConfirmations, useInvestigation } from '../state/investigation'
 
 const CONTACT_DEFINITION = 'two residues are in contact when their closest heavy atoms are within the cutoff'
+const CONTACT_TOOLS = new Set(['calculate_contacts', 'distance_over_time', 'compare_intervals', 'contact_statistics',
+  'cutoff_sensitivity', 'contact_difference_map'])
 const STATUS_ICON: Record<ChecklistItem['status'], string> = { pending: '○', in_progress: '◐', done: '●', skipped: '⊘' }
 
 /** Plain sentence for a plan step, from the tool and the plan's groups. */
@@ -72,7 +74,9 @@ function editsOf(p: Plan, d: Draft): Partial<Plan> {
 }
 
 export function PlanCard({ meta }: { meta: Metadata | null }) {
-  const { phase, proposal, run, error } = useInvestigation()
+  const inv = useInvestigation()
+  const { phase, proposal, run, error } = inv
+  const pending = pendingConfirmations(inv)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [stepThrough, setStepThrough] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -89,6 +93,8 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   const done = checklist ? checklist.filter((c) => c.status === 'done' || c.status === 'skipped').length : 0
   const halves = isHalves(p, meta?.n_frames)
   const robustStep = p.steps.some((s) => s.tool === 'cutoff_sensitivity')
+  // Groups and cutoff matter only to contact tools; other plans (native contacts, RMSF) leave them out of the summary.
+  const usesContacts = p.steps.some((s) => CONTACT_TOOLS.has(s.tool))
   const field = (k: keyof Omit<Draft, 'drop'>, w = 56) => (
     <input value={draft[k]} disabled={locked} style={{ width: w }} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
   )
@@ -99,14 +105,20 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
         <h2 title={p.summary}>Plan</h2>
         <span className="pill">{checklist ? `${done} of ${checklist.length} done` : 'Waiting for your approval'}</span>
       </header>
-      <p className="plan-scope">
-        <b>{p.group_a}</b> vs <b>{p.group_b}</b> at a <b>{p.cutoff} Å</b> cutoff
-        {p.window_b
-          ? <>, {windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}</>
-          : <>, {windowText(meta, p.window_a, 'A', false)}</>}
-        {robustStep && <>, robustness checked at {p.robustness_cutoffs.map((c) => c.toFixed(1)).join(", ")} Å</>}.
-      </p>
-      <p className="muted small plan-def">Contact: {CONTACT_DEFINITION}.</p>
+      {usesContacts
+        ? (
+          <>
+            <p className="plan-scope">
+              <b>{p.group_a}</b> vs <b>{p.group_b}</b> at a <b>{p.cutoff} Å</b> cutoff
+              {p.window_b
+                ? <>, {windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}</>
+                : <>, {windowText(meta, p.window_a, 'A', false)}</>}
+              {robustStep && <>, robustness checked at {p.robustness_cutoffs.map((c) => c.toFixed(1)).join(", ")} Å</>}.
+            </p>
+            <p className="muted small plan-def">Contact: {CONTACT_DEFINITION}.</p>
+          </>
+        )
+        : <p className="plan-scope">Frames: {windowText(meta, p.window_a, 'A', false).replace('window A: ', '')}.</p>}
       <ol className="steps">
         {checklist
           ? checklist.map((c) => (
@@ -149,7 +161,8 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
       {!locked && (
         <div className="plan-actions">
           <label className="small muted" title="The agent stops after each step until you click Next"><input type="checkbox" checked={stepThrough} onChange={(e) => setStepThrough(e.target.checked)} /> Pause after each step</label>
-          <button className="primary" disabled={starting} onClick={async () => {
+          {pending.length > 0 && <span className="small pending-note">Tick {pending.length === 1 ? 'the unsure setting' : `the ${pending.length} unsure settings`} read from the figure first</span>}
+          <button className="primary" disabled={starting || pending.length > 0} onClick={async () => {
             setStarting(true)
             await approve(editsOf(p, draft), stepThrough)
             setStarting(false)

@@ -28,8 +28,32 @@ FIGURES_DIR = CACHE_DIR / "figures"  # on the Modal Volume when deployed, so Rep
 PDF_TEXT_LIMIT = 40_000  # characters of fallback text sent to the model
 
 
+# Figure types figure mode can run, each mapped to tools in the planner prompt (SPEC §9; 2026-10-30).
+SUPPORTED_KINDS = {
+    "contact_map": "contact maps",
+    "difference_contact_map": "difference contact maps",
+    "distance_trace": "distance traces",
+    "native_contacts": "native contacts",
+    "rmsf": "RMSF (flexibility) plots",
+}
+
+
 class UploadRejected(ValueError):
     """str(e) is shown to the user."""
+
+
+class UnsupportedFigure(ValueError):
+    """The figure is not one of SUPPORTED_KINDS. No plan is made (and no planning call is spent)."""
+
+    def __init__(self, spec: dict, figure: dict):
+        kinds = ", ".join(SUPPORTED_KINDS.values())
+        super().__init__(f"This figure type isn't supported yet. TrajectoryGPT can reproduce {kinds}.")
+        self.spec, self.figure = spec, figure
+
+
+def low_confidence(spec: dict) -> list[str]:
+    """Names of extracted settings the model marked low confidence; the user must confirm them before a run."""
+    return [f["name"] for f in spec.get("fields", []) if f.get("confidence") == "low"]
 
 
 def decode_upload(f: dict) -> tuple[str, str, bytes]:
@@ -83,7 +107,8 @@ def spec_schema() -> dict:
         "type": "object",
         "properties": {
             "summary": {"type": "string", "description": "One sentence: what the figure shows."},
-            "kind": {"type": "string", "enum": ["native_contacts", "contact_map", "distance_trace", "other"]},
+            "kind": {"type": "string", "enum": sorted(SUPPORTED_KINDS) + ["other"],
+                     "description": "The figure type; 'other' for anything not in the list. Never force-fit."},
             "mode": {"type": "string", "enum": ["exact", "transfer"]},
             "dataset": {"type": "string", "enum": datasets + ["none"],
                         "description": "Our dataset the figure was made from, or none."},
@@ -145,6 +170,8 @@ def plan_from_figure(llm: LLM, raw_files: list[dict], selected_dataset: str, not
         raise UploadRejected(f"attach 1-{MAX_FILES} files (a figure image and/or a methods PDF)")
     files = [decode_upload(f) for f in raw_files]
     spec, usages = extract_spec(llm, files, note)
+    if spec["kind"] not in SUPPORTED_KINDS:
+        raise UnsupportedFigure(spec, {**save_figure(files), "spec": spec})
     dataset = spec["dataset"] if spec["mode"] == "exact" else selected_dataset
     fields = "; ".join(f"{f['name']}: {f['value']} ({f['confidence']}, {f['source']})" for f in spec["fields"])
     question = (f"{spec['question']}\n\nThis comes from an uploaded figure ({spec['kind']}, "

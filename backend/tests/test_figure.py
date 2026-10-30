@@ -37,6 +37,8 @@ def b64(raw: bytes) -> str:
 class SchemaLLM:
     """Returns the scripted parsed objects in order; raises an exception if one is scripted."""
 
+    model = "fake"
+
     def __init__(self, script):
         self.script, self.calls = list(script), []
 
@@ -134,3 +136,40 @@ def test_figure_plan_is_gated_and_checks_type(monkeypatch):
     r = c.post("/figure/plan", json=body, headers={"X-Demo-Passcode": "s3cret"})
     assert r.status_code == 400 and "only PNG, JPEG or PDF" in r.json()["detail"]
     assert c.get("/figures/nope").status_code == 404
+
+
+# ---------- supported figure types and low-confidence confirmations ----------
+
+def test_schema_lists_the_five_supported_types_plus_other():
+    kinds = figure.spec_schema()["schema"]["properties"]["kind"]["enum"]
+    assert set(kinds) == {"contact_map", "difference_contact_map", "distance_trace", "native_contacts", "rmsf", "other"}
+
+
+def test_unsupported_figure_stops_before_planning():
+    llm = SchemaLLM([{**SPEC, "kind": "other", "summary": "RMSD versus time"}])  # no plan scripted: planning must not run
+    with pytest.raises(figure.UnsupportedFigure) as e:
+        figure.plan_from_figure(llm, [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "adk_equilibrium")
+    assert "isn't supported yet" in str(e.value) and "RMSF" in str(e.value)
+    assert len(llm.calls) == 1 and e.value.figure["figure_id"]
+
+
+def test_unsupported_figure_endpoint_returns_a_clear_message(monkeypatch):
+    import app.agent.session as session
+    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([{**SPEC, "kind": "other"}]))
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    r = TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
+    assert r.status_code == 422 and "isn't supported yet" in r.json()["detail"]["unsupported"]
+
+
+def test_low_confidence_fields_must_be_confirmed_before_a_run(monkeypatch):
+    import app.agent.session as session
+    from app.agent.planner import PlanInvalid
+    spec = {**SPEC, "fields": SPEC["fields"] + [{"name": "reference frames", "value": "first and last", "confidence": "low", "source": "assumed"}]}
+    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([spec, PLAN]))
+    started = []
+    monkeypatch.setattr(session, "RunHandle", lambda run, step_through=False: started.append(run) or type("H", (), {"start": lambda self: None})())
+    out = session.propose_figure_plan([{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "adk_transition")
+    assert figure.low_confidence(out["figure"]["spec"]) == ["reference frames"]
+    with pytest.raises(PlanInvalid) as e:
+        session.start_run(out["plan_id"], {}, confirmed_fields=[])
+    assert "reference frames" in str(e.value) and not started

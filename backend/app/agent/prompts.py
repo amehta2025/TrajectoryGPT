@@ -92,9 +92,15 @@ Our datasets:
 Rules:
 - mode "exact" only if the figure was made from one of our datasets; name it in dataset and give the evidence in
   mode_reason (caption, axis labels, frame count, cited source). Otherwise mode "transfer" and dataset "none".
+- kind: contact_map, difference_contact_map (contacts gained/lost between two states), distance_trace (a distance
+  versus time or frame), native_contacts (fraction of native contacts, Q), rmsf (per-residue RMSF or B-factor
+  style flexibility). Anything else (RMSD, free-energy surfaces, PCA, secondary structure, spectra, bar charts of
+  other quantities, structure images) is "other": say so rather than picking the nearest type.
 - fields: one entry per setting: analysis, protein, data source, atom selection, cutoff or radius, reference
   frames or structures, x axis, y axis, contact definition. value is text with units. source is where you read
-  it (caption, methods, axis); use "assumed" with low confidence when you infer a value. Never invent precision.
+  it (caption, methods, axis); use "assumed" with low confidence when you infer a value. Use low confidence whenever you are unsure, including
+  for values read off a blurry axis; the user confirms every low-confidence setting before anything runs. Never
+  invent precision.
 - question: the analysis to run, written as a plain request (e.g. "Compute the fraction of native contacts Q1
   and Q2 along the transition path with C-alpha atoms and an 8 A radius, and check it against the published code").
 """

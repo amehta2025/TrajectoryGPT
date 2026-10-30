@@ -242,12 +242,14 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
 @app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body("")):
     """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
-    from app.agent.figure import UploadRejected
+    from app.agent.figure import UnsupportedFigure, UploadRejected
     _check_dataset(dataset)
     try:
         return session.propose_figure_plan(files, dataset, note[:2000])
     except UploadRejected as e:
         raise HTTPException(400, str(e)) from None
+    except UnsupportedFigure as e:
+        raise HTTPException(422, {"unsupported": str(e), "spec": e.spec, "figure": e.figure}) from None
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 
@@ -263,9 +265,10 @@ def get_figure(figure_id: str):
 
 
 @app.post("/runs", dependencies=[Depends(require_passcode), Depends(require_budget)])
-def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False)):
+def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
+              confirmed_fields: list[str] = Body([])):
     try:
-        return {"run_id": session.start_run(plan_id, edits, step_through)}
+        return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields)}
     except KeyError as e:
         raise HTTPException(404, str(e)) from None
     except PlanInvalid as e:

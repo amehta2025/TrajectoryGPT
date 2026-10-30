@@ -137,7 +137,7 @@ export type SpecField = { name: string; value: string; confidence: 'high' | 'med
 
 export type FigureSpec = {
   summary: string
-  kind: 'native_contacts' | 'contact_map' | 'distance_trace' | 'other'
+  kind: 'native_contacts' | 'contact_map' | 'difference_contact_map' | 'distance_trace' | 'rmsf' | 'other'
   mode: 'exact' | 'transfer'
   dataset: string
   mode_reason: string
@@ -277,6 +277,17 @@ export function setPasscode(code: string) {
 /** Thrown on HTTP 401 so the UI can ask for the passcode and retry. */
 export class PasscodeRequired extends Error {}
 
+/** Figure mode read the figure but it is not a supported type; no plan was made. */
+export class UnsupportedFigure extends Error {
+  spec: FigureSpec
+  figure: Figure
+  constructor(message: string, spec: FigureSpec, figure: Figure) {
+    super(message)
+    this.spec = spec
+    this.figure = figure
+  }
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(new URL(path, BASE), {
     method: 'POST',
@@ -290,6 +301,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       detail = (await r.json()).detail
     } catch {
       /* not JSON */
+    }
+    const unsupported = detail as { unsupported?: string; spec?: FigureSpec; figure?: Figure } | null
+    if (unsupported?.unsupported && unsupported.spec && unsupported.figure) {
+      throw new UnsupportedFigure(unsupported.unsupported, unsupported.spec, unsupported.figure)
     }
     const errors = (detail as { errors?: string[] } | null)?.errors
     throw new Error(errors ? errors.join('; ') : `${r.status} ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
@@ -327,8 +342,8 @@ export const api = {
     post<PlanResponse>('/figure/plan', { files, dataset, note }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
   plan: (question: string, dataset: string) => post<PlanResponse>('/plan', { question, dataset }),
-  startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean) =>
-    post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough }),
+  startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = []) =>
+    post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
   next: (runId: string, stepThrough?: boolean) => post<{ ok: boolean }>(`/runs/${runId}/next`, { step_through: stepThrough ?? null }),
   /** Live step log (server-sent events). Returns a function that closes the stream. */

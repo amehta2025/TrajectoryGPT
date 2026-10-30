@@ -82,13 +82,19 @@ export default function App() {
             <Headline meta={meta} />
             <AgentTrace meta={meta} />
           </div>
-          {!started && <div className="plan-only"><PlanCard meta={meta} /></div>}
+          {!started && (
+            <div className={inv.proposal?.figure ? 'plan-only with-figure' : 'plan-only'}>
+              <ReproduceView />
+              <PlanCard meta={meta} />
+            </div>
+          )}
           {started && (
             <>
+              {inv.run?.figure && <ReproduceView />}
               <div className="inv-body">
                 {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
                 <div className="inv-col">
-                  <ReproduceView />
+                  {!inv.run?.figure && <ReproduceView />}
                   <ReportView meta={meta} />
                   {inv.phase === 'running' && <PlanCard meta={meta} />}
                 </div>

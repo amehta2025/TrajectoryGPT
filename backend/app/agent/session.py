@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from app.agent.llm import LLM, CostTracker
 from app.agent import orchestrator
 from app.agent.orchestrator import Run, new_run, run_investigation
-from app.agent.planner import make_plan, to_approved
+from app.agent.planner import PlanInvalid, make_plan, to_approved
 from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
@@ -96,12 +96,21 @@ def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LL
             "question": out["question"]}
 
 
-def start_run(plan_id: str, edits: dict, step_through: bool = False) -> str:
-    """Approve the stored plan with the user's edits (validated in code) and start it in the background."""
+def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_fields: list[str] | None = None) -> str:
+    """Approve the stored plan with the user's edits (validated in code) and start it in the background.
+
+    A figure plan runs only once the user has confirmed every low-confidence extracted setting (SPEC §4:
+    consequential choices need human approval, enforced here rather than in the prompt).
+    """
+    from app.agent.figure import low_confidence
     with _lock:
         stored = PLANS.get(plan_id)
     if stored is None:
         raise KeyError(f"unknown plan {plan_id}")
+    if stored.get("figure"):
+        missing = [n for n in low_confidence(stored["figure"]["spec"]) if n not in (confirmed_fields or [])]
+        if missing:
+            raise PlanInvalid([f"Confirm these low-confidence settings read from the figure first: {', '.join(missing)}"], None)
     plan = {**stored["plan"], **{k: v for k, v in edits.items() if k in EDITABLE}}
     if "steps" in edits:  # the user may drop steps, never add tools the planner did not propose
         proposed = {s["tool"] for s in stored["plan"]["steps"]}
