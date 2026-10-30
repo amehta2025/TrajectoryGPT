@@ -189,3 +189,39 @@ def test_native_contacts_selection_is_restricted():
     r = call(s, "native_contacts", selection="LID CORE")
     assert r["status"] == "refused" and "selection must be one of" in r["summary_for_model"]
     assert call(s, "native_contacts", selection="name CA")["status"] == "ok"
+
+
+# ---------- difference map and flexibility (SPEC §10b a, e) ----------
+
+def test_contact_difference_map_is_untested_on_transition():
+    s = new_state([{"tool": "contact_difference_map", "rationale": ""}, {"tool": "submit_report", "rationale": ""}])
+    r = call(s, "contact_difference_map")
+    assert r["status"] == "ok"
+    summary = json.loads(r["summary_for_model"])
+    assert summary["statistics"] == "not statistically tested" and summary["most_lost"]
+    assert r["data_for_ui"]["tested"] is False
+    assert all("supported" not in p for p in r["pairs"].values())
+
+
+def test_difference_map_joins_compare_but_cannot_back_a_supported_claim(pretend_stats_valid):
+    s = new_state([{"tool": "compare_intervals", "rationale": ""}, {"tool": "contact_difference_map", "rationale": ""},
+                   {"tool": "submit_report", "rationale": ""}])
+    call(s, "compare_intervals")
+    r = call(s, "contact_difference_map")
+    assert r["data_for_ui"]["tested"] is True
+    pair = next(iter(r["pairs"]))
+    assert "supported_in_compare" in r["pairs"][pair] and "supported" not in r["pairs"][pair]
+    f = call(s, "record_finding", text=f"{pair} changes by {{{{{r['provenance_id']}.{pair}.delta}}}}",
+             claim="supported", evidence_ids=[f"{r['provenance_id']}.{pair}"])
+    out = call(s, "submit_report", finding_ids=["f1"], caveats=[], gaps=[], follow_ups=[]) if f["status"] == "ok" else f
+    assert out["status"] == "refused" and "compare_intervals" in out["summary_for_model"]
+
+
+def test_residue_flexibility_tool_summarises_by_domain():
+    s = new_state([{"tool": "residue_flexibility", "rationale": ""}, {"tool": "submit_report", "rationale": ""}])
+    r = call(s, "residue_flexibility")
+    assert r["status"] == "ok"
+    summary = json.loads(r["summary_for_model"])
+    assert set(summary["median_rmsf_by_domain_A"]) == {"NMP", "LID", "CORE"} and "Path RMSF" in summary["note"]
+    assert len(r["data_for_ui"]["rmsf"]) == 214
+    assert any(k.endswith(".rmsf") for k in s.results[r["provenance_id"]]["values"])

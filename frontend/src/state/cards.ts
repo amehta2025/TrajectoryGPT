@@ -80,6 +80,21 @@ function mapFreq(ui: MapUi, keyA: string, keyB: string): number | null {
   return i < 0 || j < 0 ? null : ui.frequency[i][j]
 }
 
+type DiffUi = { keys_a: string[]; keys_b: string[]; freq_a: number[][]; freq_b: number[][]; window_a: [number, number]; window_b: [number, number] }
+
+/** Both windows' frequencies for a pair from a contact_difference_map result this finding cites. */
+function diffFor(run: RunView, f: Finding, keyA: string, keyB: string) {
+  for (const e of f.evidence_ids) {
+    const r = run.results[e.split('.')[0]]
+    if (!r || r.tool !== 'contact_difference_map' || r.status !== 'ok' || !r.data_for_ui) continue
+    const ui = r.data_for_ui as DiffUi
+    const fa = mapFreq({ keys_a: ui.keys_a, keys_b: ui.keys_b, frequency: ui.freq_a }, keyA, keyB)
+    const fb = mapFreq({ keys_a: ui.keys_a, keys_b: ui.keys_b, frequency: ui.freq_b }, keyA, keyB)
+    if (fa !== null && fb !== null) return { fa, fb, window_a: ui.window_a, window_b: ui.window_b }
+  }
+  return null
+}
+
 export function buildCards(run: RunView, nFrames: number, hasTime: boolean): { cards: Card[]; notes: Finding[] } {
   const cards: Card[] = []
   const notes: Finding[] = []
@@ -104,6 +119,12 @@ export function buildCards(run: RunView, nFrames: number, hasTime: boolean): { c
         freqs = [{ name: na, freq: row.freq_a }, { name: nb, freq: row.freq_b }]
         stats = row
         focusWindow = cmp.window_b
+      } else if (diffFor(run, f, keyA, keyB)) {
+        // A cited difference map holds both windows' frequencies (raw, untested).
+        const d = diffFor(run, f, keyA, keyB)!
+        const [na, nb] = windowNames(d.window_a, d.window_b, nFrames, hasTime)
+        freqs = [{ name: na, freq: d.fa }, { name: nb, freq: d.fb }]
+        focusWindow = d.window_b
       } else {
         // Single-pair statistics or contact maps cited by this finding, in window order.
         const pts: { w: [number, number]; freq: number }[] = []

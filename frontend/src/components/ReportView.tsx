@@ -29,7 +29,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const range = (cs: number[]) => `${Math.min(...cs).toFixed(1)}–${Math.max(...cs).toFixed(1)} Å`
 
 /** One plain-language headline and a method line. Every number comes from a stored tool result. */
-export function Headline() {
+export function Headline({ meta }: { meta: Metadata | null }) {
   const { run, phase } = useInvestigation()
   if (!run || phase !== 'finished') return null
   if (!run.report) {
@@ -71,10 +71,17 @@ export function Headline() {
   const count = (b: Finding['badge']) => findings.filter((f) => f.badge === b).length
   const descriptive = count('descriptive')
   if (descriptive === findings.length) {
+    const noStats = meta?.stats_valid === false
     return (
       <div className="headline">
-        <p className="headline-main">{plural(findings.length, 'descriptive finding')}, with no statistics on this dataset.</p>
-        <p className="headline-method">The path is biased and not evenly spaced in time, so frequencies are described, not tested.</p>
+        <p className="headline-main">
+          {plural(findings.length, 'descriptive finding')}{noStats ? ', with no statistics on this dataset.' : ', not statistically tested.'}
+        </p>
+        <p className="headline-method">
+          {noStats
+            ? 'The path is biased and not evenly spaced in time, so frequencies are described, not tested.'
+            : 'These describe what the analyses show; no statistical test was part of this question.'}
+        </p>
       </div>
     )
   }

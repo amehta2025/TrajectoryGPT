@@ -126,3 +126,18 @@ def test_equilibrium_precompute_matches_direct_on_a_few_frames():
                 pb = rb.atoms.select_atoms("not name H*").positions
                 direct = np.sqrt(((pa[:, None] - pb[None]) ** 2).sum(-1)).min()
                 assert md.min_dist[frame, i, j] == pytest.approx(direct, abs=1e-3)
+
+
+def test_contact_difference_map_is_window_b_minus_window_a():
+    from app.science.contacts import contact_difference_map
+
+    d = contact_difference_map(DS, "LID", "NMP", (0, 49), (49, 98))
+    a = calculate_contacts(DS, "LID", "NMP", 4.5, 0, 49)
+    b = calculate_contacts(DS, "LID", "NMP", 4.5, 49, 98)
+    assert np.allclose(d["delta"], b["frequency"] - a["frequency"])
+    assert d["keys_a"] == a["keys_a"] and d["stats_valid"] is False
+    i = d["keys_a"].index(make_residue_key(DS, "4AKE", CONTACT[0], "ASP"))
+    j = d["keys_b"].index(make_residue_key(DS, "4AKE", CONTACT[1], "ARG"))
+    assert d["delta"][i, j] < 0  # the closed-state salt bridge breaks as the path opens
+    with pytest.raises(ValueError):
+        contact_difference_map(DS, "LID", "NMP", (0, 60), (40, 98))

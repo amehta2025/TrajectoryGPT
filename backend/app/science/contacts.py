@@ -186,3 +186,54 @@ def calculate_contacts(
         "pbc": md.pbc,
         "units": {"distance": "Å", "time": cfg["time_label"], "dt_ns": cfg["dt_ns"]},
     }
+
+
+def contact_difference_map(
+    dataset: str,
+    group_a: str,
+    group_b: str,
+    window_a: tuple[int, int],
+    window_b: tuple[int, int],
+    cutoff: float = 4.5,
+    stride: int = 1,
+    sequence_exclusion: int | None = None,
+    *,
+    cache_dir: Path = CACHE_DIR,
+    progress: Callable[[str], None] | None = None,
+) -> dict:
+    """Per-pair contact-frequency change, window_b minus window_a (SPEC §10b a).
+
+    Raw differences only. Whether a change is supported comes from compare_intervals (same windows and
+    cutoff); on datasets with stats_valid: false the map is labelled "not statistically tested".
+    """
+    n = precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress).min_dist.shape[0]
+    fa = validate_window(n, window_a[0], window_a[1], stride)
+    fb = validate_window(n, window_b[0], window_b[1], stride)
+    if fa.start < fb.stop and fb.start < fa.stop:
+        raise ValueError(f"Windows {list(window_a)} and {list(window_b)} overlap; choose disjoint windows.")
+    a = calculate_contacts(dataset, group_a, group_b, cutoff, window_a[0], window_a[1], stride, sequence_exclusion,
+                           cache_dir=cache_dir, progress=progress)
+    b = calculate_contacts(dataset, group_a, group_b, cutoff, window_b[0], window_b[1], stride, sequence_exclusion,
+                           cache_dir=cache_dir)
+    return {
+        "dataset": dataset,
+        "group_a": group_a,
+        "group_b": group_b,
+        "keys_a": a["keys_a"],
+        "keys_b": a["keys_b"],
+        "freq_a": a["frequency"],
+        "freq_b": b["frequency"],
+        "delta": b["frequency"] - a["frequency"],
+        "excluded": a["excluded"],
+        "sequence_exclusion": a["sequence_exclusion"],
+        "window_a": list(window_a),
+        "window_b": list(window_b),
+        "n_frames_a": a["n_frames"],
+        "n_frames_b": b["n_frames"],
+        "stride": stride,
+        "cutoff": a["cutoff"],
+        "contact_definition": CONTACT_DEFINITION,
+        "stats_valid": dataset_config(dataset)["stats_valid"],
+        "pbc": a["pbc"],
+        "units": a["units"],
+    }

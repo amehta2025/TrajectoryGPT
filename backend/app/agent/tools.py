@@ -22,8 +22,10 @@ import numpy as np
 from app.config import dataset_config
 from app.science import contact_stats as cs
 from app.science import stats
-from app.science.contacts import CONTACT_DEFINITION, calculate_contacts, dataset_hashes, validate_cutoff, validate_window
+from app.science.contacts import (CONTACT_DEFINITION, calculate_contacts, contact_difference_map, dataset_hashes,
+                                  validate_cutoff, validate_window)
 from app.science.distances import distance_over_time
+from app.science.flexibility import residue_flexibility
 from app.science.loader import TRAJ_LOCK, load_universe
 from app.science.native_contacts import native_contacts, reproduction_check
 from app.science.residues import make_residue_key, parse_residue_key
@@ -191,6 +193,70 @@ def _calculate_contacts(plan, args):
     return data, summary, values, {}
 
 
+def _contact_difference_map(plan, args, state):
+    """Window B minus window A per pair. Supported flags come from a compare_intervals result already in
+    this run with the same windows and cutoff; without one (or on stats_valid: false) the map is raw."""
+    if plan.window_b is None:
+        raise Refused("contact_difference_map compares two windows; this plan has one")
+    with TRAJ_LOCK:
+        r = contact_difference_map(plan.dataset, plan.group_a, plan.group_b, tuple(plan.window_a), tuple(plan.window_b),
+                                   plan.cutoff, plan.stride, plan.sequence_exclusion)
+    supported: dict[tuple[str, str], bool] | None = None
+    stats_valid = dataset_config(plan.dataset)["stats_valid"]
+    if stats_valid:
+        for res in state.results.values():
+            ui = res.get("data_for_ui") or {}
+            if (res["tool"] == "compare_intervals" and res["status"] == "ok" and ui.get("window_a") == list(plan.window_a)
+                    and ui.get("window_b") == list(plan.window_b) and ui.get("cutoff") == plan.cutoff):
+                supported = {(row["key_a"], row["key_b"]): bool(row["supported"]) for row in ui["rows"]}
+    delta = np.where(r["excluded"], np.nan, r["delta"])
+    flat = [(float(delta[i, j]), i, j) for i, j in zip(*np.nonzero(np.nan_to_num(delta) != 0))]
+    values, pairs, top = {}, {}, {"lost": [], "gained": []}
+    for side, rows in (("lost", sorted(flat)[:TOP_N]), ("gained", sorted(flat, reverse=True)[:TOP_N])):
+        for d, i, j in rows:
+            if (side == "lost") != (d < 0):
+                continue
+            ka, kb = r["keys_a"][i], r["keys_b"][j]
+            lab = pair_label(ka, kb)
+            sup = None if supported is None else supported.get((ka, kb), False)
+            values[f"{lab}.delta"] = _v(d, "delta")
+            values[f"{lab}.freq_a"] = _v(r["freq_a"][i, j], "freq")
+            values[f"{lab}.freq_b"] = _v(r["freq_b"][i, j], "freq")
+            # Not "supported": a supported claim must cite the compare_intervals result itself (CI, q), not this map.
+            pairs[lab] = {"key_a": ka, "key_b": kb, "delta": d, **({} if sup is None else {"supported_in_compare": sup})}
+            top[side].append({"pair": lab, "delta": _r(d), "freq_a": _r(r["freq_a"][i, j]), "freq_b": _r(r["freq_b"][i, j]),
+                              **({} if sup is None else {"supported_in_compare": sup})})
+    tested = ("statistics joined from compare_intervals (same windows and cutoff)" if supported is not None else
+              "not statistically tested" if not stats_valid else
+              "raw differences; run compare_intervals for which changes are supported")
+    summary = {"windows": [plan.window_a, plan.window_b], "n_pairs_changed": len(flat), "statistics": tested,
+               "most_lost": top["lost"], "most_gained": top["gained"]}
+    data = {**r, "delta": delta, "tested": supported is not None,
+            "supported_pairs": None if supported is None else [list(k) for k, v in supported.items() if v]}
+    return data, summary, values, pairs
+
+
+def _residue_flexibility(plan, args):
+    start, stop = _window(plan, args.get("window") or "all")
+    with TRAJ_LOCK:
+        r = residue_flexibility(plan.dataset, start, stop if stop is not None else None, plan.stride)
+    rmsf, keys = r["rmsf"], r["keys"]
+    order = np.argsort(-rmsf)[:TOP_N]
+    values = {f"{res_label(keys[i])}.rmsf": _v(rmsf[i], "distance") for i in order}
+    per_domain = {}
+    for name, ranges in dataset_config(plan.dataset)["domains"].items():
+        mask = np.zeros(len(keys), bool)
+        for a, b in ranges:
+            mask |= (r["resids"] >= a) & (r["resids"] <= b)
+        per_domain[name] = _r(np.median(rmsf[mask]), 2)
+        values[f"median_rmsf.{name}"] = _v(np.median(rmsf[mask]), "distance")
+    summary = {"window": [start, stop], "n_frames": r["n_frames"], "fit": "CORE C-alphas", "note": r["note"],
+               "median_rmsf_by_domain_A": per_domain,
+               "most_flexible": [{"residue": res_label(keys[i]), "rmsf_A": _r(rmsf[i], 2)} for i in order]}
+    data = {**r, "window": {"start": start, "stop": stop, "stride": plan.stride}}
+    return data, summary, values, {}
+
+
 def _distance_over_time(plan, args):
     ka, kb = resolve_pair(plan, args.get("pair"))
     start, stop = _window(plan, args.get("window") or "all")
@@ -344,6 +410,8 @@ SCHEMAS = [
     _tool("compare_intervals", "Per-pair contact-frequency change, window b minus window a, with autocorrelation-corrected CIs and BH-FDR q-values; says which pairs are supported.", {}),
     _tool("contact_statistics", "For one pair in one window: frequency, autocorrelation time in ns, independent chunks, and its CI.", {"pair": PAIR, "window": WINDOW}, ["pair"]),
     _tool("cutoff_sensitivity", "Rerun the comparison at every approved robustness cutoff. A pair is robust only if supported at every cutoff with the same sign; otherwise cutoff-sensitive.", {"pairs": {"type": "array", "items": PAIR, "description": "Pairs to judge; default: every pair supported at any cutoff."}}),
+    _tool("contact_difference_map", "Contact-frequency change per residue pair, window B minus window A, for the approved groups and cutoff. Raw differences; pairs are marked supported only if compare_intervals already ran on the same windows. Not statistically tested on a stats-invalid dataset.", {}),
+    _tool("residue_flexibility", "Per-residue C-alpha RMSF over an approved window, after superposing CORE C-alphas. On a biased path this is a path RMSF, not equilibrium flexibility.", {"window": WINDOW}),
     _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS), "description": "Atoms used: 'name CA' (default, as in the User Guide) or 'heavy atoms'."}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
     _tool("reproduction_check", "Exact-reproduction check: run the published MDAnalysis User Guide code (contacts.q1q2) and compare it with our native_contacts (reference frames first and last); reports the largest difference and whether it is within tolerance.", {"selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS)}, "radius": {"type": "number"}}),
     _tool("update_checklist", "Mark a plan item done, in progress or skipped (a skip needs a reason in note).", {"item": {"type": "integer", "description": "1-based plan item"}, "status": {"type": "string", "enum": ["in_progress", "done", "skipped"]}, "note": {"type": "string"}}, ["item", "status"]),
@@ -372,9 +440,11 @@ SCIENCE: dict[str, Callable] = {
     "get_metadata": _get_metadata, "list_groups": _list_groups, "calculate_contacts": _calculate_contacts,
     "distance_over_time": _distance_over_time, "compare_intervals": _compare_intervals,
     "contact_statistics": _contact_statistics, "cutoff_sensitivity": _cutoff_sensitivity,
-    "native_contacts": _native_contacts, "reproduction_check": _reproduction_check,
+    "native_contacts": _native_contacts, "contact_difference_map": _contact_difference_map,
+    "residue_flexibility": _residue_flexibility, "reproduction_check": _reproduction_check,
 }
 STATS_TOOLS = {"compare_intervals", "contact_statistics", "cutoff_sensitivity"}
+NEEDS_STATE = {"contact_difference_map"}  # reads earlier results in the run (compare_intervals) to mark supported pairs
 FREE_TOOLS = {"get_metadata", "list_groups"}  # informational; never count as an extra step
 
 
@@ -425,7 +495,8 @@ def run_tool(state: RunState, name: str, raw_args: str | dict) -> dict:
             raise Refused(f"unknown tool {name!r}")
         if name in STATS_TOOLS and not dataset_config(state.plan.dataset)["stats_valid"]:
             raise cs.StatsRefused(dataset_config(state.plan.dataset)["stats_refusal"].strip())
-        data, summary, values, pairs = SCIENCE[name](state.plan, args)
+        handler = SCIENCE[name]
+        data, summary, values, pairs = handler(state.plan, args, state) if name in NEEDS_STATE else handler(state.plan, args)
     except (Refused, cs.StatsRefused) as e:
         return _store(state, name, args, "refused", {"refused": str(e)})
     except ValueError as e:

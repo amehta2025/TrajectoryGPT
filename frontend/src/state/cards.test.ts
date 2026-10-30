@@ -53,6 +53,17 @@ describe('contact cards', () => {
     expect(notes.map((n) => n.id)).toEqual(['f2'])
   })
 
+  it('reads before/after from a cited difference map', () => {
+    const r = run(
+      [finding({ badge: 'descriptive', badge_label: 'descriptive — not statistically tested', text: 'LYS157-ASP54 is lost', evidence_ids: ['r1'] })],
+      { r1: { status: 'ok', tool: 'contact_difference_map', provenance_id: 'r1', params: {}, units: {}, summary_for_model: '',
+        pairs: { 'LYS157-ASP54': { key_a: K('LYS157'), key_b: K('ASP54') } },
+        data_for_ui: { keys_a: [K('LYS157')], keys_b: [K('ASP54')], freq_a: [[0.9]], freq_b: [[0.2]], window_a: [0, 49], window_b: [49, 98] } } },
+    )
+    const { cards } = buildCards(r, 98, false)
+    expect(cards[0].freqs).toEqual([{ name: 'early path', freq: 0.9 }, { name: 'late path', freq: 0.2 }])
+  })
+
   it('names windows', () => {
     expect(windowNames([0, 50], [50, 100], 100, true)).toEqual(['1st half', '2nd half'])
     expect(windowNames([0, 30], [60, 100], 100, true)).toEqual(['window A', 'window B'])

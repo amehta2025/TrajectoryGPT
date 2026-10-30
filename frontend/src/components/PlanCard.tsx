@@ -21,6 +21,9 @@ export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | nu
     case 'contact_statistics': return 'Estimate one pair’s contact frequency with its uncertainty'
     case 'native_contacts': return 'Compute the fraction of native contacts per frame'
     case 'cutoff_sensitivity': return 'Re-check each supported change at every robustness cutoff'
+    case 'contact_difference_map': return `Map how each ${pair} contact changes between the two windows`
+    case 'residue_flexibility': return 'Measure how much each residue moves (Cα RMSF)'
+    case 'reproduction_check': return 'Check the result against the published code'
     case 'submit_report': return 'Write the report from the recorded findings'
     default: return tool
   }

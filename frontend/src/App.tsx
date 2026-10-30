@@ -13,6 +13,7 @@ import { AgentTrace } from './components/StepLog'
 import { Headline, ReportView } from './components/ReportView'
 import { CostMeter } from './components/CostMeter'
 import { ReproduceView } from './components/ReproduceView'
+import { AnalysisCards } from './components/AnalysisViews'
 import { DOMAIN_COLORS } from './theme'
 
 function Structure({ meta }: { meta: Metadata }) {
@@ -78,7 +79,7 @@ export default function App() {
             {inv.needPasscode && <PasscodePrompt />}
             <span className="muted small">You asked</span>
             <h1 className="inv-question">{inv.question}</h1>
-            <Headline />
+            <Headline meta={meta} />
             <AgentTrace meta={meta} />
           </div>
           {!started && <div className="plan-only"><PlanCard meta={meta} /></div>}
@@ -96,6 +97,7 @@ export default function App() {
                 <div className="evidence-more">
                   <CompareChart meta={meta} />
                   <div className="inv-col">
+                    <AnalysisCards run={inv.run} />
                     <DistancePlot meta={meta} />
                     <Heatmap meta={meta} />
                   </div>

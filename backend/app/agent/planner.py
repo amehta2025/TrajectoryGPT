@@ -14,7 +14,8 @@ from app.science.loader import TRAJ_LOCK, load_universe
 
 MAX_STEPS = 5
 PLAN_TOOLS = ["get_metadata", "list_groups", "calculate_contacts", "distance_over_time", "compare_intervals", "contact_statistics",
-              "cutoff_sensitivity", "native_contacts", "reproduction_check", "submit_report"]
+              "cutoff_sensitivity", "native_contacts", "reproduction_check", "contact_difference_map",
+              "residue_flexibility", "submit_report"]
 
 
 class PlanInvalid(ValueError):
