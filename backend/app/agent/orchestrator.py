@@ -131,6 +131,9 @@ def run_investigation(
             t0 = time.perf_counter()
             result = run_tool(state, call.name, call.arguments)
             tool_s = round(time.perf_counter() - t0, 2)
+            if "provenance" in result:  # the model call that chose this tool, for export (SPEC §11)
+                result["provenance"].update(model=resp.usage.model, provider=resp.usage.provider,
+                                            usage=resp.usage.as_dict(), turn=turn, tool_s=tool_s)
             _auto_check(state, call.name, result["status"])
             run.input_items.append(tool_result_item(call.call_id, result["summary_for_model"]))
             rec.update(tool=call.name, arguments=call.arguments, status=result["status"], tool_s=tool_s,

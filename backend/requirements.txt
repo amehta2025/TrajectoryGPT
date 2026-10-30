@@ -12,6 +12,8 @@ uvicorn==0.54.0
 # LLM (SPEC §6b)
 openai==3.41.0
 python-dotenv==1.2.4
+# Figure mode: PDF text fallback (SPEC §9 step 1)
+pypdf==6.21.4
 # Deploy (SPEC §12)
 modal==1.6.3
 # Tests

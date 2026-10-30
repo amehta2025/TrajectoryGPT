@@ -10,19 +10,27 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Callable
+
+import MDAnalysis
+import scipy
 
 import numpy as np
 
 from app.config import dataset_config
 from app.science import contact_stats as cs
-from app.science.contacts import CONTACT_DEFINITION, calculate_contacts, validate_cutoff, validate_window
+from app.science import stats
+from app.science.contacts import CONTACT_DEFINITION, calculate_contacts, dataset_hashes, validate_cutoff, validate_window
 from app.science.distances import distance_over_time
 from app.science.loader import TRAJ_LOCK, load_universe
 from app.science.native_contacts import native_contacts
 from app.science.residues import make_residue_key, parse_residue_key
 
 TOP_N = 8  # rows per table in a model summary (keeps it well under ~2k tokens)
+# Atom selections native_contacts accepts (the agent cannot pass free-form MDAnalysis selections).
+NATIVE_SELECTIONS = {"name CA": "name CA", "heavy atoms": "protein and not name H*"}
 
 
 # ---------- approved plan and run state ----------
@@ -280,7 +288,10 @@ def _cutoff_sensitivity(plan, args):
 
 def _native_contacts(plan, args):
     start, stop = _window(plan, args.get("window") or "all")
-    selection = args.get("selection") or "name CA"
+    label = args.get("selection") or "name CA"
+    if label not in NATIVE_SELECTIONS:
+        raise Refused(f"selection must be one of {sorted(NATIVE_SELECTIONS)}")
+    selection = NATIVE_SELECTIONS[label]
     radius = float(args.get("radius") or 8.0)
     ref = args.get("ref_frames") or [0, -1]
     with TRAJ_LOCK:
@@ -317,7 +328,7 @@ SCHEMAS = [
     _tool("compare_intervals", "Per-pair contact-frequency change, window b minus window a, with autocorrelation-corrected CIs and BH-FDR q-values; says which pairs are supported.", {}),
     _tool("contact_statistics", "For one pair in one window: frequency, autocorrelation time in ns, independent chunks, and its CI.", {"pair": PAIR, "window": WINDOW}, ["pair"]),
     _tool("cutoff_sensitivity", "Rerun the comparison at every approved robustness cutoff. A pair is robust only if supported at every cutoff with the same sign; otherwise cutoff-sensitive.", {"pairs": {"type": "array", "items": PAIR, "description": "Pairs to judge; default: every pair supported at any cutoff."}}),
-    _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string"}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
+    _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS), "description": "Atoms used: 'name CA' (default, as in the User Guide) or 'heavy atoms'."}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
     _tool("update_checklist", "Mark a plan item done, in progress or skipped (a skip needs a reason in note).", {"item": {"type": "integer", "description": "1-based plan item"}, "status": {"type": "string", "enum": ["in_progress", "done", "skipped"]}, "note": {"type": "string"}}, ["item", "status"]),
     _tool("record_finding", "Record one finding. Text uses placeholders like {{r2.HSE134-ASP118.delta}} for every number; never write numbers. Cite evidence ids (a result 'r2' or a pair 'r2.HSE134-ASP118').", {
         "text": {"type": "string"},
@@ -412,6 +423,18 @@ def _bookkeeping(state, name, args, outcome: dict) -> dict:
             "data_for_ui": jsonable(outcome.get("data")), "params": args, "units": None, "provenance_id": None}
 
 
+@lru_cache(maxsize=1)
+def library_versions() -> dict:
+    return {"MDAnalysis": MDAnalysis.__version__, "numpy": np.__version__, "scipy": scipy.__version__}
+
+
+def provenance_record(dataset: str) -> dict:
+    """What export and reproduction need (SPEC §11); the orchestrator adds the model and its usage."""
+    return {"dataset": dataset, "dataset_hashes": dataset_hashes(dataset), "seed": stats.SEED,
+            "library_versions": library_versions(),
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
 def _store(state, name, args, status, summary, data=None, values=None, pairs=None) -> dict:
     pid = state.next_id("r", state.results)
     units = {"distance": "Å", "time": dataset_config(state.plan.dataset)["time_label"]}
@@ -426,6 +449,7 @@ def _store(state, name, args, status, summary, data=None, values=None, pairs=Non
         "data_for_ui": jsonable(data),
         "values": jsonable(values or {}),
         "pairs": jsonable(pairs or {}),
+        "provenance": provenance_record(state.plan.dataset),
     }
     state.results[pid] = result
     return result

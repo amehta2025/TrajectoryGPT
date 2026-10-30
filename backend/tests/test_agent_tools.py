@@ -173,3 +173,19 @@ def test_null_finding_needs_a_comparison_with_nothing_supported(pretend_stats_va
     assert r["status"] == "refused" and "must cite the compare_intervals result" in r["summary_for_model"]
     r = call(s, "submit_report", finding_ids=[ok])
     assert r["status"] == "submitted" and s.report["findings"][0]["badge"] == "null"
+
+
+def test_results_carry_provenance():
+    s = new_state()
+    r = call(s, "calculate_contacts")
+    p = r["provenance"]
+    assert p["dataset"] == DS and p["seed"] == 0 and len(p["dataset_hashes"]) == 2
+    assert all(len(h) == 64 for h in p["dataset_hashes"].values())
+    assert set(p["library_versions"]) == {"MDAnalysis", "numpy", "scipy"} and p["timestamp"].endswith("+00:00")
+
+
+def test_native_contacts_selection_is_restricted():
+    s = new_state([{"tool": "native_contacts"}])
+    r = call(s, "native_contacts", selection="LID CORE")
+    assert r["status"] == "refused" and "selection must be one of" in r["summary_for_model"]
+    assert call(s, "native_contacts", selection="name CA")["status"] == "ok"

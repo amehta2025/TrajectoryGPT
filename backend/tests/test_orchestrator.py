@@ -188,3 +188,9 @@ def test_run_saved_from_the_start_and_listed(tmp_investigations):
     listed = orch.list_runs()
     assert listed[0]["run_id"] == run.run_id and listed[0]["dataset"] == DS and listed[0]["question"] == "q"
     assert not list(tmp_investigations.glob("*.tmp"))
+
+
+def test_provenance_records_the_model_call():
+    run = orch.run_investigation(ScriptedLLM(GOOD), orch.new_run("q", plan()))
+    p = run.state.results["r1"]["provenance"]
+    assert p["model"] == "fake" and p["turn"] == 1 and p["usage"]["effort"] == "low"
