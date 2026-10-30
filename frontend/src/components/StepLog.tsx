@@ -1,6 +1,8 @@
-// The agent trace: one slim always-visible line under the headline ("Planned 3 steps → ran 2 analyses →
-// 3 findings passed checks → report accepted · 38 s · $0.003"), which expands into the plan checklist,
-// the live step log from the run's server-sent events, and the turn timeline.
+// The agent trace: one slim always-visible line under the headline. While the run is going it shows the
+// plan's steps as a row that lights up as each one happens (the current one pulses), plus a count of
+// findings that passed the checks; afterwards it becomes a summary ("Planned 3 steps → ran 2 analyses →
+// 3 findings passed checks → report accepted · 38 s · $0.003"). It expands into the plan checklist, the
+// live step log from the run's server-sent events, and the turn timeline.
 import { useState } from 'react'
 import type { Metadata, RunEvent } from '../api/client'
 import { nextTurn, useInvestigation } from '../state/investigation'
@@ -8,6 +10,30 @@ import { PlanCard, stepText } from './PlanCard'
 import { Timeline } from './Timeline'
 
 const BOOKKEEPING = new Set(['update_checklist', 'record_finding', 'submit_report'])
+const SHORT: Record<string, string> = {
+  get_metadata: 'Check dataset', list_groups: 'Domains', calculate_contacts: 'Contact map', distance_over_time: 'Distance trace',
+  compare_intervals: 'Compare windows', contact_statistics: 'Pair statistics', native_contacts: 'Native contacts',
+  cutoff_sensitivity: 'Check cutoffs', reproduction_check: 'Check vs published code', submit_report: 'Write report',
+}
+
+/** The plan's steps as a row that lights up while the run is going. */
+function LiveSteps({ run, paused }: { run: NonNullable<ReturnType<typeof useInvestigation>['run']>; paused: boolean }) {
+  const current = run.checklist.find((c) => c.status === 'in_progress') ?? run.checklist.find((c) => c.status === 'pending')
+  const findings = run.turns.filter((t) => t.tool === 'record_finding' && t.status === 'ok').length
+  return (
+    <ol className="live-steps" aria-live="polite">
+      {run.checklist.map((c) => {
+        const state = c === current && !paused ? 'current' : c.status === 'done' ? 'done' : c.status === 'skipped' ? 'skipped' : 'pending'
+        return (
+          <li key={c.item} className={`lstep ${state}`} title={`${c.text}${c.note ? ` — ${c.note}` : ''}`}>
+            <span className="ldot" />{SHORT[c.tool] ?? c.tool}
+          </li>
+        )
+      })}
+      {findings > 0 && <li className="lstep done findings-count"><span className="ldot" />{findings} {findings === 1 ? 'finding' : 'findings'} checked</li>}
+    </ol>
+  )
+}
 const cost = (c: number | null) => (c === null ? '' : ` · $${c.toFixed(4)}`)
 
 function line(e: RunEvent): { text: string; cls: string } | null {
@@ -77,7 +103,9 @@ export function AgentTrace({ meta }: { meta: Metadata | null }) {
         <button className="trace-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
           <span className="trace-caret">{open ? '▾' : '▸'}</span>
           <span className="trace-label">Agent</span>
-          {parts.map((p, i) => <span key={i} className="trace-part">{i > 0 && <span className="arrow">→</span>}{p}</span>)}
+          {finished
+            ? parts.map((p, i) => <span key={i} className="trace-part">{i > 0 && <span className="arrow">→</span>}{p}</span>)
+            : <LiveSteps run={run} paused={paused} />}
           {finished && <span className="trace-meta">· {run.wall_s.toFixed(0)} s{run.cost_usd !== null ? ` · $${run.cost_usd.toFixed(3)}` : ''}</span>}
         </button>
         {paused && <button className="primary small" onClick={() => void nextTurn()}>Next step</button>}

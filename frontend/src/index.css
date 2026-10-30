@@ -274,3 +274,18 @@ dl.kv dt { color: var(--muted); }
 dl.kv dd { margin: 0; font-family: var(--mono); color: #dde2ea; }
 .badge.supported { color: var(--ok); border-color: #2c5e45; }
 .report > .folds { margin-top: 0; }
+
+/* live agent steps */
+.live-steps { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0; padding: 0; }
+.lstep { display: inline-flex; align-items: center; gap: 6px; color: #5d6678; white-space: nowrap; transition: color 0.3s; }
+.lstep + .lstep::before { content: ''; display: inline-block; width: 18px; height: 1px; background: #2a3242; margin: 0 8px; transition: background 0.3s; }
+.lstep.done + .lstep::before, .lstep.current::before { background: #6f788b; }
+.ldot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #4a5366; transition: background 0.3s, border-color 0.3s; }
+.lstep.done { color: #b9c0cc; }
+.lstep.done .ldot { background: var(--ok); border-color: var(--ok); }
+.lstep.skipped { color: #6f788b; text-decoration: line-through; }
+.lstep.current { color: var(--text); }
+.lstep.current .ldot { background: var(--accent); border-color: var(--accent); animation: lpulse 1.2s ease-in-out infinite; }
+.findings-count { color: var(--muted); }
+@keyframes lpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(156, 195, 230, 0.55); } 50% { box-shadow: 0 0 0 5px rgba(156, 195, 230, 0); } }
+@media (prefers-reduced-motion: reduce) { .lstep.current .ldot { animation: none; } .lstep, .ldot, .lstep::before { transition: none; } }
