@@ -82,6 +82,20 @@ def propose_plan(question: str, dataset: str, llm: LLM | None = None) -> dict:
     return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model}
 
 
+def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LLM | None = None) -> dict:
+    """Figure mode: uploads -> extracted spec -> plan, stored like a question's plan."""
+    from app.agent.figure import plan_from_figure
+    llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
+    out = plan_from_figure(llm, files, dataset, note)
+    pid = uuid.uuid4().hex[:12]
+    usage = [u.as_dict() for u in out["usages"]]
+    with _lock:
+        PLANS[pid] = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
+                      "usage": usage, "llm": llm, "figure": out["figure"]}
+    return {"plan_id": pid, "plan": out["plan"], "usage": usage, "model": llm.model, "figure": out["figure"],
+            "question": out["question"]}
+
+
 def start_run(plan_id: str, edits: dict, step_through: bool = False) -> str:
     """Approve the stored plan with the user's edits (validated in code) and start it in the background."""
     with _lock:
@@ -95,6 +109,7 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False) -> str:
     approved = to_approved(plan)  # raises PlanInvalid with the problems
     run = new_run(stored["question"], approved)
     run.plan_usage = stored["usage"]
+    run.figure = stored.get("figure")
     handle = RunHandle(run, step_through=step_through)
     with _lock:
         RUNS[run.run_id] = handle

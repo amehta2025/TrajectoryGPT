@@ -40,6 +40,7 @@ class Run:
     created: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"))
     wall_s: float = 0.0
     error: str | None = None
+    figure: dict | None = None  # figure mode: {figure_id, filename, mime, spec}
 
     def cost_usd(self) -> float | None:
         costs = [t["usage"]["cost_usd"] for t in self.turns] + [u["cost_usd"] for u in self.plan_usage]
@@ -51,7 +52,7 @@ class Run:
             "plan": self.plan.as_dict(), "checklist": self.state.checklist, "turns": self.turns,
             "plan_usage": self.plan_usage, "results": self.state.results, "findings": self.state.findings,
             "report": self.state.report, "extra_steps": self.state.extra_steps, "problems": self.problems, "wall_s": round(self.wall_s, 2),
-            "cost_usd": self.cost_usd(), "error": self.error,
+            "cost_usd": self.cost_usd(), "error": self.error, "figure": self.figure,
             "input_items": self.input_items,  # full history incl. encrypted reasoning, for resume_run
         })
 
@@ -104,7 +105,7 @@ def run_investigation(
     tools = tools_for(plan.dataset)
     if not run.input_items:
         run.input_items = [{"role": "system", "content": prompts.AGENT_SYSTEM},
-                           {"role": "user", "content": prompts.agent_user(run.question, plan.as_dict())}]
+                           {"role": "user", "content": prompts.agent_user(run.question, plan.as_dict(), run.figure)}]
     refusals = sum(1 for t in run.turns if t["tool"] == "submit_report" and t["status"] == "refused")
     seen_at_start = 0 if not run.turns else len(run.input_items)  # timeline shows only what is new each turn
     run.save()
@@ -182,7 +183,7 @@ def load_run(run_id: str, directory: Path | None = None) -> Run:
                      extra_steps=d.get("extra_steps", []))
     return Run(d["run_id"], d["question"], plan, state, status=d["status"], turns=d["turns"],
                plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"],
-               wall_s=d.get("wall_s", 0.0), error=d.get("error"))
+               wall_s=d.get("wall_s", 0.0), error=d.get("error"), figure=d.get("figure"))
 
 
 def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:

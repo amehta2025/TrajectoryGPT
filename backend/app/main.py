@@ -239,6 +239,29 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 
 
+@app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
+def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body("")):
+    """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
+    from app.agent.figure import UploadRejected
+    _check_dataset(dataset)
+    try:
+        return session.propose_figure_plan(files, dataset, note[:2000])
+    except UploadRejected as e:
+        raise HTTPException(400, str(e)) from None
+    except PlanInvalid as e:
+        raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
+
+
+@app.get("/figures/{figure_id}")
+def get_figure(figure_id: str):
+    from app.agent.figure import load_figure
+    try:
+        raw, mime = load_figure(figure_id)
+    except KeyError:
+        raise HTTPException(404, "unknown figure") from None
+    return Response(content=raw, media_type=mime)
+
+
 @app.post("/runs", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False)):
     try:

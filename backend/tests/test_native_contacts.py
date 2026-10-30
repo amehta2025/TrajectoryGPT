@@ -47,3 +47,17 @@ def test_window_and_custom_reference():
 def test_rejects_bad_params(kwargs):
     with pytest.raises(ValueError):
         native_contacts(DS, **kwargs)
+
+
+def test_reproduction_check_matches_published_code():
+    from app.science.native_contacts import reproduction_check
+    r = reproduction_check(DS)
+    assert r["match"] and r["max_abs_diff"] <= r["tolerance"] and r["n_values"] == 98 * 2
+    assert r["endpoints"]["q1_last"] == pytest.approx(0.932, abs=1e-3)
+
+
+def test_reproduction_check_detects_a_mismatch(monkeypatch):
+    import app.science.native_contacts as nc
+    real = nc.native_contacts
+    monkeypatch.setattr(nc, "native_contacts", lambda *a, **k: {**(r := real(*a, **k)), "q": r["q"] + 1e-3})
+    assert not nc.reproduction_check(DS)["match"]

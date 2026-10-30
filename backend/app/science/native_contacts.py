@@ -9,6 +9,7 @@ import warnings
 
 import MDAnalysis as mda
 import numpy as np
+from MDAnalysis.analysis import contacts
 from MDAnalysis.analysis.contacts import Contacts
 
 from app.config import dataset_config
@@ -77,4 +78,36 @@ def native_contacts(
         "method": "MDAnalysis.analysis.contacts.Contacts, method='radius_cut' (as contacts.q1q2)",
         "pbc": pbc_mode(dataset),
         "units": {"distance": "Å", "time": cfg["time_label"], "dt_ns": cfg["dt_ns"]},
+    }
+
+
+REPRO_TOLERANCE = 1e-6  # max |ours - published code| for an exact reproduction
+
+
+def reproduction_check(dataset: str, selection: str = "name CA", radius: float = 8.0) -> dict:
+    """Exact-reproduction check (SPEC §5c): our native_contacts vs the published method itself.
+
+    The reference is the MDAnalysis User Guide's code, contacts.q1q2(u, selection, radius), run in a fresh
+    Universe. Ours is native_contacts() with the same parameters and reference frames 0 and last.
+    """
+    if not (RADIUS_MIN <= radius <= RADIUS_MAX):
+        raise ValueError(f"radius must be between {RADIUS_MIN} and {RADIUS_MAX} Å, got {radius}")
+    ours = native_contacts(dataset, selection, radius, (0, -1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        u = mda.Universe(*dataset_files(dataset))
+    ref = contacts.q1q2(u, selection, radius=radius).run().results.timeseries  # columns: frame, Q1, Q2
+    if ref.shape != (len(ours["frames"]), 3) or not np.array_equal(ref[:, 0].astype(int), ours["frames"]):
+        raise ValueError("reference and our frames differ; cannot compare")
+    diff = np.abs(ours["q"] - ref[:, 1:])
+    max_diff = float(diff.max())
+    return {
+        "dataset": dataset, "selection": selection, "radius": float(radius), "ref_frames": ours["ref_frames"],
+        "frames": ours["frames"], "time_ns": ours["time_ns"], "ours": ours["q"], "reference": ref[:, 1:],
+        "max_abs_diff": max_diff, "n_values": int(diff.size), "tolerance": REPRO_TOLERANCE,
+        "match": max_diff <= REPRO_TOLERANCE,
+        "reference_method": f"MDAnalysis.analysis.contacts.q1q2(u, {selection!r}, radius={radius}) (MDAnalysis User Guide)",
+        "endpoints": {"q1_first": float(ours["q"][0, 0]), "q1_last": float(ours["q"][-1, 0]),
+                      "q2_first": float(ours["q"][0, 1]), "q2_last": float(ours["q"][-1, 1])},
+        "units": ours["units"],
     }

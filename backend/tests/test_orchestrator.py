@@ -168,6 +168,7 @@ def test_explain_transition_with_descriptive_finding_and_background():
     assert "{{" not in f["rendered"] and not f["robustness"]
     assert rep["background"][0]["text"].startswith("Adenylate kinase") and rep["background_label"] == "background — not computed"
     assert any("no statistics were computed" in c["text"] for c in rep["caveats"])
+    assert not any(c["text"].startswith("Limited sampling") for c in rep["caveats"])
 
 
 @pytest.mark.parametrize("text", ["The path shows a significant loss of native contacts {{r1.ref0.q_last}}",

@@ -25,7 +25,7 @@ from app.science import stats
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts, dataset_hashes, validate_cutoff, validate_window
 from app.science.distances import distance_over_time
 from app.science.loader import TRAJ_LOCK, load_universe
-from app.science.native_contacts import native_contacts
+from app.science.native_contacts import native_contacts, reproduction_check
 from app.science.residues import make_residue_key, parse_residue_key
 
 TOP_N = 8  # rows per table in a model summary (keeps it well under ~2k tokens)
@@ -308,6 +308,22 @@ def _native_contacts(plan, args):
     return r, summary, values, {}
 
 
+def _reproduction_check(plan, args):
+    label = args.get("selection") or "name CA"
+    if label not in NATIVE_SELECTIONS:
+        raise Refused(f"selection must be one of {sorted(NATIVE_SELECTIONS)}")
+    radius = float(args.get("radius") or 8.0)
+    with TRAJ_LOCK:
+        r = reproduction_check(plan.dataset, NATIVE_SELECTIONS[label], radius)
+    e = r["endpoints"]
+    values = {"max_abs_diff": _v(r["max_abs_diff"], "sci"), "tolerance": _v(r["tolerance"], "sci"),
+              "n_values": _v(r["n_values"], "count"), "match": _v(r["match"], "match"),
+              **{k: _v(v, "freq") for k, v in e.items()}}
+    summary = {"reference": r["reference_method"], "match": r["match"], "max_abs_diff": r["max_abs_diff"],
+               "tolerance": r["tolerance"], "n_values": r["n_values"], "endpoints": {k: _r(v) for k, v in e.items()}}
+    return r, summary, values, {}
+
+
 # ---------- schemas (Responses API flat function tools) ----------
 
 def _tool(name: str, description: str, props: dict, required: list[str] | None = None) -> dict:
@@ -329,6 +345,7 @@ SCHEMAS = [
     _tool("contact_statistics", "For one pair in one window: frequency, autocorrelation time in ns, independent chunks, and its CI.", {"pair": PAIR, "window": WINDOW}, ["pair"]),
     _tool("cutoff_sensitivity", "Rerun the comparison at every approved robustness cutoff. A pair is robust only if supported at every cutoff with the same sign; otherwise cutoff-sensitive.", {"pairs": {"type": "array", "items": PAIR, "description": "Pairs to judge; default: every pair supported at any cutoff."}}),
     _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS), "description": "Atoms used: 'name CA' (default, as in the User Guide) or 'heavy atoms'."}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
+    _tool("reproduction_check", "Exact-reproduction check: run the published MDAnalysis User Guide code (contacts.q1q2) and compare it with our native_contacts (reference frames first and last); reports the largest difference and whether it is within tolerance.", {"selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS)}, "radius": {"type": "number"}}),
     _tool("update_checklist", "Mark a plan item done, in progress or skipped (a skip needs a reason in note).", {"item": {"type": "integer", "description": "1-based plan item"}, "status": {"type": "string", "enum": ["in_progress", "done", "skipped"]}, "note": {"type": "string"}}, ["item", "status"]),
     _tool("record_finding", "Record one finding. Text uses placeholders like {{r2.HSE134-ASP118.delta}} for every number; never write numbers. Cite evidence ids (a result 'r2' or a pair 'r2.HSE134-ASP118').", {
         "text": {"type": "string"},
@@ -355,7 +372,7 @@ SCIENCE: dict[str, Callable] = {
     "get_metadata": _get_metadata, "list_groups": _list_groups, "calculate_contacts": _calculate_contacts,
     "distance_over_time": _distance_over_time, "compare_intervals": _compare_intervals,
     "contact_statistics": _contact_statistics, "cutoff_sensitivity": _cutoff_sensitivity,
-    "native_contacts": _native_contacts,
+    "native_contacts": _native_contacts, "reproduction_check": _reproduction_check,
 }
 STATS_TOOLS = {"compare_intervals", "contact_statistics", "cutoff_sensitivity"}
 FREE_TOOLS = {"get_metadata", "list_groups"}  # informational; never count as an extra step

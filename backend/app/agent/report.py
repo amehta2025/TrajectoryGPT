@@ -54,6 +54,10 @@ def format_value(v, kind: str, time_label: str = "ns") -> str:
         return f"[{_num(lo)}, {_num(hi)}]"
     if kind == "q":
         return f"{v:.1e}".replace("-", "−") if v < 1e-3 else f"{v:.2g}"
+    if kind == "sci":
+        return f"{v:.1e}".replace("-", "−")
+    if kind == "match":
+        return "matches" if v else "does not match"
     if kind == "tau_ns":
         return f"{v:.1f} ns"
     if kind == "chunks":
@@ -312,7 +316,8 @@ def build_report(state, args: dict) -> dict:
                        for k in ("delta", "ci", "q", "n_blocks_a", "n_blocks_b", "tau_ns_a", "tau_ns_b")},
                     "supported": res["pairs"][pair]["supported"], "provisional": res["pairs"][pair]["provisional"],
                     "robustness": robustness(state, pair)["label"]})
-    caveats = STANDARD_CAVEATS + ([] if dataset_config(state.plan.dataset)["stats_valid"] else [UNTESTED_CAVEAT])
+    # The sampling caveat is about statistics; on a dataset without them, say that no statistics were computed.
+    caveats = STANDARD_CAVEATS if dataset_config(state.plan.dataset)["stats_valid"] else [STANDARD_CAVEATS[0], UNTESTED_CAVEAT]
 
     def section(key):
         return [dict(zip(("text", "segments"), render(state, t))) for t in (args.get(key) or [])]

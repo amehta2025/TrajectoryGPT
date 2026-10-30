@@ -7,9 +7,11 @@
 Uses META_MODEL from .env (contributor in development) and aborts a run whose estimated cost passes --budget.
 """
 import argparse
+import base64
 import json
 import sys
 import time
+from pathlib import Path
 
 # Windows consoles default to cp1252, which cannot print "−" or "Å": force UTF-8 before any output.
 for _stream in (sys.stdout, sys.stderr):
@@ -78,13 +80,33 @@ def _print_timing(run, plan_s: float) -> None:
     print(f"  cost:  {_cost(run.cost_usd())} over {len(calls)} calls  (model {calls[0]['model']})")
 
 
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf"}
+
+
+def _print_figure(fig: dict) -> None:
+    spec = fig["spec"]
+    print(f"\nFigure: {spec['summary']}")
+    print(f"  mode: {spec['mode']} ({spec['dataset']}) - {spec['mode_reason']}")
+    for f in spec["fields"]:
+        print(f"  {f['name']:<22} {f['value']:<40} {f['confidence']:<6} {f['source']}")
+
+
 def cmd_run(a) -> int:
     tracker = CostTracker(limit_usd=a.budget)
     llm = LLM(a.provider, tracker=tracker)
     print(f"Model {llm.model} ({llm.provider}); budget {_cost(a.budget)} per run")
     t0 = time.perf_counter()
+    figure = None
     try:
-        plan, usages = make_plan(llm, a.question, a.dataset)
+        if a.cmd == "figure":
+            from app.agent.figure import plan_from_figure
+            files = [{"filename": Path(p).name, "mime": MIME.get(Path(p).suffix.lower(), "?"),
+                      "data": base64.b64encode(Path(p).read_bytes()).decode()} for p in a.files]
+            out = plan_from_figure(llm, files, a.dataset, a.note)
+            plan, usages, figure, a.question = out["plan"], out["usages"], out["figure"], out["question"]
+            _print_figure(figure)
+        else:
+            plan, usages = make_plan(llm, a.question, a.dataset)
     except PlanInvalid as e:
         print("Plan invalid after one retry:\n  - " + "\n  - ".join(e.errors))
         return 1
@@ -110,10 +132,19 @@ def cmd_run(a) -> int:
 
     run = new_run(a.question, approved)
     run.plan_usage = [u.as_dict() for u in usages]
+    run.figure = figure
     print(f"\nRun {run.run_id}")
     run = run_investigation(llm, run, max_turns=a.turns, on_event=_print_turn)
     path = run.save()
     _print_report(run)
+    for res in run.state.results.values():
+        if res["tool"] == "reproduction_check" and res["status"] == "ok":
+            d = res["data_for_ui"]
+            print(f"\nReproduction vs published code: {'MATCH' if d['match'] else 'NO MATCH'} - max |Δ| "
+                  f"{d['max_abs_diff']:.1e} over {d['n_values']} values (tolerance {d['tolerance']:.0e})")
+        elif figure and figure["spec"]["mode"] == "transfer":
+            print("\nMethod applied to your data — numbers are not expected to match.")
+            break
     _print_timing(run, plan_s)
     print(f"\nSaved {path}")
     return 0 if run.status == "awaiting_verification" else 1
@@ -130,6 +161,16 @@ def main(argv=None) -> int:
     r.add_argument("--cutoff", type=float, help="edit the plan's main cutoff (Å)")
     r.add_argument("--robust", help="edit the robustness cutoffs, e.g. 4.0,4.5,5.0")
     r.add_argument("--budget", type=float, default=DEV_BUDGET_USD, help="abort when estimated $ passes this")
+    f = sub.add_parser("figure", help="reproduce a figure: image and/or methods PDF -> spec -> plan -> run")
+    f.add_argument("files", nargs="+", help="PNG/JPEG figure and optional PDF")
+    f.add_argument("--note", default="", help="optional text from the user")
+    for p in (f,):
+        p.add_argument("--turns", type=int, default=MAX_TURNS)
+        p.add_argument("--dataset", default="adk_equilibrium", help="dataset for a method transfer")
+        p.add_argument("--provider", choices=["meta", "baseten"], default=None)
+        p.add_argument("--cutoff", type=float)
+        p.add_argument("--robust")
+        p.add_argument("--budget", type=float, default=DEV_BUDGET_USD)
     a = ap.parse_args(argv)
     return cmd_run(a)
 
