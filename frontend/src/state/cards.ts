@@ -226,3 +226,47 @@ export function plainSentence(card: Card, groups: Record<string, { ranges: [numb
   }
   return card.freqs.length === 1 ? `${what} is present ${WINDOW_WORDS[card.freqs[0].name] ?? 'in this window'}.` : `${what} was observed.`
 }
+
+// ---------- markers ----------
+
+/** A finding not tied to one pair but naming residues (e.g. "the most flexible residues are THR149, VAL148"). */
+export type Located = { finding: Finding; resids: number[] }
+export type Marker = { n: number; resids: number[] }
+
+const RESIDUE_IN_TEXT = /\b(?:ALA|ARG|ASN|ASP|CYS|GLN|GLU|GLY|HIS|HSD|HSE|HSP|ILE|LEU|LYS|MET|PHE|PRO|SER|THR|TRP|TYR|VAL)(\d{1,3})\b/g
+
+/** Residue numbers named in a finding's own text (resolved values excluded), in order, without repeats. */
+export function residuesNamed(f: Finding): number[] {
+  const text = f.segments.filter((s) => !s.pid).map((s) => s.text).join(' ') || f.text
+  return [...new Set([...text.matchAll(RESIDUE_IN_TEXT)].map((m) => Number(m[1])))]
+}
+
+/** Split leftover notes into located ones (they name residues) and notes with no location. */
+export function locateNotes(notes: Finding[]): { located: Located[]; unlocated: Finding[] } {
+  const located: Located[] = []
+  const unlocated: Finding[] = []
+  for (const f of notes) {
+    const resids = residuesNamed(f)
+    if (resids.length) located.push({ finding: f, resids })
+    else unlocated.push(f)
+  }
+  return { located, unlocated }
+}
+
+/** Numbers 1..n: contact cards first, then located findings. Unlocated findings get none. */
+export function markersFor(cards: Card[], located: Located[]): Marker[] {
+  const res = (k: string) => Number(k.split(':')[2])
+  return [
+    ...cards.map((c, i) => ({ n: i + 1, resids: [res(c.keyA), res(c.keyB)] })),
+    ...located.map((l, i) => ({ n: cards.length + i + 1, resids: l.resids })),
+  ]
+}
+
+/** Plain sentence for a located finding, from the tool it cites. */
+export function locatedSentence(l: Located, run: RunView): string {
+  const tools = new Set(l.finding.evidence_ids.map((e) => run.results[e.split('.')[0]]?.tool))
+  if (tools.has('residue_flexibility')) return 'These parts of the protein move the most.'
+  if (tools.has('contact_difference_map')) return 'These residues are where the contacts change most.'
+  if (tools.has('calculate_contacts') || tools.has('compare_intervals')) return 'These residues take part in the contacts described here.'
+  return 'This finding is about the marked residues.'
+}

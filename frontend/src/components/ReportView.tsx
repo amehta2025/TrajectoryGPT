@@ -12,7 +12,7 @@ import { api, type Finding, type Metadata, type RunView, type Segment, type Text
 import { toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
-import { buildCards, plainSentence, type Card } from '../state/cards'
+import { buildCards, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
 
 type CompareData = {
   group_a: string; group_b: string; n_tested: number; n_filtered: number; n_supported: number
@@ -187,12 +187,12 @@ function FreqBars({ card }: { card: Card }) {
   )
 }
 
-function ContactCard({ card, run, meta, selected, science }: { card: Card; run: RunView; meta: Metadata; selected: boolean; science: boolean }) {
+function ContactCard({ card, n, run, meta, selected, science }: { card: Card; n: number; run: RunView; meta: Metadata; selected: boolean; science: boolean }) {
   const s = card.stats
   return (
     <li className={`ccard ${card.badge} ${selected ? 'selected' : ''}`}>
       <button className="ccard-main" onClick={() => void focusCard(card, meta)} title="Show this contact in 3D">
-        <span className="ccard-sentence">{plainSentence(card, meta.groups)}</span>
+        <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{plainSentence(card, meta.groups)}</span>
         {card.freqs.length > 0 && <FreqBars card={card} />}
       </button>
       {science && (
@@ -229,6 +229,21 @@ function ContactCard({ card, run, meta, selected, science }: { card: Card; run: 
   )
 }
 
+/** A finding that names residues but no single pair: its number (also drawn in 3D) and a plain sentence. */
+function LocatedCard({ l, n, run, science }: { l: Located; n: number; run: RunView; science: boolean }) {
+  return (
+    <li className="ccard located">
+      <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{locatedSentence(l, run)}</span>
+      {science && (
+        <div className="ccard-detail">
+          <p className="ccard-text"><Segments segs={l.finding.segments} run={run} /></p>
+          <Sources f={l.finding} run={run} />
+        </div>
+      )}
+    </li>
+  )
+}
+
 function Fold({ title, items, run, open = false }: { title: string; items: TextItem[]; run: RunView; open?: boolean }) {
   if (!items.length) return null
   return (
@@ -247,22 +262,28 @@ export function ReportView({ meta }: { meta: Metadata | null }) {
     () => (run?.report && meta ? buildCards(run, meta.n_frames, meta.dt_ns !== null) : null),
     [run, meta],
   )
+  const located = useMemo(() => (built ? locateNotes(built.notes).located : []), [built])
+  const markers = useMemo(() => (built ? markersFor(built.cards, located) : []), [built, located])
   const top = built?.cards.find((c) => c.badge === 'supported' || c.badge === 'proven') ?? built?.cards[0]
   useEffect(() => {
     if (top && meta && phase === 'finished') void focusCard(top, meta).catch(() => {})
   }, [run?.run_id, top?.id, meta, phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setSelection({ markers: phase === 'finished' ? markers : [] })
+  }, [markers, phase])
 
   if (!run || phase !== 'finished' || !meta || !built) return null
-  if (!built.cards.length) {
-    return <p className="muted report-empty">Nothing here is tied to a single contact. The findings are under “Show the science”.</p>
+  if (!built.cards.length && !located.length) {
+    return <p className="muted report-empty">None of these findings points to a specific place in the protein. They are under “Show the science”.</p>
   }
   return (
     <section className="report">
       <ul className="ccards">
-        {built.cards.map((c) => (
-          <ContactCard key={c.id} card={c} run={run} meta={meta} science={science}
+        {built.cards.map((c, i) => (
+          <ContactCard key={c.id} card={c} n={i + 1} run={run} meta={meta} science={science}
             selected={pair?.keyA === c.keyA && pair?.keyB === c.keyB} />
         ))}
+        {located.map((l, i) => <LocatedCard key={l.finding.id} l={l} n={built.cards.length + i + 1} run={run} science={science} />)}
       </ul>
     </section>
   )
@@ -312,9 +333,9 @@ export function ScienceReport({ meta }: { meta: Metadata | null }) {
           {sens && <> · robustness checked at {range(sens.cutoffs)}</>}
         </p>
       )}
-      {built && built.notes.length > 0 && (
+      {built && locateNotes(built.notes).unlocated.length > 0 && (
         <ul className="plain notes">
-          {built.notes.map((f) => (
+          {locateNotes(built.notes).unlocated.map((f) => (
             <li key={f.id}><span className={`badge ${f.badge}`}>{f.badge === 'proven' ? 'supported' : f.badge_label}</span>{' '}
               <Segments segs={f.segments} run={run} /> <Sources f={f} run={run} /></li>
           ))}

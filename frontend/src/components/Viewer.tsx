@@ -26,12 +26,12 @@ function domainScheme(meta: Metadata): string {
 }
 
 export function Viewer({ meta }: { meta: Metadata }) {
-  const { pair, frame, focus } = useSelection()
+  const { pair, frame, focus, markers } = useSelection()
   const { science } = useInvestigation() // residue labels, frame numbers and times only with "Show the science"
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<NGL.Stage | null>(null)
   const comp = useRef<NGL.StructureComponent | null>(null)
-  const reps = useRef<{ a: Rep; b: Rep; label: Rep } | null>(null)
+  const reps = useRef<{ a: Rep; b: Rep; label: Rep; marks: Rep; dots: Rep } | null>(null)
   const playback = useRef<Playback | null>(null)
   const exact = useRef(new Map<number, Float32Array>())
   const [status, setStatus] = useState('Loading structure…')
@@ -89,7 +89,13 @@ export function Viewer({ meta }: { meta: Metadata }) {
           showBorder: true, borderColor: '#000000', borderWidth: 0.4,
         })
         comp.current = c
-        reps.current = { a, b, label }
+        // Numbered markers: the finding's number on each of its residues (C-alpha), over a small white dot.
+        const dots = c.addRepresentation('spacefill', { sele: NONE, color: '#ffffff', radiusType: 'size', radiusSize: 0.9, opacity: 0.85 })
+        const marks = c.addRepresentation('label', {
+          sele: NONE, labelType: 'text', labelText: [] as string[], color: '#0b0e14', fixedSize: true, radiusType: 'size',
+          radiusSize: 1.5, showBackground: true, backgroundColor: '#ffffff', backgroundOpacity: 1, zOffset: 2,
+        })
+        reps.current = { a, b, label, marks, dots }
         c.autoView()
 
         const stride = meta.playback_stride
@@ -140,6 +146,28 @@ export function Viewer({ meta }: { meta: Metadata }) {
     r.label.setSelection(`(${residueKeyToNglSelection(pair.keyA)}) or (${residueKeyToNglSelection(pair.keyB)})`)
     r.label.setVisibility(science)
   }, [pair, loadedFor, meta.dataset, science])
+
+  // Draw the numbered markers of located findings; findings with no location have none.
+  useEffect(() => {
+    const r = reps.current
+    const c = comp.current
+    if (!r || !c || loadedFor !== meta.dataset) return
+    if (!markers.length) {
+      r.marks.setSelection(NONE)
+      r.dots.setSelection(NONE)
+      return
+    }
+    const byResid = new Map<number, number[]>()
+    for (const m of markers) for (const rid of m.resids) byResid.set(rid, [...(byResid.get(rid) ?? []), m.n])
+    const labelText: string[] = []
+    for (const [rid, ns] of byResid) {
+      for (const i of c.structure.getAtomIndices(new NGL.Selection(`${rid} and .CA`)) ?? []) labelText[i] = ns.join(',')
+    }
+    const sele = `(${[...byResid.keys()].join(' or ')}) and .CA` // parentheses: 'and' binds tighter than 'or'
+    r.marks.setParameters({ labelText })
+    r.marks.setSelection(`(${sele})`)
+    r.dots.setSelection(`(${sele})`)
+  }, [markers, loadedFor, meta.dataset])
 
   // Show the requested frame: from the playback set if present, otherwise fetch it exactly.
   useEffect(() => {

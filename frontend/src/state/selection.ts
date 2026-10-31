@@ -12,9 +12,10 @@ export type Selection = {
   cutoff: number // Å; the approved plan's cutoff once an investigation runs
   windows: [[number, number], [number, number]] | null // approved comparison windows; null = halves
   focus: { frame: number; text: string; plain: string } | null // why the viewer shows this frame: technical and plain wording
+  markers: { n: number; resids: number[] }[] // numbered findings, drawn on their residues in 3D
 }
 
-let state: Selection = { dataset: 'adk_equilibrium', groupA: 'NMP', groupB: 'CORE', pair: null, frame: 0, cutoff: 4.5, windows: null, focus: null }
+let state: Selection = { dataset: 'adk_equilibrium', groupA: 'NMP', groupB: 'CORE', pair: null, frame: 0, cutoff: 4.5, windows: null, focus: null, markers: [] }
 const listeners = new Set<() => void>()
 
 export function setSelection(patch: Partial<Selection>) {

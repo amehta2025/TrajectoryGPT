@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Finding, RunView } from '../api/client'
-import { buildCards, domainOf, plainSentence, windowNames, type Card } from './cards'
+import { buildCards, domainOf, locateNotes, markersFor, plainSentence, residuesNamed, windowNames, type Card } from './cards'
 
 const K = (r: string) => `adk_equilibrium:ADK:${r.slice(3)}:${r.slice(0, 3)}`
 const finding = (over: Partial<Finding>): Finding => ({
@@ -113,5 +113,22 @@ describe('plain sentences', () => {
   it('finds the domain of a residue', () => {
     expect(domainOf(K('ASP54'), groups)).toBe('NMP')
     expect(domainOf(K('ASP118'), groups)).toBe('CORE')
+  })
+})
+
+describe('numbered markers', () => {
+  it('numbers contact cards first, then findings that name residues; findings with no location get none', () => {
+    const flex = finding({ id: 'f2', badge: 'descriptive', text: 'The most flexible residues are THR149, VAL148 and GLY150.' })
+    const none = finding({ id: 'f3', badge: 'descriptive', text: 'The dataset is a 98-frame path.' })
+    const { located, unlocated } = locateNotes([flex, none])
+    expect(located.map((l) => l.resids)).toEqual([[149, 148, 150]])
+    expect(unlocated.map((f) => f.id)).toEqual(['f3'])
+    const c = { keyA: K('HSE134'), keyB: K('ASP118') } as Card
+    expect(markersFor([c], located)).toEqual([{ n: 1, resids: [134, 118] }, { n: 2, resids: [149, 148, 150] }])
+  })
+
+  it('ignores numbers that come from resolved values', () => {
+    const f = finding({ text: '', segments: [{ text: 'frequency ' }, { text: 'ALA12', pid: 'r1', path: 'x' }] })
+    expect(residuesNamed(f)).toEqual([])
   })
 })
