@@ -72,7 +72,7 @@ function Ours({ run }: { run: RunView | null }) {
 const CONF_TEXT = { high: 'read clearly', medium: 'probably right', low: 'unsure: please check' }
 
 /** What was read from the figure; low-confidence settings get a tick box until a run starts. */
-function SpecList({ figure, editable }: { figure: Figure; editable: boolean }) {
+function SpecList({ figure, editable, science }: { figure: Figure; editable: boolean; science: boolean }) {
   const { confirmed } = useInvestigation()
   return (
     <ul className="spec-list">
@@ -83,7 +83,9 @@ function SpecList({ figure, editable }: { figure: Figure; editable: boolean }) {
           <li key={f.name} className={`spec-row conf-${f.confidence} ${low && !ok ? 'needs-check' : ''}`}>
             <span className="spec-name">{f.name}</span>
             <span className="spec-value">{f.value}</span>
-            <span className="spec-meta" title={`confidence: ${f.confidence} · read from: ${f.source}`}>{CONF_TEXT[f.confidence]} · {f.source}</span>
+            <span className="spec-meta" title={`confidence: ${f.confidence} · read from: ${f.source}`}>
+              {science ? `${CONF_TEXT[f.confidence]} · ${f.source}` : low ? 'please check' : ''}
+            </span>
             {low
               ? (
                 <label className="spec-check">
@@ -99,7 +101,7 @@ function SpecList({ figure, editable }: { figure: Figure; editable: boolean }) {
 }
 
 export function ReproduceView() {
-  const { proposal, run, phase } = useInvestigation()
+  const { proposal, run, phase, science } = useInvestigation()
   const figure = run?.figure ?? proposal?.figure
   if (!figure) return null
   const repro = lastData<Repro>(run ?? null, 'reproduction_check')
@@ -109,13 +111,15 @@ export function ReproduceView() {
   return (
     <section className="card reproduce">
       <header className="card-head">
-        <h2>Reproduce a figure</h2>
-        <span className="repro-tags">
-          <span className="tag">{KIND_LABEL[figure.spec.kind]}</span>
-          <span className={`tag ${exact ? 'tag-strong' : ''}`}>{exact ? `exact reproduction · same data` : 'method transfer'}</span>
-        </span>
+        <h2>{exact ? 'Reproducing a figure' : 'Applying a figure’s method'}</h2>
+        {science && (
+          <span className="repro-tags">
+            <span className="tag">{KIND_LABEL[figure.spec.kind]}</span>
+            <span className={`tag ${exact ? 'tag-strong' : ''}`}>{exact ? 'exact reproduction · same data' : 'method transfer'}</span>
+          </span>
+        )}
       </header>
-      <p className="repro-summary">{figure.spec.summary}{figure.spec.pdf_fallback ? ' (methods PDF read as text)' : ''}</p>
+      {science && <p className="repro-summary">{figure.spec.summary}{figure.spec.pdf_fallback ? ' (methods PDF read as text)' : ''}</p>}
       <div className="repro-grid">
         <figure>
           <figcaption className="muted small">Theirs · {figure.filename}</figcaption>
@@ -128,21 +132,29 @@ export function ReproduceView() {
       </div>
       {exact && repro && (
         <div className={repro.match ? 'match ok' : 'match no'}>
-          {repro.match ? '✓ Matches the published code' : '✗ Does not match the published code'}: largest difference{' '}
-          {repro.max_abs_diff.toExponential(1)} over {repro.n_values} values (tolerance {repro.tolerance.toExponential(0)}).
-          <span className="muted small"> Reference: {repro.reference_method}</span>
+          {repro.match ? '✓ Our result matches the original exactly.' : '✗ Our result does not match the original.'}
+          {science && (
+            <span className="muted small"> Largest difference {repro.max_abs_diff.toExponential(1)} over {repro.n_values} values
+              (tolerance {repro.tolerance.toExponential(0)}). Reference: {repro.reference_method}</span>
+          )}
         </div>
       )}
       {!exact && <div className="match transfer">Method applied to your data — numbers are not expected to match.</div>}
-      <h3 className="spec-head">
-        What we read from the figure
-        {nLow > 0 && phase === 'plan' && <span className="muted small"> · tick the {nLow} unsure {nLow === 1 ? 'setting' : 'settings'} before running</span>}
-      </h3>
-      <SpecList figure={figure} editable={phase === 'plan'} />
-      <details className="fold">
-        <summary>Why {exact ? 'exact reproduction' : 'method transfer'}</summary>
-        <p className="small">{figure.spec.mode_reason}</p>
-      </details>
+      {(phase === 'plan' || science) && (
+        <>
+          <h3 className="spec-head">
+            What we read from the figure
+            {nLow > 0 && phase === 'plan' && <span className="muted small"> · tick the {nLow === 1 ? 'one we’re unsure of' : `${nLow} we’re unsure of`} before running</span>}
+          </h3>
+          <SpecList figure={figure} editable={phase === 'plan'} science={science} />
+        </>
+      )}
+      {science && (
+        <details className="fold">
+          <summary>Why {exact ? 'exact reproduction' : 'method transfer'}</summary>
+          <p className="small">{figure.spec.mode_reason}</p>
+        </details>
+      )}
     </section>
   )
 }
@@ -153,8 +165,8 @@ export function UnsupportedNotice({ message, figure, onDismiss }: { message: str
     <div className="unsupported" role="status">
       <img src={api.figureUrl(figure.figure_id)} alt="" />
       <div>
-        <b>{message}</b>
-        <p className="muted small">What we saw: {figure.spec.summary} Nothing was planned or run.</p>
+        <b>{message.split('. ')[0].replace(/\.$/, '')}.</b>
+        <p className="muted small">Nothing was planned or run.</p>
       </div>
       <button className="link dismiss" onClick={onDismiss} aria-label="Dismiss">×</button>
     </div>

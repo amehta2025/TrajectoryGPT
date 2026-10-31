@@ -16,6 +16,7 @@ export type Card = {
   keyA: string
   keyB: string
   finding: Finding
+  others: Finding[] // further findings about the same contact (merged into this card)
   badge: Finding['badge']
   badgeLabel: string
   robustness: Robustness | null
@@ -153,7 +154,8 @@ export function buildCards(run: RunView, nFrames: number, hasTime: boolean): { c
           const mid = Math.floor(nFrames / 2)
           const [first, second] = windowNames([0, mid], [mid, nFrames], nFrames, hasTime)
           const w = pts[0].w
-          const name = w[0] === 0 && w[1] === mid ? first : w[0] === mid ? second : `frames ${w[0]}–${Math.min(w[1], nFrames) - 1}`
+          const whole = w[0] === 0 && w[1] >= nFrames
+          const name = whole ? (hasTime ? 'whole run' : 'whole path') : w[0] === 0 && w[1] === mid ? first : w[0] === mid ? second : 'part of the run'
           freqs = [{ name, freq: pts[0].freq }]
           focusWindow = w
         }
@@ -170,11 +172,57 @@ export function buildCards(run: RunView, nFrames: number, hasTime: boolean): { c
       cards.push({
         id: `${f.id}:${label}`, label, keyA, keyB, finding: f, badge, badgeLabel,
         robustness: f.robustness.find((r) => r.pair === label) ?? null,
-        freqs, stats, focusWindow,
+        freqs, stats, focusWindow, others: [],
       })
       added++
     }
     if (!added) notes.push(f)
   }
-  return { cards, notes }
+  // One card per contact: when several findings name the same pair, keep the card with the most windows
+  // (a before -> after bar beats a single bar) and carry the other findings along for the science layer.
+  const merged = new Map<string, Card>()
+  for (const c of cards) {
+    const key = [c.keyA, c.keyB].sort().join('|')
+    const prev = merged.get(key)
+    if (!prev) merged.set(key, c)
+    else if (c.freqs.length > prev.freqs.length) merged.set(key, { ...c, others: [prev.finding, ...prev.others, ...c.others] })
+    else prev.others.push(c.finding)
+  }
+  return { cards: [...merged.values()], notes }
+}
+
+// ---------- plain language (no numbers, units, residue codes or status words) ----------
+
+const WINDOW_WORDS: Record<string, string> = {
+  '1st half': 'the first half', '2nd half': 'the second half', 'early path': 'early in the path', 'late path': 'late in the path',
+  'window A': 'the first window', 'window B': 'the second window', 'earlier steps': 'earlier steps', 'later steps': 'later steps',
+  'whole run': 'during the run', 'whole path': 'along the path', 'part of the run': 'in part of the run',
+}
+
+/** Domain of a residue (e.g. "LID") from the dataset's group ranges; null if it is in none. */
+export function domainOf(key: string, groups: Record<string, { ranges: [number, number][] }>): string | null {
+  const resid = Number(key.split(':')[2])
+  for (const [g, { ranges }] of Object.entries(groups)) if (ranges.some(([a, b]) => resid >= a && resid <= b)) return g
+  return null
+}
+
+/** One plain sentence for a card, built only from its stored badge, direction and robustness verdict. */
+export function plainSentence(card: Card, groups: Record<string, { ranges: [number, number][] }>): string {
+  const a = domainOf(card.keyA, groups)
+  const b = domainOf(card.keyB, groups)
+  const what = a && b ? (a === b ? `This ${a} contact` : `This ${a}–${b} contact`) : 'This contact'
+  const later = card.freqs.length === 2 ? WINDOW_WORDS[card.freqs[1].name] ?? card.freqs[1].name : null
+  const dir = card.freqs.length === 2 ? Math.sign(card.freqs[1].freq - card.freqs[0].freq) : 0
+  if (card.badge === 'supported' || card.badge === 'proven') {
+    let s = `${what} formed ${dir < 0 ? 'less' : 'more'} often in ${later ?? 'the later window'}.`
+    if (card.robustness?.verdict === 'robust') s += ' This holds at every distance threshold we tried.'
+    else if (card.robustness?.verdict === 'cutoff-sensitive') s += ' It holds at some distance thresholds but not all.'
+    if (card.stats?.provisional) s += ' It changes slowly, so this is less certain.'
+    return s
+  }
+  if (card.badge === 'unsupported' || card.badge === 'null') return `${what} shifted, but no more than random variation would explain.`
+  if (card.freqs.length === 2) {
+    return dir === 0 ? `${what} is present about as often ${later}.` : `${what} is present ${dir < 0 ? 'less' : 'more'} often ${later}.`
+  }
+  return card.freqs.length === 1 ? `${what} is present ${WINDOW_WORDS[card.freqs[0].name] ?? 'in this window'}.` : `${what} was observed.`
 }

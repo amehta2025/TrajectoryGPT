@@ -337,3 +337,18 @@ dl.kv dd { margin: 0; font-family: var(--mono); color: #dde2ea; }
 .inv > .reproduce .repro-grid img { max-height: 340px; object-fit: contain; }
 
 .unsupported .dismiss { margin-left: auto; font-size: 18px; color: var(--muted); line-height: 1; }
+
+/* plain layer + "Show the science" */
+.headline-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.ccard-sentence { font-size: 14px; line-height: 1.5; color: var(--text); }
+.ccard-detail .ccard-head { margin-bottom: 4px; }
+.ccard-detail .badges { justify-content: flex-end; }
+.report-empty { margin: 0; }
+button.science-toggle {
+  align-self: flex-start; margin-top: 4px; padding: 7px 14px; font-size: 13px; border-radius: 6px;
+  background: var(--panel); border-color: var(--border-strong); color: #c3cad6;
+}
+.science { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; border-top: 1px dashed var(--border-strong); }
+.report-science { gap: 8px; }
+.report-science .notes li { margin-bottom: 6px; }
+.review-problems { color: #ffcdbf; }

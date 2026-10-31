@@ -15,19 +15,19 @@ const STATUS_ICON: Record<ChecklistItem['status'], string> = { pending: '○', i
 export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | null): string {
   const pair = p ? `${p.group_a}–${p.group_b}` : ''
   switch (tool) {
-    case 'get_metadata': return 'Check the dataset: length, time step and domains'
-    case 'list_groups': return 'Look up the domain definitions'
-    case 'calculate_contacts': return `Measure how often each ${pair} residue pair is in contact`
-    case 'distance_over_time': return 'Track one residue pair’s distance frame by frame'
-    case 'compare_intervals': return `Compare ${pair} contacts between the two windows`
-    case 'contact_statistics': return 'Estimate one pair’s contact frequency with its uncertainty'
-    case 'native_contacts': return 'Compute the fraction of native contacts per frame'
-    case 'cutoff_sensitivity': return 'Re-check each supported change at every robustness cutoff'
-    case 'contact_difference_map': return `Map how each ${pair} contact changes between the two windows`
-    case 'residue_flexibility': return 'Measure how much each residue moves (Cα RMSF)'
-    case 'reproduction_check': return 'Check the result against the published code'
-    case 'submit_report': return 'Write the report from the recorded findings'
-    default: return tool
+    case 'get_metadata': return 'Check the dataset'
+    case 'list_groups': return 'Look up the protein’s domains'
+    case 'calculate_contacts': return `Measure how often each ${pair} contact forms`
+    case 'distance_over_time': return 'Track how far apart two parts of the protein are over time'
+    case 'compare_intervals': return `Compare ${pair} contacts between two parts of the run`
+    case 'contact_statistics': return 'Look at one contact in detail'
+    case 'native_contacts': return 'Measure how many of the reference contacts remain'
+    case 'cutoff_sensitivity': return 'Re-check each change at several distance thresholds'
+    case 'contact_difference_map': return `Map which ${pair} contacts change`
+    case 'residue_flexibility': return 'Measure how much each part of the protein moves'
+    case 'reproduction_check': return 'Compare with the original published result'
+    case 'submit_report': return 'Write the report'
+    default: return 'Run an analysis'
   }
 }
 
@@ -103,29 +103,21 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
     <section className="card plan-card">
       <header className="card-head">
         <h2 title={p.summary}>Plan</h2>
-        <span className="pill">{checklist ? `${done} of ${checklist.length} done` : 'Waiting for your approval'}</span>
+        {checklist && <span className="pill">{done} of {checklist.length} done</span>}
       </header>
-      {usesContacts
-        ? (
-          <>
-            <p className="plan-scope">
-              <b>{p.group_a}</b> vs <b>{p.group_b}</b> at a <b>{p.cutoff} Å</b> cutoff
-              {p.window_b
-                ? <>, {windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}</>
-                : <>, {windowText(meta, p.window_a, 'A', false)}</>}
-              {robustStep && <>, robustness checked at {p.robustness_cutoffs.map((c) => c.toFixed(1)).join(", ")} Å</>}.
-            </p>
-            <p className="muted small plan-def">Contact: {CONTACT_DEFINITION}.</p>
-          </>
-        )
-        : <p className="plan-scope">Frames: {windowText(meta, p.window_a, 'A', false).replace('window A: ', '')}.</p>}
+      {usesContacts && (
+        <p className="plan-scope">
+          <b>{p.group_a}</b> and <b>{p.group_b}</b>
+          {p.window_b ? (halves ? ', first half vs second half' : ', two parts of the run') : ''}
+          {robustStep ? ', double-checked at several distance thresholds' : ''}.
+        </p>
+      )}
       <ol className="steps">
         {checklist
           ? checklist.map((c) => (
               <li key={c.item} className={`st-${c.status}`} title={c.text}>
                 <span className="step-icon">{STATUS_ICON[c.status]}</span>
-                <span className="step-text">{stepText(c.tool, p)}{c.note && <span className="muted small"> — {c.note}</span>}</span>
-                <span className="tool-tag">{c.tool}</span>
+                <span className="step-text">{stepText(c.tool, p)}</span>
               </li>
             ))
           : p.steps.map((s, i) => {
@@ -134,7 +126,6 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
                 <li key={i} className={dropped ? 'dropped' : ''} title={s.rationale}>
                   <span className="step-icon">{i + 1}</span>
                   <span className="step-text">{stepText(s.tool, p)}</span>
-                  <span className="tool-tag">{s.tool}</span>
                   {!locked && s.tool !== 'submit_report' && (
                     <button className="link small step-drop" onClick={() => {
                       const drop = new Set(draft.drop)
@@ -149,6 +140,14 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
       </ol>
       <details className="settings">
         <summary>Settings</summary>
+        <p className="muted small plan-def">
+          {usesContacts && <>Contact: {CONTACT_DEFINITION}; cutoff {p.cutoff} Å. </>}
+          {p.window_b
+            ? <>{windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}.</>
+            : <>{windowText(meta, p.window_a, 'A', false)}.</>}
+          {robustStep && <> Robustness checked at {p.robustness_cutoffs.map((c) => c.toFixed(1)).join(', ')} Å.</>}
+          {' '}Steps: {p.steps.map((s) => s.tool).join(', ')}.
+        </p>
         <div className="param-grid">
           <label>Cutoff (Å) {field('cutoff')}</label>
           {robustStep && <label title="A finding is robust only if supported at every one of these cutoffs (3.5–6.0 Å)">Robustness cutoffs (Å) {field('robust', 110)}</label>}

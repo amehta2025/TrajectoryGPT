@@ -10,7 +10,7 @@ import { Viewer } from './components/Viewer'
 import { PasscodePrompt, StartScreen } from './components/StartScreen'
 import { PlanCard } from './components/PlanCard'
 import { AgentTrace } from './components/StepLog'
-import { Headline, ReportView } from './components/ReportView'
+import { Headline, ReportView, ScienceReport, ScienceToggle } from './components/ReportView'
 import { CostMeter } from './components/CostMeter'
 import { ReproduceView } from './components/ReproduceView'
 import { AnalysisCards } from './components/AnalysisViews'
@@ -93,20 +93,24 @@ export default function App() {
             <>
               {inv.run?.figure && <ReproduceView />}
               <div className="inv-body">
-                {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading {dataset}…</div>}
+                {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading…</div>}
                 <div className="inv-col">
                   {!inv.run?.figure && <ReproduceView />}
                   <ReportView meta={meta} />
                   {inv.phase === 'running' && <PlanCard meta={meta} />}
                 </div>
               </div>
-              {meta && (
-                <div className="evidence-more">
-                  <CompareChart meta={meta} />
-                  <div className="inv-col">
-                    <AnalysisCards run={inv.run} />
-                    <DistancePlot meta={meta} />
-                    <Heatmap meta={meta} />
+              <ScienceToggle />
+              {inv.science && meta && (
+                <div className="science">
+                  <ScienceReport meta={meta} />
+                  <div className="evidence-more">
+                    <CompareChart meta={meta} />
+                    <div className="inv-col">
+                      <AnalysisCards run={inv.run} />
+                      <DistancePlot meta={meta} />
+                      <Heatmap meta={meta} />
+                    </div>
                   </div>
                 </div>
               )}

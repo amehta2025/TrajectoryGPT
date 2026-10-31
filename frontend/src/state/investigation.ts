@@ -17,11 +17,12 @@ export type Investigation = {
   needPasscode: boolean // set by a 401; the start screen asks for the passcode, then retries
   confirmed: string[] // low-confidence figure settings the user has checked (the backend requires all of them)
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
+  science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
 }
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
-  confirmed: [], unsupported: null,
+  confirmed: [], unsupported: null, science: false,
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
@@ -140,6 +141,11 @@ export async function nextTurn(stepThrough?: boolean) {
   if (!state.runId) return
   set({ paused: false })
   await api.next(state.runId, stepThrough)
+}
+
+/** Show or hide all technical detail at once. */
+export function toggleScience() {
+  set({ science: !state.science })
 }
 
 /** Tick or untick one low-confidence figure setting. */

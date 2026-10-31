@@ -4,11 +4,11 @@ import type { DatasetInfo, Metadata } from '../api/client'
 
 export const DATASET_TEXT: Record<string, { name: string; line: string }> = {
   adk_equilibrium: {
-    name: 'Equilibrium run · 1 µs',
+    name: 'Equilibrium run',
     line: 'A 1 µs unbiased simulation of adenylate kinase (AdK) with nothing bound: 4,187 frames, 0.24 ns apart. Statistics are available.',
   },
   adk_transition: {
-    name: 'Closed → open path · 98 steps',
+    name: 'Closed-to-open path',
     line: 'A 98-step path of AdK opening from closed to open, built with a biased method (DIMS). Steps are not evenly spaced in time, so results are descriptive only, with no statistics.',
   },
 }
@@ -23,11 +23,6 @@ export function datasetLine(info: DatasetInfo | undefined): string {
 }
 
 export function DatasetBadge({ meta, dataset }: { meta: Metadata | null; dataset: string }) {
-  const descriptive = meta && meta.dataset === dataset && !meta.stats_valid
-  return (
-    <span className="ds-readout" title={dataset}>
-      AdK · {datasetName(dataset)}
-      {descriptive && <span className="tag">descriptive only</span>}
-    </span>
-  )
+  void meta
+  return <span className="ds-readout" title={dataset}>AdK · {datasetName(dataset)}</span>
 }

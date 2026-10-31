@@ -6,15 +6,15 @@ import { useState } from 'react'
 import type { DatasetInfo, Metadata } from '../api/client'
 import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
-import { datasetLine, datasetName } from './DatasetBadge'
+import { datasetName } from './DatasetBadge'
 import { SpinningStructure } from './Viewer'
 import { UnsupportedNotice } from './ReproduceView'
 
 const FIGURE_EXAMPLES = [
-  { label: 'Native contacts (MDAnalysis User Guide)', sub: 'exact reproduction on the same data', dataset: 'adk_transition',
+  { label: 'A figure from the MDAnalysis guide', dataset: 'adk_transition',
     figure: '/figures/userguide_q1q2_replot.png', question: 'Reproduce this figure.',
     note: 'Attaches the MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).' },
-  { label: 'Difference contact map (Iyer et al. 2020)', sub: 'method applied to our data', dataset: 'adk_transition',
+  { label: 'A figure from Iyer et al. 2020', dataset: 'adk_transition',
     figure: '/figures/iyer2020_fig5c_adk_difference_contact_map.png', caption: '/figures/iyer2020_fig5c_caption.txt',
     question: 'Apply this figure’s method to our data.',
     note: 'Iyer M et al. (2020) PLOS ONE 15(3): e0226702, Fig 5C, CC BY (see assets/figures/ATTRIBUTION.md).' },
@@ -22,7 +22,7 @@ const FIGURE_EXAMPLES = [
 const QUESTION_EXAMPLES = [
   { label: 'Which LID–CORE contacts change between the first and second half?', dataset: 'adk_equilibrium',
     question: 'Which LID–CORE contacts change between the first and second half of the run?' },
-  { label: 'Is the SER30–ASP84 drop real?', dataset: 'adk_equilibrium',
+  { label: 'Is a big drop in one contact real?', dataset: 'adk_equilibrium',
     question: 'Is the drop in the SER30–ASP84 contact between the first and second half of the run real?' },
 ]
 
@@ -57,7 +57,6 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   const [fileError, setFileError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const busy = phase === 'planning'
-  const info = datasets.find((d) => d.id === dataset)
 
   const addFiles = (list: FileList | File[]) => {
     clearNotices()
@@ -93,10 +92,10 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   return (
     <section className="start">
       <div className="start-main">
-        <h1 className="start-title">Drop in a figure from any paper.</h1>
+        <h1 className="start-title">Ask what a protein is doing</h1>
         <p className="start-lede">
-          TrajectoryGPT reads its method and runs it on real simulation data: two preloaded simulations of the enzyme
-          adenylate kinase (AdK).
+          Drop in a figure from any paper, or ask a question. TrajectoryGPT runs the analysis on real simulations of
+          the enzyme adenylate kinase.
         </p>
 
         <label
@@ -110,10 +109,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           {files.length === 0
             ? <>
                 <span className="dz-main">Drop a figure here, or <u>choose a file</u></span>
-                <span className="muted small">
-                  PNG or JPEG, plus the methods as a PDF if you have them · up to 10 MB each ·
-                  works with contact maps, difference contact maps, distance traces, native contacts and RMSF
-                </span>
+                <span className="muted small">PNG, JPEG or PDF</span>
               </>
             : <span className="attached">
                 {files.map((f) => (
@@ -138,7 +134,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <span className="muted small">Try a sample:</span>
           {FIGURE_EXAMPLES.map((ex) => (
             <button key={ex.label} className="example-chip" disabled={busy} onClick={() => void runFigureExample(ex)} title={ex.note}>
-              {ex.label} <span className="muted small">· {ex.sub}</span>
+              {ex.label}
             </button>
           ))}
         </div>
@@ -168,7 +164,6 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <select id="ds" value={dataset} onChange={(e) => { clearNotices(); setSelection({ dataset: e.target.value }) }} disabled={busy}>
             {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
           </select>
-          {info && <p className="muted small dataset-line">{datasetLine(info)} Analyses use these preloaded public simulations only.</p>}
         </div>
       </div>
       <div className="start-art">{meta && <SpinningStructure meta={meta} />}</div>

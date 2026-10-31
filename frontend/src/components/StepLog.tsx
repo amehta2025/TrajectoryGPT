@@ -11,10 +11,10 @@ import { Timeline } from './Timeline'
 
 const BOOKKEEPING = new Set(['update_checklist', 'record_finding', 'submit_report'])
 const SHORT: Record<string, string> = {
-  get_metadata: 'Check dataset', list_groups: 'Domains', calculate_contacts: 'Contact map', distance_over_time: 'Distance trace',
-  compare_intervals: 'Compare windows', contact_statistics: 'Pair statistics', native_contacts: 'Native contacts',
-  cutoff_sensitivity: 'Check cutoffs', reproduction_check: 'Check vs published code', submit_report: 'Write report',
-  contact_difference_map: 'Difference map', residue_flexibility: 'Flexibility',
+  get_metadata: 'Check the data', list_groups: 'Domains', calculate_contacts: 'Measure contacts', distance_over_time: 'Track a distance',
+  compare_intervals: 'Compare', contact_statistics: 'Look closer', native_contacts: 'Reference contacts',
+  cutoff_sensitivity: 'Double-check', reproduction_check: 'Compare with the original', submit_report: 'Write the report',
+  contact_difference_map: 'Map changes', residue_flexibility: 'Measure movement',
 }
 
 /** The plan's steps as a row that lights up while the run is going. */
@@ -27,7 +27,7 @@ function LiveSteps({ run, paused }: { run: NonNullable<ReturnType<typeof useInve
         const state = c === current && !paused ? 'current' : c.status === 'done' ? 'done' : c.status === 'skipped' ? 'skipped' : 'pending'
         return (
           <li key={c.item} className={`lstep ${state}`} title={`${c.text}${c.note ? ` — ${c.note}` : ''}`}>
-            <span className="ldot" />{SHORT[c.tool] ?? c.tool}
+            <span className="ldot" />{SHORT[c.tool] ?? 'Analysis'}
           </li>
         )
       })}
@@ -80,11 +80,10 @@ function summary(run: NonNullable<ReturnType<typeof useInvestigation>['run']>, f
   const findingsRefused = turns.filter((t) => t.tool === 'record_finding' && t.status === 'refused').length
   const reportRefused = turns.filter((t) => t.tool === 'submit_report' && t.status === 'refused').length
   const parts = [`Planned ${run.checklist.length} steps`, `ran ${analyses} ${analyses === 1 ? 'analysis' : 'analyses'}`]
-  if (findingsOk || findingsRefused) parts.push(`${findingsOk} ${findingsOk === 1 ? 'finding' : 'findings'} passed checks${findingsRefused ? ` (${findingsRefused} refused and redone)` : ''}`)
+  if (findingsOk || findingsRefused) parts.push(`checked ${findingsOk} ${findingsOk === 1 ? 'finding' : 'findings'}`)
+  void reportRefused // refusals stay in the step log; the summary line stays plain
   if (finished) {
-    parts.push(run.report
-      ? `report accepted${reportRefused ? ` after ${reportRefused} ${reportRefused === 1 ? 'fix' : 'fixes'}` : ''}`
-      : 'report not accepted')
+    parts.push(run.report ? 'done' : 'stopped for review')
   } else {
     const cur = run.checklist.find((c) => c.status === 'in_progress') ?? run.checklist.find((c) => c.status === 'pending')
     if (cur) parts.push(`now: ${stepText(cur.tool, null).toLowerCase()}…`)

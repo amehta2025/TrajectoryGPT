@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as NGL from 'ngl'
 import { api, type Metadata } from '../api/client'
 import { getSelection, setSelection, useSelection } from '../state/selection'
+import { useInvestigation } from '../state/investigation'
 import { residueKeyToNglSelection, residueLabel } from '../state/residueKey'
 import { frameTimeLabel } from '../state/time'
 import { DOMAIN_COLORS, PAIR_COLORS } from '../theme'
@@ -26,6 +27,7 @@ function domainScheme(meta: Metadata): string {
 
 export function Viewer({ meta }: { meta: Metadata }) {
   const { pair, frame, focus } = useSelection()
+  const { science } = useInvestigation() // residue labels, frame numbers and times only with "Show the science"
   const host = useRef<HTMLDivElement>(null)
   const stage = useRef<NGL.Stage | null>(null)
   const comp = useRef<NGL.StructureComponent | null>(null)
@@ -136,7 +138,8 @@ export function Viewer({ meta }: { meta: Metadata }) {
     }
     r.label.setParameters({ labelText })
     r.label.setSelection(`(${residueKeyToNglSelection(pair.keyA)}) or (${residueKeyToNglSelection(pair.keyB)})`)
-  }, [pair, loadedFor, meta.dataset])
+    r.label.setVisibility(science)
+  }, [pair, loadedFor, meta.dataset, science])
 
   // Show the requested frame: from the playback set if present, otherwise fetch it exactly.
   useEffect(() => {
@@ -194,17 +197,19 @@ export function Viewer({ meta }: { meta: Metadata }) {
         </div>
       )}
       <div className="viewer-hud">
-        {pair && (
+        {pair && science && (
           <div className="pair-chips">
             <span className="chip" style={{ borderColor: PAIR_COLORS.a }}>{residueLabel(pair.keyA)}</span>
             <span className="chip" style={{ borderColor: PAIR_COLORS.b }}>{residueLabel(pair.keyB)}</span>
           </div>
         )}
-        {focus && focus.frame === frame && shownFrame === frame && <div className="focus-caption">{focus.text}</div>}
-        <div className="frame-readout" data-testid="frame-readout">
-          {shownFrame === null ? '—' : <>Frame <b>{shownFrame}</b> · {frameTimeLabel(meta, shownFrame)}</>}
-          {shownFrame !== null && shownFrame !== frame && <span className="muted"> (loading {frame})</span>}
-        </div>
+        {focus && focus.frame === frame && shownFrame === frame && <div className="focus-caption">{science ? focus.text : focus.plain}</div>}
+        {science && (
+          <div className="frame-readout" data-testid="frame-readout">
+            {shownFrame === null ? '—' : <>Frame <b>{shownFrame}</b> · {frameTimeLabel(meta, shownFrame)}</>}
+            {shownFrame !== null && shownFrame !== frame && <span className="muted"> (loading {frame})</span>}
+          </div>
+        )}
       </div>
       <div className="viewer-controls">
         <button disabled={!ready} onClick={() => setPlaying((p) => !p)} title="Play through the run" aria-label={playing ? 'Pause' : 'Play'}>
@@ -218,7 +223,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
           disabled={!ready}
           onChange={(e) => pb && setSelection({ frame: pb.frames[Number(e.target.value)] })}
         />
-        <span className="muted small" title={`Playback shows every ${meta.playback_stride}th frame; jumps load the exact frame`}>{pb ? `${pb.frames.length} frames for playback` : ''}</span>
+        {science && <span className="muted small" title={`Playback shows every ${meta.playback_stride}th frame; jumps load the exact frame`}>{pb ? `${pb.frames.length} frames for playback` : ''}</span>}
       </div>
     </div>
   )
