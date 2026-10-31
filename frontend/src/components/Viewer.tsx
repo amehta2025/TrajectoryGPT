@@ -51,7 +51,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
     // Re-fit the protein when the box changes size (layout settling, window resize), so it never draws tiny.
     const ro = new ResizeObserver(() => {
       s.handleResize()
-      comp.current?.autoView()
+      if (comp.current) fitProtein(s, comp.current)
     })
     ro.observe(el)
     return () => {
@@ -100,7 +100,7 @@ export function Viewer({ meta }: { meta: Metadata }) {
           radiusSize: 1.5, showBackground: true, backgroundColor: '#ffffff', backgroundOpacity: 1, zOffset: 2,
         })
         reps.current = { a, b, label, marks, dots }
-        c.autoView()
+        fitProtein(s, c)
 
         const stride = meta.playback_stride
         setStatus('Loading the trajectory…')
@@ -268,6 +268,34 @@ function getFrameIndex(frames: number[], f: number): number {
   return lo
 }
 
+/**
+ * Zoom so the protein fills the view. NGL's autoView fits a loose box (its longest side plus a margin to the
+ * canvas height), which leaves the protein small in a wide canvas. This fits the C-alpha extent as seen in the
+ * current orientation to both the width and the height, with a small margin. `spin`: the protein turns about
+ * the vertical axis, so the horizontal extent covers depth too.
+ */
+export function fitProtein(s: NGL.Stage, c: NGL.StructureComponent, opts: { margin?: number; spin?: boolean } = {}) {
+  const { margin = 0.88, spin = false } = opts
+  const center = c.getCenter()
+  const q = s.viewerControls.rotation
+  const tanHalf = Math.tan((s.viewer.perspectiveCamera.fov * Math.PI) / 360) * margin
+  const aspect = s.viewer.width / s.viewer.height
+  if (!s.viewer.width || !s.viewer.height) return c.autoView()
+  const v = new NGL.Vector3()
+  // Camera at distance d looks down -z at the centre; an atom at view depth z (towards the camera) shows at
+  // |y| / (d - z), so it fits when d >= z + |y| / tanHalf (and likewise for x over the aspect ratio).
+  let d = 0
+  c.structure.eachAtom((ap) => {
+    v.set(ap.x - center.x, ap.y - center.y, ap.z - center.z).applyQuaternion(q)
+    const across = spin ? Math.hypot(v.x, v.z) : Math.abs(v.x) // spinning about y: x and z trade places
+    const toward = spin ? across : Math.abs(v.z) // either side of the centre plane: safe whichever way the camera faces
+    d = Math.max(d, toward + Math.max(Math.abs(v.y), across / aspect) / tanHalf)
+  }, new NGL.Selection('.CA'))
+  if (!d) return c.autoView()
+  s.viewerControls.center(center)
+  s.viewerControls.distance(d)
+}
+
 /** Start screen: the AdK cartoon, domain-coloured, turning slowly. Structure only (no trajectory frames). */
 export function SpinningStructure({ meta }: { meta: Metadata }) {
   const host = useRef<HTMLDivElement>(null)
@@ -285,7 +313,7 @@ export function SpinningStructure({ meta }: { meta: Metadata }) {
         const c = (await s.loadFile(new Blob([pdb], { type: 'text/plain' }), { ext: 'pdb' })) as NGL.StructureComponent
         if (cancelled) return
         c.addRepresentation('cartoon', { color: domainScheme(meta), opacity: 0.95 })
-        c.autoView()
+        fitProtein(s, c, { spin: true })
         const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
         if (!reduce) {
           s.setSpin(true)
