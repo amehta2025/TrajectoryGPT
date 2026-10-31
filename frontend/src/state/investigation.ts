@@ -75,10 +75,10 @@ export async function toUpload(file: File): Promise<UploadFile> {
 }
 
 /** Figure mode: figure image and/or methods PDF -> extracted spec -> plan. */
-export async function askFigure(files: File[], dataset: string, note: string) {
+export async function askFigure(files: File[], dataset: string, note: string, label?: string) {
   closeStream?.()
-  retry = () => askFigure(files, dataset, note)
-  const label = note.trim() || `Reproduce ${files.map((f) => f.name).join(' + ')}`
+  retry = () => askFigure(files, dataset, note, label)
+  label = label || note.trim() || `Reproduce ${files.map((f) => f.name).join(' + ')}`
   set({ ...empty, phase: 'planning', question: label, dataset })
   try {
     const uploads = await Promise.all(files.map(toUpload))

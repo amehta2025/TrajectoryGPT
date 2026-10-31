@@ -15,7 +15,8 @@ const FIGURE_EXAMPLES = [
     figure: '/figures/userguide_q1q2_replot.png', question: 'Reproduce this figure.',
     note: 'Attaches the MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).' },
   { label: 'Difference contact map (Iyer et al. 2020)', sub: 'method applied to our data', dataset: 'adk_transition',
-    figure: '/figures/iyer2020_fig5c_adk_difference_contact_map.png', question: 'Apply this figure’s method to our data.',
+    figure: '/figures/iyer2020_fig5c_adk_difference_contact_map.png', caption: '/figures/iyer2020_fig5c_caption.txt',
+    question: 'Apply this figure’s method to our data.',
     note: 'Iyer M et al. (2020) PLOS ONE 15(3): e0226702, Fig 5C, CC BY (see assets/figures/ATTRIBUTION.md).' },
 ]
 const QUESTION_EXAMPLES = [
@@ -66,10 +67,10 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
     if (!bad) setFiles(picked)
   }
 
-  const startFigure = (attached: File[], ds = dataset, text = note) => {
+  const startFigure = (attached: File[], ds = dataset, text = note, label?: string) => {
     if (busy || !attached.length) return
     if (ds !== dataset) setSelection({ dataset: ds })
-    void askFigure(attached, ds, text.trim())
+    void askFigure(attached, ds, text.trim(), label)
     setFiles([])
     setNote('')
   }
@@ -81,10 +82,12 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
     setQuestion('')
   }
 
+  // A sample ships with its caption and methods text when the image alone does not carry them.
   const runFigureExample = async (ex: (typeof FIGURE_EXAMPLES)[number]) => {
     const blob = await (await fetch(ex.figure)).blob()
     const file = new File([blob], ex.figure.split('/').pop() ?? 'figure.png', { type: 'image/png' })
-    startFigure([file], ex.dataset, ex.question)
+    const caption = 'caption' in ex && ex.caption ? await (await fetch(ex.caption)).text() : ''
+    startFigure([file], ex.dataset, caption ? `${ex.question} ${caption}` : ex.question, ex.question)
   }
 
   return (

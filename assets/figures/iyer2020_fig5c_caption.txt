@@ -1,0 +1,5 @@
+Figure caption and methods from: Iyer M, Li Z, Jaroszewski L, Sedova M, Godzik A (2020). Difference contact maps: From what to why in the analysis of the conformational flexibility of proteins. PLOS ONE 15(3): e0226702. doi:10.1371/journal.pone.0226702. CC BY 4.0. This image is panel (c) of Fig 5.
+
+Fig 5 caption: "DSRs seen in adenylate kinase. The cartoon representations of the (a) closed and (b) open forms of ADK. The NMPbind domain is colored magenta, the LID domain is cyan and the CORE domain is green. Residues forming contacts are shown as sticks. Glu170 and Leu58 are shown in yellow sticks in both structures. (c) The final differential contact map for this enzyme. Red contacts are seen in the closed conformation and blue contacts are seen in the open conformation."
+
+Methods: "A pair of residues was considered to be in contact if the distance between any two side-chain heavy atoms from the residues was less than 5Å." "A differential contact map was then created by subtracting one contact map from the other." Results: the adenylate kinase structures compared are "the PDB models with codes 4jzkB and 4akeA" (E. coli adenylate kinase, closed and open).

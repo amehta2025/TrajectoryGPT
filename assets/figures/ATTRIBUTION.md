@@ -24,6 +24,7 @@ Every figure in this folder (and its copy in `frontend/public/figures/`) is list
   - Contact: any side-chain heavy atom pair within 5 Å (Cα for glycine).
   - Axes: positions in the SEQRES alignment, after dropping residues without coordinates or aligned to a gap.
   - The text says residue pairs whose inter-residue distance changed by ≤ 5 Å were filtered out. We could not reproduce this filter exactly (see the mapping notes in `notes/recon.md`).
+- **Caption text:** `iyer2020_fig5c_caption.txt` (copied to `frontend/public/figures/`) holds the Fig 5 caption and the two Methods sentences that define the contact and the difference map, quoted verbatim from the article page on 2026-10-31, with the same attribution (CC BY 4.0). The sample button sends it with the image, because panel C alone carries no method.
 - **How we use it:** as the method-transfer example. The agent applies the method to our trajectories, and the UI labels the result "Method applied to your data — numbers are not expected to match."
 - **Axis mapping, checked 2026-10-30:** alignment position *p* (0-based) = E. coli AdK residue *p* + 1.
   - Both models resolve all 214 residues, and 4jzk and 4ake have identical SEQRES sequences, so the alignment has 214 gap-free positions.
