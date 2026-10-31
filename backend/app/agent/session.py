@@ -15,6 +15,7 @@ from app.agent.llm import LLM, CostTracker
 from app.agent import orchestrator, verifier
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import PlanInvalid, make_plan, to_approved
+from app.agent.tools import res_label
 from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
@@ -68,19 +69,75 @@ class RunHandle:
 
 
 PLANS: dict[str, dict] = {}
+# Per browser session (SPEC §9 step 8): last run, its approved params, the selected pair. In memory: one container.
+SESSIONS: dict[str, dict] = {}
+MAX_SESSIONS = 2000
 ON_RUN_FINISHED = None  # set on Modal to commit the Volume, so a finished run survives restarts
 RUNS: dict[str, RunHandle] = {}
 _lock = threading.Lock()
 
 
-def propose_plan(question: str, dataset: str, llm: LLM | None = None) -> dict:
+def remember(session_id: str | None, **fields) -> None:
+    if not session_id:
+        return
+    with _lock:
+        s = SESSIONS.pop(session_id, {})
+        SESSIONS[session_id] = {**s, **fields}  # re-inserted last: the oldest session is dropped first
+        while len(SESSIONS) > MAX_SESSIONS:
+            SESSIONS.pop(next(iter(SESSIONS)))
+
+
+def focus_pair(run: Run, selected: str | None) -> tuple[str | None, str]:
+    """What "that" refers to: the pair the user selected, else the top supported pair (lowest q)."""
+    labels = {pair for r in run.state.results.values() for pair in r.get("pairs", {})}
+    if selected and selected in labels:
+        return selected, "the pair the user selected"
+    best = None
+    for r in run.state.results.values():
+        if r["tool"] == "compare_intervals" and r["status"] == "ok":
+            for row in (r["data_for_ui"] or {}).get("rows", []):
+                if row["supported"] and (best is None or row["q"] < best[1]):
+                    best = (f"{res_label(row['key_a'])}-{res_label(row['key_b'])}", row["q"])
+    return (best[0], "the top supported pair") if best else (None, "")
+
+
+def follow_up_context(session_id: str | None) -> dict | None:
+    """The previous run of this session, for the planner; None when there is none (a fresh question)."""
+    with _lock:
+        s = dict(SESSIONS.get(session_id or "", {}))
+    rid = s.get("last_run_id")
+    if not rid:
+        return None
+    try:
+        run = get_handle(rid).run
+    except KeyError:
+        try:
+            run = orchestrator.load_run(rid)
+        except (FileNotFoundError, ValueError):
+            return None
+    if not run.state.report:
+        return None
+    pair, why = focus_pair(run, s.get("selected_pair"))
+    findings = [(f.get("plain") or {}).get("text") or f["rendered"] for f in run.state.report["findings"]][:3]
+    return {"run_id": rid, "question": run.question, "plan": run.plan.as_dict(), "findings": findings,
+            "focus_pair": pair, "focus_reason": why}
+
+
+def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id: str | None = None,
+                 selected_pair: str | None = None, follow_up: bool = False) -> dict:
+    """A follow-up uses the session's last run (its params, findings, and the pair "that" refers to)."""
     llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
-    plan, usages = make_plan(llm, question, dataset)
+    if selected_pair is not None:
+        remember(session_id, selected_pair=selected_pair)
+    context = follow_up_context(session_id) if follow_up else None
+    dataset = context["plan"]["dataset"] if context else dataset  # a follow-up stays on the previous dataset
+    plan, usages = make_plan(llm, question, dataset, context)
     pid = uuid.uuid4().hex[:12]
     with _lock:
         PLANS[pid] = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
-                      "llm": llm}
-    return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model}
+                      "llm": llm, "session_id": session_id}
+    follow = {k: context[k] for k in ("run_id", "question", "focus_pair")} if context else None
+    return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model, "follow_up": follow}
 
 
 def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LLM | None = None) -> dict:
@@ -124,6 +181,7 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
     handle = RunHandle(run, step_through=step_through)
     with _lock:
         RUNS[run.run_id] = handle
+    remember(stored.get("session_id"), last_run_id=run.run_id)
     llm: LLM = stored["llm"]
 
     plant = plant_overclaim and verifier.planting_allowed()

@@ -312,6 +312,25 @@ def headline_problems(state, args: dict) -> list[str]:
     return p
 
 
+MAX_NEXT_QUESTIONS = 2
+
+
+def next_questions(state, args: dict) -> tuple[list[str], list[str]]:
+    """Muse's suggested next questions (buttons in the UI): at most two, each a short question with no
+    placeholders and no numbers beyond residue numbers and approved cutoffs. Returns (kept, problems)."""
+    kept, problems = [], []
+    for i, q in enumerate((args.get("next_questions") or [])[:MAX_NEXT_QUESTIONS]):
+        q = q.strip() if isinstance(q, str) else ""
+        why = ("must be 10-200 characters" if not 10 <= len(q) <= 200 else "must end with '?'" if not q.endswith("?")
+               else "cannot contain placeholders" if PLACEHOLDER.search(q)
+               else f"bare numbers {bare_numbers(state, q)}" if bare_numbers(state, q) else None)
+        if why:
+            problems.append(f"next_questions[{i}]: {why}")
+        else:
+            kept.append(q)
+    return kept, problems
+
+
 def interpretation_problems(state, args: dict) -> list[str]:
     """Interpretation is labelled as such and, like a hypothesis, claims no statistical support and writes no numbers."""
     text = (args.get("interpretation") or "").strip()
@@ -408,11 +427,13 @@ def build_report(state, args: dict) -> dict:
         text = (args.get(key) or "").strip()
         return dict(zip(("text", "segments"), render(state, text))) if text and not problems else None
     hp, ip = headline_problems(state, args), interpretation_problems(state, args)
+    nq, nqp = next_questions(state, args)
     return {
+        "next_questions": nq,
         "headline": written("headline", hp),
         "interpretation": written("interpretation", ip),
         "interpretation_label": INTERPRETATION_LABEL,
-        "text_dropped": hp + ip,
+        "text_dropped": hp + ip + nqp,
         "findings": findings,
         "statistical_support": stat_rows,
         "background": section("background"),

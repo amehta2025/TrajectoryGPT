@@ -9,7 +9,7 @@
 // Verification is not shown until a verifier result exists (SPEC §9 step 7, Day 6).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type Finding, type Metadata, type RunView, type Segment, type TextItem } from '../api/client'
-import { toggleScience, useInvestigation } from '../state/investigation'
+import { ask, toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
 import { buildCards, touchAnswer, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
@@ -336,7 +336,31 @@ export function ReportView({ meta }: { meta: Metadata | null }) {
         ))}
         {located.map((l, i) => <LocatedCard key={l.finding.id} l={l} n={built.cards.length + i + 1} run={run} science={science} />)}
       </ul>
+      <NextQuestions run={run} meta={meta} />
     </section>
+  )
+}
+
+/** Suggested next questions (written by Muse, checked by code) and a follow-up box. Each goes through plan approval. */
+function NextQuestions({ run, meta }: { run: RunView; meta: Metadata }) {
+  const [text, setText] = useState('')
+  const suggestions = run.report?.next_questions ?? []
+  const go = (q: string) => q.trim() && void ask(q.trim(), meta.dataset, true)
+  return (
+    <div className="next-qs">
+      <h3>Ask next</h3>
+      {suggestions.length > 0 && (
+        <div className="next-q-buttons">
+          {suggestions.map((q) => <button key={q} className="next-q" onClick={() => go(q)}>{hisText(q)}</button>)}
+        </div>
+      )}
+      <form className="follow-up" onSubmit={(e) => { e.preventDefault(); go(text) }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} maxLength={2000}
+          placeholder="Ask a follow-up, e.g. “Does that persist?”" aria-label="Follow-up question" />
+        <button type="submit" disabled={!text.trim()}>Ask</button>
+      </form>
+      <p className="muted small">Follow-ups use this investigation’s settings and the contact you selected. You approve the plan before it runs.</p>
+    </div>
   )
 }
 

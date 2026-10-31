@@ -2,7 +2,8 @@
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
 import { api, PasscodeRequired, setPasscode, UnsupportedFigure, type Figure, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
-import { setSelection } from './selection'
+import { getSelection, setSelection } from './selection'
+import { parseResidueKey } from './residueKey'
 
 export type Investigation = {
   phase: 'idle' | 'planning' | 'plan' | 'running' | 'finished'
@@ -49,12 +50,21 @@ export function useInvestigation(): Investigation {
   )
 }
 
-export async function ask(question: string, dataset: string) {
+/** A pair's backend label ("HSE134-ASP118") from residue keys. */
+function pairLabel(keyA: string, keyB: string): string {
+  const [a, b] = [parseResidueKey(keyA), parseResidueKey(keyB)]
+  return `${a.resname}${a.resid}-${b.resname}${b.resid}`
+}
+
+/** A question; a follow-up also sends the selected pair, and the backend adds this session's last run. */
+export async function ask(question: string, dataset: string, followUp = false) {
   closeStream?.()
-  retry = () => ask(question, dataset)
-  set({ ...empty, phase: 'planning', question, dataset })
+  retry = () => ask(question, dataset, followUp)
+  const { pair } = getSelection()
+  const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
+  set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
   try {
-    const proposal = await api.plan(question, dataset)
+    const proposal = await api.plan(question, dataset, { followUp, selectedPair })
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
@@ -115,7 +125,7 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean) {
     set({ phase: 'running', runId: run_id, events: [], error: null })
     closeStream = api.runEvents(run_id, (e) => {
       set({ events: [...state.events, e], paused: e.type === 'paused' })
-      if (e.type === 'turn' || e.type === 'run_finished' || e.type === 'run_started') void refresh(run_id)
+      if (['turn', 'run_finished', 'run_started', 'verification_started', 'verification_finished'].includes(e.type)) void refresh(run_id)
       if (e.type === 'run_finished') set({ phase: 'finished' })
     })
   } catch (e) {

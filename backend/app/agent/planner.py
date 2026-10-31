@@ -135,10 +135,10 @@ def to_approved(p: dict) -> ApprovedPlan:
     )
 
 
-def make_plan(llm: LLM, question: str, dataset: str) -> tuple[dict, list]:
+def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None) -> tuple[dict, list]:
     """Returns (plan dict, usages). One retry with the validation errors."""
     history = [{"role": "system", "content": prompts.PLANNER_SYSTEM},
-               {"role": "user", "content": prompts.planner_user(question, dataset, dataset_facts())}]
+               {"role": "user", "content": prompts.planner_user(question, dataset, dataset_facts(), context)}]
     usages = []
     for attempt in range(2):
         r = llm.run_turn(history, schema=plan_schema(), effort=EFFORT["plan"])

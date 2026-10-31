@@ -89,6 +89,8 @@ Plain language (the main view; readers are not specialists):
   {{r1.any_contact_freq|pct}} of frames." It may say supported or robust only when a cited finding is.
 - Optional "interpretation": one hedged sentence on what the answer might mean; it is shown labelled
   "interpretation - not computed" and has no numbers.
+- "next_questions": one or two short questions worth asking next, grounded in what you found (e.g. whether a
+  supported change persists, or what an unsupported one would need). Each must end with "?".
 - Text that fails these checks is dropped and replaced by a code-built sentence, so follow them exactly.
 """
 
@@ -127,14 +129,31 @@ def figure_user(note: str) -> str:
     return "Extract the spec of this figure." + (f" The user adds: {note}" if note else "")
 
 
-def planner_user(question: str, dataset: str, datasets: dict) -> str:
+def planner_user(question: str, dataset: str, datasets: dict, context: dict | None = None) -> str:
     lines = [f"Selected dataset: {dataset}", "Datasets:"]
     for ds, d in datasets.items():
         time = f"{d['dt_ns']} ns per frame" if d["dt_ns"] else "path steps, no physical time"
         lines.append(f"- {ds}: n_frames={d['n_frames']}, {time}, stats_valid={d['stats_valid']}, "
                      f"groups={d['groups']}. {d['description']}")
     lines.append(f"Default sequence_exclusion: {datasets[dataset]['sequence_exclusion']}")
+    if context:
+        lines.append(follow_up_block(context))
     lines.append(f"\nQuestion: {question}")
+    return "\n".join(lines)
+
+
+def follow_up_block(c: dict) -> str:
+    """The previous investigation, for a follow-up question ("does that persist?")."""
+    p = c["plan"]
+    wb = f", window_b {p['window_b']}" if p.get("window_b") else ""
+    lines = ["", "This is a follow-up in the same session. Previous investigation:",
+             f"- question: {c['question']}",
+             f"- approved: dataset {p['dataset']}, groups {p['group_a']}-{p['group_b']}, cutoff {p['cutoff']} Å, "
+             f"window_a {p['window_a']}{wb}, stride {p['stride']}, robustness cutoffs {p['robustness_cutoffs']} Å"]
+    lines += [f"- finding: {f}" for f in c["findings"]]
+    if c.get("focus_pair"):
+        lines.append(f"- \"that\", \"it\" or \"this contact\" refers to the pair {c['focus_pair']} ({c['focus_reason']})")
+    lines.append("Keep the previous dataset, groups, cutoff, windows and robustness cutoffs unless the question asks to change them.")
     return "\n".join(lines)
 
 

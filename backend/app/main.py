@@ -1,6 +1,7 @@
 """FastAPI app: thin HTTP wrappers around the science functions. No science here."""
 import json
 import os
+import re
 
 import numpy as np
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
@@ -231,14 +232,24 @@ def auth_check():
 
 
 @app.post("/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
-def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
+def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), session_id: str | None = Body(None),
+         selected_pair: str | None = Body(None), follow_up: bool = Body(False)):
     _check_dataset(dataset)
     if not question.strip() or len(question) > 2000:
         raise HTTPException(400, "question must be 1-2000 characters")
+    if session_id is not None and not SESSION_ID.fullmatch(session_id):
+        raise HTTPException(400, "bad session_id")
+    if selected_pair is not None and not PAIR_LABEL.fullmatch(selected_pair):
+        raise HTTPException(400, "selected_pair must look like 'HSE134-ASP118'")
     try:
-        return session.propose_plan(question.strip(), dataset)
+        return session.propose_plan(question.strip(), dataset, session_id=session_id, selected_pair=selected_pair,
+                                    follow_up=follow_up)
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
+
+
+SESSION_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
+PAIR_LABEL = re.compile(r"[A-Z]{3}\d{1,4}-[A-Z]{3}\d{1,4}")
 
 
 @app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])

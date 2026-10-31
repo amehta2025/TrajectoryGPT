@@ -151,7 +151,12 @@ export type Figure = { figure_id: string; filename: string; mime: string; spec: 
 /** A file for figure mode: base64 content plus its type (PNG, JPEG or PDF). */
 export type UploadFile = { filename: string; mime: string; data: string }
 
-export type PlanResponse = { plan_id: string; plan: Plan; usage: Usage[]; model: string; figure?: Figure; question?: string }
+export type FollowUp = { run_id: string; question: string; focus_pair: string | null }
+export type PlanResponse = {
+  plan_id: string; plan: Plan; usage: Usage[]; model: string; figure?: Figure; question?: string
+  follow_up?: FollowUp | null // set when the plan follows up the session's previous investigation
+}
+export type PlanOptions = { followUp?: boolean; selectedPair?: string | null }
 
 export type ChecklistItem = { item: number; tool: string; text: string; status: 'pending' | 'in_progress' | 'done' | 'skipped'; note: string }
 
@@ -207,6 +212,7 @@ export type Report = {
   caveats: TextItem[]
   gaps: TextItem[]
   follow_ups: { tool: string; pair?: string; rationale: string }[]
+  next_questions?: string[] // Muse's suggested next questions (checked by code), shown as buttons
 }
 
 export type ResultPair = { key_a: string; key_b: string; supported?: boolean; provisional?: boolean; verdict?: string }
@@ -236,7 +242,19 @@ export type Turn = {
   tool_s: number
 }
 
-export type RunStatus = 'running' | 'needs_review' | 'awaiting_verification' | 'aborted_budget' | 'error'
+export type RunStatus = 'running' | 'needs_review' | 'awaiting_verification' | 'verified' | 'flagged' | 'aborted_budget' | 'error'
+
+export type VerifierFlag = { finding_id: string; quote: string; problem: string; severity: 'major' | 'minor' }
+/** The background Muse Wonder check of an accepted report (SPEC §9 step 7). */
+export type Verification = {
+  status: 'pending' | 'verified' | 'flagged' | 'error'
+  summary?: string
+  flags?: VerifierFlag[]
+  figures?: string[]
+  usage?: Usage
+  wall_s?: number
+  error?: string
+}
 
 export type RunView = {
   run_id: string
@@ -253,6 +271,9 @@ export type RunView = {
   error: string | null
   step_through: boolean
   figure: Figure | null
+  verification?: Verification | null
+  verifier_cost_usd?: number | null
+  planted?: string | null // dev-only planted overclaim (its finding id)
 }
 
 export type RunEvent =
@@ -261,6 +282,8 @@ export type RunEvent =
   | { seq: number; type: 'turn'; turn: number; tool: string | null; status: string; model_s: number; tool_s: number; cost_usd: number | null; effort: string; provenance_id: string | null; checklist: ChecklistItem[]; progress: string }
   | { seq: number; type: 'paused' }
   | { seq: number; type: 'run_finished'; status: RunStatus; problems: string[]; cost_usd: number | null; wall_s: number; error: string | null }
+  | { seq: number; type: 'verification_started'; planted: string | null }
+  | { seq: number; type: 'verification_finished'; status: RunStatus; verification: Verification }
 
 // Demo passcode for the AI endpoints (SPEC §12): asked once, kept for this browser tab only.
 const PASSCODE_KEY = 'trajectorygpt.passcode'
@@ -335,6 +358,23 @@ async function get(path: string, params: Record<string, string | number | undefi
   return r
 }
 
+let memorySession: string | null = null
+
+/** One id per browser tab, so the backend can resolve follow-ups ("does that persist?") to this tab's last run. */
+export function sessionId(): string {
+  const make = () => (crypto.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 14)}`)
+  try {
+    let id = sessionStorage.getItem('tgpt-session')
+    if (!id) {
+      id = make()
+      sessionStorage.setItem('tgpt-session', id)
+    }
+    return id
+  } catch {
+    return (memorySession ??= make())
+  }
+}
+
 export const api = {
   datasets: async (): Promise<DatasetInfo[]> => (await get('/datasets')).json(),
   metadata: async (ds: string): Promise<Metadata> => (await get(`/metadata/${ds}`)).json(),
@@ -348,7 +388,10 @@ export const api = {
   figurePlan: (files: UploadFile[], dataset: string, note: string) =>
     post<PlanResponse>('/figure/plan', { files, dataset, note }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
-  plan: (question: string, dataset: string) => post<PlanResponse>('/plan', { question, dataset }),
+  plan: (question: string, dataset: string, opts: PlanOptions = {}) =>
+    post<PlanResponse>('/plan', {
+      question, dataset, session_id: sessionId(), follow_up: opts.followUp ?? false, selected_pair: opts.selectedPair ?? null,
+    }),
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = []) =>
     post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
@@ -359,7 +402,8 @@ export const api = {
     es.onmessage = (m) => {
       const e = JSON.parse(m.data) as RunEvent
       onEvent(e)
-      if (e.type === 'run_finished') es.close()
+      // An accepted report keeps the stream open for the background verifier's result.
+      if (e.type === 'verification_finished' || (e.type === 'run_finished' && e.status !== 'awaiting_verification')) es.close()
     }
     return () => es.close()
   },

@@ -434,6 +434,10 @@ SCHEMAS = [
                                                         "number, e.g. 'Rarely: NMP and LID touch in {{r1.any_contact_freq|pct}} of frames.'"},
         "interpretation": {"type": "string", "description": "Optional: one hedged plain sentence on what the answer might mean, shown "
                                                               "labelled 'interpretation — not computed'. No numbers, no claims of support."},
+        "next_questions": {"type": "array", "items": {"type": "string"},
+                           "description": "One or two short follow-up questions a researcher might ask next, based on these findings "
+                                          "(e.g. 'Does the HSE134-ASP118 change persist across the whole run?'). Shown as buttons; each "
+                                          "goes through plan approval. No numbers except residue numbers and approved cutoffs."},
         "background": {"type": "array", "items": {"type": "string"},
                        "description": "For general questions only: brief textbook context, shown as 'background — not computed'. No numbers, no claims about this run."},
         "hypotheses": {"type": "array", "items": {"type": "string"}, "description": "Possible explanations, hedged."},

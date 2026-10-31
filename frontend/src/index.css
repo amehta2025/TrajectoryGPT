@@ -360,3 +360,12 @@ button.science-toggle {
 .marker-num { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; margin-right: 8px; border-radius: 10px; background: #f3f6fa; color: #0b0e14; font-size: 12px; font-weight: 700; vertical-align: 1px; }
 .ccard.located { padding-bottom: 10px; }
 .headline .why { margin: 6px 0 0; font-size: 13px; color: #c3cad6; }
+
+/* Ask next: suggested follow-up questions and the follow-up box */
+.next-qs { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line, #2a3240); }
+.next-qs h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.next-q-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.next-q { text-align: left; font-size: 14px; padding: 8px 12px; border-radius: 8px; }
+.follow-up { display: flex; gap: 8px; }
+.follow-up input { flex: 1; min-width: 0; }
+.follow-of { display: block; margin-bottom: 2px; }

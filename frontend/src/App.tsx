@@ -15,6 +15,7 @@ import { CostMeter } from './components/CostMeter'
 import { ReproduceView } from './components/ReproduceView'
 import { AnalysisCards } from './components/AnalysisViews'
 import { DOMAIN_COLORS } from './theme'
+import { hisText } from './state/residueKey'
 
 function Structure({ meta }: { meta: Metadata }) {
   return (
@@ -78,6 +79,10 @@ export default function App() {
         <main className="inv">
           <div className="inv-head">
             {inv.needPasscode && <PasscodePrompt />}
+            {inv.proposal?.follow_up && (
+              <span className="muted small follow-of">Following up on “{inv.proposal.follow_up.question}”
+                {inv.proposal.follow_up.focus_pair && <> · about {hisText(inv.proposal.follow_up.focus_pair)}</>}</span>
+            )}
             <span className="muted small">You asked</span>
             <h1 className="inv-question">{inv.question}</h1>
             <Headline meta={meta} />
