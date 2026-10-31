@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, setPasscode, UnsupportedFigure, type Figure, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Figure, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -68,6 +68,7 @@ export async function ask(question: string, dataset: string, followUp = false) {
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
+    else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
     else set({ phase: 'idle', error: `Planning failed: ${(e as Error).message}` })
   }
 }
@@ -98,6 +99,7 @@ export async function askFigure(files: File[], dataset: string, note: string, la
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof UnsupportedFigure) set({ phase: 'idle', unsupported: { message: e.message, figure: e.figure } })
+    else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
     else set({ phase: 'idle', error: `Figure planning failed: ${(e as Error).message}` })
   }
 }

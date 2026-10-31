@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import io
+import hashlib
 import json
 import uuid
 from pathlib import Path
@@ -165,7 +166,7 @@ def save_figure(files: list[tuple[str, str, bytes]], directory: Path | None = No
     fid = uuid.uuid4().hex[:16]
     (d / fid).write_bytes(raw)
     (d / f"{fid}.json").write_text(json.dumps({"filename": name, "mime": mime}), encoding="utf-8")
-    return {"figure_id": fid, "filename": name, "mime": mime}
+    return {"figure_id": fid, "filename": name, "mime": mime, "sha256": hashlib.sha256(raw).hexdigest()}
 
 
 def load_figure(figure_id: str, directory: Path | None = None) -> tuple[bytes, str]:

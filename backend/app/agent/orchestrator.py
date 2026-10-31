@@ -43,6 +43,8 @@ class Run:
     figure: dict | None = None  # figure mode: {figure_id, filename, mime, spec}
     verification: dict | None = None  # Muse Wonder check: {status: pending|verified|flagged|error, summary, flags, usage}
     planted: str | None = None  # dev-only planted overclaim: its finding id
+    proposal: dict | None = None  # the plan as proposed (summary, step rationales), for replay
+    recorded_from: str | None = None  # replay mode: the recorded run this one plays back
 
     def cost_usd(self) -> float | None:
         costs = [t["usage"]["cost_usd"] for t in self.turns] + [u["cost_usd"] for u in self.plan_usage]
@@ -59,6 +61,7 @@ class Run:
             "report": self.state.report, "extra_steps": self.state.extra_steps, "problems": self.problems, "wall_s": round(self.wall_s, 2),
             "cost_usd": self.cost_usd(), "verifier_cost_usd": self.verifier_cost_usd(), "error": self.error,
             "figure": self.figure, "verification": self.verification, "planted": self.planted,
+            "proposal": self.proposal, "recorded_from": self.recorded_from,
             "input_items": self.input_items,  # full history incl. encrypted reasoning, for resume_run
         })
 
@@ -190,7 +193,8 @@ def load_run(run_id: str, directory: Path | None = None) -> Run:
     return Run(d["run_id"], d["question"], plan, state, status=d["status"], turns=d["turns"],
                plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"],
                wall_s=d.get("wall_s", 0.0), error=d.get("error"), figure=d.get("figure"),
-               verification=d.get("verification"), planted=d.get("planted"))
+               verification=d.get("verification"), planted=d.get("planted"), proposal=d.get("proposal"),
+               recorded_from=d.get("recorded_from"))
 
 
 def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:

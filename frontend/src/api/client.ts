@@ -155,8 +155,19 @@ export type FollowUp = { run_id: string; question: string; focus_pair: string | 
 export type PlanResponse = {
   plan_id: string; plan: Plan; usage: Usage[]; model: string; figure?: Figure; question?: string
   follow_up?: FollowUp | null // set when the plan follows up the session's previous investigation
+  recorded?: boolean // replay mode: a recorded run's plan (settings are fixed)
 }
 export type PlanOptions = { followUp?: boolean; selectedPair?: string | null }
+export type Recorded = { run_id: string; label: string; question: string; dataset: string; figure: boolean; figure_id: string | null }
+
+/** Replay mode: the question matched no recorded run (the AI is off). */
+export class ReplayOnly extends Error {
+  recorded: Recorded[]
+  constructor(message: string, recorded: Recorded[]) {
+    super(message)
+    this.recorded = recorded
+  }
+}
 
 export type ChecklistItem = { item: number; tool: string; text: string; status: 'pending' | 'in_progress' | 'done' | 'skipped'; note: string }
 
@@ -274,6 +285,7 @@ export type RunView = {
   verification?: Verification | null
   verifier_cost_usd?: number | null
   planted?: string | null // dev-only planted overclaim (its finding id)
+  recorded_from?: string | null // replay mode: this is a recorded run played back
 }
 
 export type RunEvent =
@@ -325,6 +337,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   if (r.status === 401) throw new PasscodeRequired('Demo passcode required')
+  if (r.status === 409) {
+    const d = await r.clone().json().then((j) => j.detail, () => null)
+    if (d?.replay) throw new ReplayOnly(d.message, d.recorded)
+  }
+  if (r.status === 429) {
+    const d = await r.clone().json().then((j) => j.detail, () => null)
+    throw new Error(typeof d === 'string' ? d : 'Too many requests; try again later.')
+  }
   if (!r.ok) {
     let detail: unknown = r.statusText
     try {
@@ -359,7 +379,7 @@ async function get(path: string, params: Record<string, string | number | undefi
 }
 
 export type Health = {
-  status: string; mode: 'live' | 'replay'; model: string; verifier_model: string
+  status: string; mode: 'live' | 'replay'; mode_reason: string | null; model: string; verifier_model: string
   spent_today_usd: number; daily_budget_usd: number; dev_overclaim_toggle: boolean; sandbox: boolean
 }
 /** The clean-sandbox re-run of a run's export script. */
@@ -408,6 +428,7 @@ export const api = {
     post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
   /** Backend mode and switches; fetched once per page load. */
+  replays: async (): Promise<{ mode: 'live' | 'replay'; recorded: Recorded[] }> => (await get('/replays')).json(),
   health: (): Promise<Health> => (healthCache ??= get('/health').then((r) => r.json())),
   exportUrl: (runId: string) => new URL(`/runs/${runId}/export`, BASE).toString(),
   sandboxStart: (runId: string) => post<SandboxJob>(`/runs/${runId}/sandbox`, {}),

@@ -4,7 +4,7 @@ import os
 import re
 
 import numpy as np
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
@@ -12,7 +12,8 @@ from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from app.agent import session, verifier
 from app.agent.planner import PlanInvalid
 from app.config import dataset_config, load_config
-from app.safety import budget
+from app.safety import budget, replay
+from app.safety.ratelimit import LIMITER, RateLimited, client_ip
 from app.safety.passcode import HEADER as PASSCODE_HEADER, passcode_ok
 from app.science.contact_stats import StatsRefused, compare_intervals, contact_statistics
 from app.science.contacts import CONTACT_DEFINITION, calculate_contacts
@@ -70,7 +71,8 @@ def _round(a: np.ndarray, nd: int = 4) -> list:
 @app.get("/health")
 def health():
     return {"status": "ok", "datasets": sorted(load_config()["datasets"]),
-            "model": os.environ.get("META_MODEL", "muse-spark-1.3"), "mode": os.environ.get("APP_MODE", "live"),
+            "model": os.environ.get("META_MODEL", "muse-spark-1.3"), "mode": replay.mode()[0],
+            "mode_reason": replay.mode()[1],
             "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd(),
             "verifier_model": os.environ.get("META_VERIFIER_MODEL", "muse-wonder-1.0"),
             "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1"}
@@ -215,8 +217,28 @@ def native_contacts_endpoint(dataset: str, selection: str = "name CA", radius: f
 # random id) and the science endpoints above stay public.
 
 def require_passcode(x_demo_passcode: str | None = Header(None)):
+    """Live AI work needs the passcode; replay mode calls no model, so recorded runs are open to everyone."""
+    if replay.mode()[0] == "replay":
+        return
     if not passcode_ok(x_demo_passcode):
         raise HTTPException(401, "Demo passcode required for AI investigations.")
+
+
+def rate_limit(kind: str):
+    """Per-IP hourly limit (app/safety/ratelimit.py), keyed on the real client IP."""
+    def dep(request: Request):
+        ip = client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for"))
+        try:
+            LIMITER.check(kind, ip)
+        except RateLimited as e:
+            raise HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after_s)}) from None
+    return dep
+
+
+def _replay_miss() -> HTTPException:
+    return HTTPException(409, {"replay": True, "recorded": replay.catalog(),
+                               "message": "The AI is off right now, so only recorded investigations can be shown. "
+                                          "Pick one of them; charts and the 3D viewer stay live."})
 
 
 def require_budget():
@@ -231,7 +253,13 @@ def auth_check():
     return {"ok": True}
 
 
-@app.post("/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
+@app.get("/replays")
+def replays():
+    """Recorded runs available in replay mode (also shown on the start screen while it is on)."""
+    return {"mode": replay.mode()[0], "recorded": replay.catalog()}
+
+
+@app.post("/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
 def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), session_id: str | None = Body(None),
          selected_pair: str | None = Body(None), follow_up: bool = Body(False)):
     _check_dataset(dataset)
@@ -241,6 +269,12 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), sess
         raise HTTPException(400, "bad session_id")
     if selected_pair is not None and not PAIR_LABEL.fullmatch(selected_pair):
         raise HTTPException(400, "selected_pair must look like 'HSE134-ASP118'")
+    if replay.mode()[0] == "replay":
+        r = replay.match_question(question)
+        if r is None:
+            raise _replay_miss()
+        return replay.proposal(r)
+    require_budget()
     try:
         return session.propose_plan(question.strip(), dataset, session_id=session_id, selected_pair=selected_pair,
                                     follow_up=follow_up)
@@ -252,11 +286,20 @@ SESSION_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 PAIR_LABEL = re.compile(r"[A-Z]{3}\d{1,4}-[A-Z]{3}\d{1,4}")
 
 
-@app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
+@app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
 def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body("")):
     """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
-    from app.agent.figure import NOTE_LIMIT, UnsupportedFigure, UploadRejected
+    from app.agent.figure import NOTE_LIMIT, UnsupportedFigure, UploadRejected, decode_upload
     _check_dataset(dataset)
+    if replay.mode()[0] == "replay":
+        try:
+            r = replay.match_figure([decode_upload(f) for f in files[:2]])
+        except UploadRejected as e:
+            raise HTTPException(400, str(e)) from None
+        if r is None:
+            raise _replay_miss()
+        return replay.proposal(r)
+    require_budget()
     try:
         return session.propose_figure_plan(files, dataset, note[:NOTE_LIMIT])
     except UploadRejected as e:
@@ -273,13 +316,22 @@ def get_figure(figure_id: str):
     try:
         raw, mime = load_figure(figure_id)
     except KeyError:
-        raise HTTPException(404, "unknown figure") from None
+        recorded = replay.figure_path(figure_id)  # figures of recorded runs ship with the replay set
+        if recorded is None:
+            raise HTTPException(404, "unknown figure") from None
+        raw, mime = recorded
     return Response(content=raw, media_type=mime)
 
 
-@app.post("/runs", dependencies=[Depends(require_passcode), Depends(require_budget)])
+@app.post("/runs", dependencies=[Depends(require_passcode), Depends(rate_limit("run"))])
 def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
               confirmed_fields: list[str] = Body([]), plant_overclaim: bool = Body(False)):
+    if plan_id.startswith("replay:"):  # a recorded run: no model is called, edits do not apply
+        try:
+            return {"run_id": replay.start_playback(plan_id, step_through)}
+        except KeyError as e:
+            raise HTTPException(404, str(e)) from None
+    require_budget()
     try:
         return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields, plant_overclaim)}
     except KeyError as e:
@@ -357,7 +409,7 @@ def _sandbox_done(run_id: str, job: dict) -> None:
         session.ON_RUN_FINISHED()  # on Modal: commit the Volume
 
 
-@app.post("/runs/{run_id}/sandbox", dependencies=[Depends(require_passcode)])
+@app.post("/runs/{run_id}/sandbox", dependencies=[Depends(require_passcode), Depends(rate_limit("sandbox"))])
 def sandbox_start(run_id: str):
     """Re-run the export in a clean Modal Sandbox (deployed app only: SANDBOX_ENABLED=1)."""
     from app.provenance import export, sandbox

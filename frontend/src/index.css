@@ -377,3 +377,8 @@ button.science-toggle {
 .repro-ok { color: #8fd19e; }
 .repro-bad { color: #f0a36b; }
 .repro-out { max-height: 320px; overflow: auto; font-size: 12px; white-space: pre; }
+
+/* Replay mode */
+.replay-banner { border: 1px solid #6b5a2e; background: rgba(240, 190, 90, 0.08); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-size: 14px; }
+.replay-banner p { margin: 0 0 8px; }
+.recorded-badge { display: inline-block; margin-bottom: 4px; margin-right: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: rgba(240, 190, 90, 0.15); color: #f0c46b; }

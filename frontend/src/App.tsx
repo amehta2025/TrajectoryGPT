@@ -83,6 +83,9 @@ export default function App() {
               <span className="muted small follow-of">Following up on “{inv.proposal.follow_up.question}”
                 {inv.proposal.follow_up.focus_pair && <> · about {hisText(inv.proposal.follow_up.focus_pair)}</>}</span>
             )}
+            {(inv.run?.recorded_from || inv.proposal?.recorded) && (
+              <span className="recorded-badge" title="Replayed from a real run recorded earlier; no AI model is called">Recorded run</span>
+            )}
             <span className="muted small">You asked</span>
             <h1 className="inv-question">{inv.question}</h1>
             <Headline meta={meta} />

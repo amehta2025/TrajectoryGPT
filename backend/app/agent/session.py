@@ -178,6 +178,7 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
     run = new_run(stored["question"], approved)
     run.plan_usage = stored["usage"]
     run.figure = stored.get("figure")
+    run.proposal = stored["plan"]
     handle = RunHandle(run, step_through=step_through)
     with _lock:
         RUNS[run.run_id] = handle

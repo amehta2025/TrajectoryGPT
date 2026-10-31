@@ -2,8 +2,8 @@
 // agent reads its method and runs it on our preloaded AdK simulations. Asking a question is the second
 // entry point. The dataset picker is a small detail. Users never upload trajectories (README: Known
 // limitations), and the copy never implies they can.
-import { useState } from 'react'
-import type { DatasetInfo, Metadata } from '../api/client'
+import { useEffect, useState } from 'react'
+import { api, type DatasetInfo, type Metadata, type Recorded } from '../api/client'
 import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
 import { datasetName } from './DatasetBadge'
@@ -46,6 +46,33 @@ export function PasscodePrompt() {
       <button type="submit" className="primary" disabled={!code.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
       {error && <span className="error-text small">{error}</span>}
     </form>
+  )
+}
+
+/** Replay mode (AI off): say so, and offer the recorded real investigations. Charts and 3D stay live. */
+function ReplayBanner({ busy, onQuestion, onFigure }: {
+  busy: boolean; onQuestion: (q: string, ds: string) => void; onFigure: (f: File, ds: string, label: string) => void
+}) {
+  const [info, setInfo] = useState<{ mode: string; recorded: Recorded[]; reason: string | null } | null>(null)
+  useEffect(() => {
+    Promise.all([api.replays(), api.health()]).then(([r, h]) => setInfo({ ...r, reason: h.mode_reason }), () => {})
+  }, [])
+  if (!info || info.mode !== 'replay') return null
+  const openFigure = async (r: Recorded) => {
+    const blob = await (await fetch(api.figureUrl(r.figure_id!))).blob()
+    onFigure(new File([blob], 'figure.png', { type: blob.type || 'image/png' }), r.dataset, r.label)
+  }
+  return (
+    <div className="replay-banner">
+      <p><strong>The AI is off right now</strong>{info.reason ? ` (${info.reason})` : ''}. You can watch recorded real
+        investigations, replayed step by step; the charts and the 3D viewer are live.</p>
+      <div className="example-row">
+        {info.recorded.map((r) => (
+          <button key={r.run_id} className="example-chip" disabled={busy}
+            onClick={() => (r.figure ? void openFigure(r) : onQuestion(r.question, r.dataset))}>{r.label}</button>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -92,6 +119,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   return (
     <section className="start">
       <div className="start-main">
+        <ReplayBanner busy={busy} onQuestion={startQuestion} onFigure={(f, ds, label) => startFigure([f], ds, '', label)} />
         <h1 className="start-title">Ask what a protein is doing</h1>
         <p className="start-lede">
           Drop in a figure from any paper, or ask a question. TrajectoryGPT runs the analysis on real simulations of

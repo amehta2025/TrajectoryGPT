@@ -88,7 +88,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   if (phase === 'planning') return <section className="card plan-card"><h2>Plan</h2><p className="muted">Drafting a plan… (about 10 s)</p></section>
   if (!proposal || !draft) return null
   const p = proposal.plan
-  const locked = phase !== 'plan'
+  const locked = phase !== 'plan' || !!proposal.recorded // a recorded plan cannot be edited
   const checklist = run?.checklist
   const done = checklist ? checklist.filter((c) => c.status === 'done' || c.status === 'skipped').length : 0
   const halves = isHalves(p, meta?.n_frames)
