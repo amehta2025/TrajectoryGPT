@@ -73,7 +73,7 @@ def health():
             "model": os.environ.get("META_MODEL", "muse-spark-1.3"), "mode": os.environ.get("APP_MODE", "live"),
             "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd(),
             "verifier_model": os.environ.get("META_VERIFIER_MODEL", "muse-wonder-1.0"),
-            "dev_overclaim_toggle": verifier.planting_allowed()}
+            "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1"}
 
 
 @app.get("/datasets")
@@ -329,6 +329,52 @@ def run_events(run_id: str, after: int = 0):
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/runs/{run_id}/export", response_class=PlainTextResponse)
+def export_run(run_id: str):
+    """reproduce_<run_id>.py: a standalone script that recomputes every stored value (SPEC §11)."""
+    from app.provenance import export
+    run = get_run(run_id)
+    try:
+        script = export.build_script(run)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+    return PlainTextResponse(script, media_type="text/x-python",
+                             headers={"Content-Disposition": f'attachment; filename="{export.script_name(run_id)}"'})
+
+
+def _sandbox_file(run_id: str):
+    from app.agent.orchestrator import INVESTIGATIONS_DIR
+    return INVESTIGATIONS_DIR / "sandbox" / f"{run_id}.json"
+
+
+def _sandbox_done(run_id: str, job: dict) -> None:
+    path = _sandbox_file(run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(job), encoding="utf-8")
+    if session.ON_RUN_FINISHED:
+        session.ON_RUN_FINISHED()  # on Modal: commit the Volume
+
+
+@app.post("/runs/{run_id}/sandbox", dependencies=[Depends(require_passcode)])
+def sandbox_start(run_id: str):
+    """Re-run the export in a clean Modal Sandbox (deployed app only: SANDBOX_ENABLED=1)."""
+    from app.provenance import export, sandbox
+    if os.environ.get("SANDBOX_ENABLED") != "1":
+        raise HTTPException(503, "The clean-sandbox check runs on the deployed app only; run the downloaded script locally instead.")
+    script = export.build_script(get_run(run_id))
+    return sandbox.start(run_id, script, on_done=_sandbox_done)
+
+
+@app.get("/runs/{run_id}/sandbox")
+def sandbox_status(run_id: str):
+    from app.provenance import sandbox
+    get_run(run_id)  # 404 for an unknown run
+    if run_id in sandbox.JOBS:
+        return sandbox.JOBS[run_id]
+    path = _sandbox_file(run_id)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "none"}
 
 
 @app.post("/runs/{run_id}/next", dependencies=[Depends(require_passcode)])

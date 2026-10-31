@@ -8,7 +8,7 @@
 // A needs_review run shows a plain line, with its unresolved problems in the science layer.
 // Verification is not shown until a verifier result exists (SPEC §9 step 7, Day 6).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, type Finding, type Metadata, type RunView, type Segment, type TextItem } from '../api/client'
+import { api, type Finding, type Metadata, type RunView, type SandboxJob, type Segment, type TextItem } from '../api/client'
 import { ask, toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
@@ -337,7 +337,52 @@ export function ReportView({ meta }: { meta: Metadata | null }) {
         {located.map((l, i) => <LocatedCard key={l.finding.id} l={l} n={built.cards.length + i + 1} run={run} science={science} />)}
       </ul>
       <NextQuestions run={run} meta={meta} />
+      <Reproduce run={run} science={science} />
     </section>
+  )
+}
+
+/** One click: a script that recomputes every number; on the deployed app, also re-run it in a clean sandbox. */
+function Reproduce({ run, science }: { run: RunView; science: boolean }) {
+  const [canSandbox, setCanSandbox] = useState(false)
+  const [job, setJob] = useState<SandboxJob>({ status: 'none' })
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.health().then((h) => alive && setCanSandbox(h.sandbox), () => {})
+    api.sandbox(run.run_id).then((j) => alive && setJob(j), () => {})
+    return () => { alive = false }
+  }, [run.run_id])
+  useEffect(() => {
+    if (job.status !== 'running') return
+    const t = setInterval(() => void api.sandbox(run.run_id).then(setJob, () => {}), 3000)
+    return () => clearInterval(t)
+  }, [job.status, run.run_id])
+  const check = async () => {
+    setErr(null)
+    try { setJob(await api.sandboxStart(run.run_id)) } catch (e) { setErr((e as Error).message) }
+  }
+  return (
+    <div className="reproduce">
+      <a className="button-like" href={api.exportUrl(run.run_id)} download>Download a script that recomputes every number</a>
+      {canSandbox && job.status !== 'running' && (
+        <button onClick={() => void check()}>{job.status === 'none' ? 'Check it in a clean cloud sandbox' : 'Check again'}</button>
+      )}
+      {job.status === 'running' && <span className="muted">Re-running the analysis from the raw trajectory in a clean sandbox… (about a minute)</span>}
+      {job.status === 'done' && (
+        <span className={job.reproduced ? 'repro-ok' : 'repro-bad'}>
+          {job.reproduced
+            ? `Reproduced in a clean sandbox: all ${job.n_values} numbers match.`
+            : `Not reproduced: ${job.n_match ?? '?'} of ${job.n_values ?? '?'} numbers match.`}
+        </span>
+      )}
+      {job.status === 'error' && <span className="repro-bad">The sandbox check could not run.</span>}
+      {err && <span className="repro-bad">{err}</span>}
+      {science && job.output && (
+        <details className="fold"><summary>Sandbox output</summary><pre className="repro-out">{job.output}</pre></details>
+      )}
+      {science && job.error && <p className="muted small">{job.error}</p>}
+    </div>
   )
 }
 

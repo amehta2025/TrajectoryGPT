@@ -369,3 +369,11 @@ button.science-toggle {
 .follow-up { display: flex; gap: 8px; }
 .follow-up input { flex: 1; min-width: 0; }
 .follow-of { display: block; margin-bottom: 2px; }
+
+/* Reproduce: download the script, re-run it in a clean sandbox */
+.reproduce { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
+.button-like { display: inline-block; padding: 7px 12px; border: 1px solid var(--line, #2a3240); border-radius: 8px; color: inherit; text-decoration: none; }
+.button-like:hover { border-color: var(--muted); }
+.repro-ok { color: #8fd19e; }
+.repro-bad { color: #f0a36b; }
+.repro-out { max-height: 320px; overflow: auto; font-size: 12px; white-space: pre; }

@@ -358,6 +358,18 @@ async function get(path: string, params: Record<string, string | number | undefi
   return r
 }
 
+export type Health = {
+  status: string; mode: 'live' | 'replay'; model: string; verifier_model: string
+  spent_today_usd: number; daily_budget_usd: number; dev_overclaim_toggle: boolean; sandbox: boolean
+}
+/** The clean-sandbox re-run of a run's export script. */
+export type SandboxJob = {
+  status: 'none' | 'running' | 'done' | 'error'
+  reproduced?: boolean; n_match?: number | null; n_values?: number | null; wall_s?: number; output?: string; error?: string
+}
+
+let healthCache: Promise<Health> | null = null
+
 let memorySession: string | null = null
 
 /** One id per browser tab, so the backend can resolve follow-ups ("does that persist?") to this tab's last run. */
@@ -395,6 +407,11 @@ export const api = {
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = []) =>
     post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
+  /** Backend mode and switches; fetched once per page load. */
+  health: (): Promise<Health> => (healthCache ??= get('/health').then((r) => r.json())),
+  exportUrl: (runId: string) => new URL(`/runs/${runId}/export`, BASE).toString(),
+  sandboxStart: (runId: string) => post<SandboxJob>(`/runs/${runId}/sandbox`, {}),
+  sandbox: async (runId: string): Promise<SandboxJob> => (await get(`/runs/${runId}/sandbox`)).json(),
   next: (runId: string, stepThrough?: boolean) => post<{ ok: boolean }>(`/runs/${runId}/next`, { step_through: stepThrough ?? null }),
   /** Live step log (server-sent events). Returns a function that closes the stream. */
   runEvents: (runId: string, onEvent: (e: RunEvent) => void): (() => void) => {
