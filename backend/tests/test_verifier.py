@@ -72,7 +72,7 @@ def test_verifier_sees_stored_values_and_one_plot_per_cited_result(run):
 
 def test_major_flag_means_flagged(run):
     llm = FakeWonder({"summary": "f2 overclaims.", "flags": [
-        {"finding_id": "f2", "quote": "drops significantly", "problem": "q = 0.31: not supported.", "severity": "major"}]})
+        {"finding_id": "f2", "quote": "drops significantly", "problem": "q = 0.31: not supported.", "plain": "It calls this change real, but chance can explain it.", "severity": "major"}]})
     verifier.plant_overclaim(run)
     v = verifier.verify_run(run, llm)
     assert v["status"] == "flagged" and run.status == "flagged"
@@ -83,7 +83,7 @@ def test_major_flag_means_flagged(run):
 
 def test_minor_flags_only_means_verified(run):
     llm = FakeWonder({"summary": "Fine.", "flags": [
-        {"finding_id": "f1", "quote": "x", "problem": "wording", "severity": "minor"}]})
+        {"finding_id": "f1", "quote": "x", "problem": "wording", "plain": "Wording.", "severity": "minor"}]})
     assert verifier.verify_run(run, llm)["status"] == "verified" and run.status == "verified"
 
 
@@ -109,3 +109,11 @@ def test_planting_needs_the_dev_flag(monkeypatch):
     assert not verifier.planting_allowed()
     monkeypatch.setenv("ALLOW_PLANTED_OVERCLAIM", "1")
     assert verifier.planting_allowed()
+
+
+def test_result_level_evidence_includes_the_values_the_text_uses(run):
+    run.state.results["r1"]["values"]["SER30-ASP84.freq_a"] = {"v": 0.46, "kind": "freq"}
+    run.state.findings["f1"]["text"] = "SER30-ASP84 is in contact in {{r1.SER30-ASP84.freq_a}} of frames."
+    run.state.report = report.build_report(run.state, {"finding_ids": ["f1"]})
+    vals = verifier.verifier_input(run)["findings"][0]["evidence"][0]["values"]
+    assert vals["SER30-ASP84.freq_a"] == 0.46 and vals["n_tested"] == 2

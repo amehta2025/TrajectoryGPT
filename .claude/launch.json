@@ -5,6 +5,7 @@
       "name": "backend",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
+      "env": { "ALLOW_PLANTED_OVERCLAIM": "1" },
       "port": 8000
     },
     {

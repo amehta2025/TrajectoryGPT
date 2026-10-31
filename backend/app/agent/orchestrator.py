@@ -20,6 +20,15 @@ from app.agent.tools import ApprovedPlan, RunState, jsonable, run_tool, tools_fo
 from app.config import REPO_ROOT
 
 MAX_TURNS = 8
+MAX_TURNS_CAP = 10
+FINDING_TURNS = 3  # the prompt allows at most three findings
+
+
+def turn_budget(plan: ApprovedPlan) -> int:
+    """Turns for a plan: each analysis step, up to three findings, the report, and one spare; at least
+    MAX_TURNS (SPEC §9b), at most MAX_TURNS_CAP. A 5-step plan (4 analyses) would otherwise have no slack."""
+    analyses = sum(s["tool"] != "submit_report" for s in plan.steps)
+    return min(MAX_TURNS_CAP, max(MAX_TURNS, analyses + FINDING_TURNS + 2))
 MAX_REFUSALS = 2
 # Runs are saved here as they progress; on Modal this is on the Volume (/cache/investigations).
 INVESTIGATIONS_DIR = Path(os.environ.get("INVESTIGATIONS_DIR") or REPO_ROOT / "investigations")
@@ -105,12 +114,13 @@ def run_investigation(
     llm: LLM,
     run: Run,
     *,
-    max_turns: int = MAX_TURNS,
+    max_turns: int | None = None,
     on_event: Callable[[dict], None] | None = None,
     wait_for_next: Callable[[], None] | None = None,
 ) -> Run:
     emit = on_event or (lambda e: None)
     state, plan = run.state, run.plan
+    max_turns = max_turns or turn_budget(plan)
     tools = tools_for(plan.dataset)
     if not run.input_items:
         run.input_items = [{"role": "system", "content": prompts.AGENT_SYSTEM},

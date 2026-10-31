@@ -91,6 +91,8 @@ Plain language (the main view; readers are not specialists):
   "interpretation - not computed" and has no numbers.
 - "next_questions": one or two short questions worth asking next, grounded in what you found (e.g. whether a
   supported change persists, or what an unsupported one would need). Each must end with "?".
+- Counts written as words ("four contacts", "two pairs") are numbers too: use placeholders such as
+  {{r1.n_supported}} or {{r1.n_tested}}, or say "several" / "a few".
 - Text that fails these checks is dropped and replaced by a code-built sentence, so follow them exactly.
 """
 
@@ -183,7 +185,8 @@ Flag every claim that the cited data or plot does not support. In particular:
 
 Severity: "major" when a claim is wrong or unsupported by the cited evidence; "minor" for wording that is
 imprecise but not wrong. Do not flag correct, hedged statements, and do not ask for analyses that were not run.
-For each flag give the finding id ("f2", or the section name such as "hypotheses"), a short quote, and the
-problem in one plain sentence. summary: one or two plain sentences on whether the report's claims hold up.
+For each flag give the finding id ("f2", or the section name such as "hypotheses"), a short quote, the
+problem in one precise sentence, and "plain": the same problem in one short sentence for a non-specialist, with
+no statistics terms, symbols or numbers (e.g. "It calls this change real, but the data can't rule out chance."). summary: one or two plain sentences on whether the report's claims hold up.
 Return no flags when everything is supported.
 """

@@ -195,3 +195,11 @@ def test_provenance_records_the_model_call():
     run = orch.run_investigation(ScriptedLLM(GOOD), orch.new_run("q", plan()))
     p = run.state.results["r1"]["provenance"]
     assert p["model"] == "fake" and p["turn"] == 1 and p["usage"]["effort"] == "low"
+
+
+def test_turn_budget_leaves_room_for_findings_and_the_report():
+    steps = lambda n: [{"tool": "calculate_contacts", "rationale": ""}] * n + [{"tool": "submit_report", "rationale": ""}]  # noqa: E731
+    mk = lambda n: ApprovedPlan(DS, "NMP", "CORE", 4.5, [0, 98], None, steps=steps(n))  # noqa: E731
+    assert orch.turn_budget(mk(1)) == 8 and orch.turn_budget(mk(3)) == 8
+    assert orch.turn_budget(mk(4)) == 9  # 4 analyses + 3 findings + report + 1 spare
+    assert orch.turn_budget(mk(6)) == 10

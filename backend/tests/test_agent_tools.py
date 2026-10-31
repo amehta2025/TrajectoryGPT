@@ -300,3 +300,16 @@ def test_headline_may_say_robust_only_with_a_robust_verdict(pretend_stats_valid)
     probs = report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Yes: one contact changed, a supported and robust change."})
     assert probs == ["headline: says robust but no supported pair has a robust cutoff_sensitivity verdict"]
     assert report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Yes: one contact changed, a supported change."}) == []
+
+
+def test_numbers_written_as_words_are_numbers_in_plain_text(pretend_stats_valid):
+    s = new_state()
+    call(s, "calculate_contacts", window="all")
+    r = call(s, "record_finding", text="{{r1.n_pairs_in_contact}} pairs touch", evidence_ids=["r1"], claim="descriptive",
+             plain="Four pairs of residues touch.")
+    assert "numbers written as words" in r["summary_for_model"]
+    probs = report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Twelve contacts touch in one simulation."})
+    assert probs and "Twelve" in probs[0]
+    assert report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Yes: {{r1.n_pairs_in_contact}} pairs touch, in one simulation."}) == []
+    kept, problems = report.next_questions(s, {"next_questions": ["Do the two halves differ?", "Do all four changed contacts persist?"]})
+    assert kept == ["Do the two halves differ?"] and "four" in problems[0]  # a setup noun is fine, a count is not

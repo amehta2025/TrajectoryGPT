@@ -114,12 +114,12 @@ async function refresh(runId: string) {
 }
 
 /** Approve the plan with the user's edits and start the run; the charts follow the approved params. */
-export async function approve(edits: Partial<Plan>, stepThrough: boolean) {
+export async function approve(edits: Partial<Plan>, stepThrough: boolean, plantOverclaim = false) {
   const proposal = state.proposal
   if (!proposal) return
   const p = { ...proposal.plan, ...edits }
   try {
-    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough, state.confirmed)
+    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough, state.confirmed, plantOverclaim)
     setSelection({
       dataset: p.dataset, groupA: p.group_a, groupB: p.group_b, cutoff: p.cutoff,
       windows: p.window_b ? [p.window_a, p.window_b] : null,

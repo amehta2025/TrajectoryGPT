@@ -187,7 +187,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="plan and run one investigation")
     r.add_argument("question")
-    r.add_argument("--turns", type=int, default=MAX_TURNS)
+    r.add_argument("--turns", type=int, default=None, help=f"turn cap (default: from the plan, {MAX_TURNS}-10)")
     r.add_argument("--dataset", default="adk_equilibrium")
     r.add_argument("--provider", choices=["meta", "baseten"], default=None)
     r.add_argument("--cutoff", type=float, help="edit the plan's main cutoff (Å)")
@@ -199,7 +199,7 @@ def main(argv=None) -> int:
     f.add_argument("files", nargs="+", help="PNG/JPEG figure and optional PDF")
     f.add_argument("--note", default="", help="optional text from the user")
     for p in (f,):
-        p.add_argument("--turns", type=int, default=MAX_TURNS)
+        p.add_argument("--turns", type=int, default=None)
         p.add_argument("--dataset", default="adk_equilibrium", help="dataset for a method transfer")
         p.add_argument("--provider", choices=["meta", "baseten"], default=None)
         p.add_argument("--cutoff", type=float)

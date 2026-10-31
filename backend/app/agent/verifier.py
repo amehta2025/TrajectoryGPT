@@ -15,24 +15,26 @@ import time
 
 from app.agent import prompts
 from app.agent.llm import EFFORT, LLM, CostTracker
-from app.agent.report import render
+from app.agent.report import PLACEHOLDER, render
 from app.agent.tools import jsonable, res_label
 from app.config import dataset_config
 from app.provenance.plots import plot_result, png_b64
 from app.safety import budget
 
 MAX_FIGURES = 6
+MAX_VALUES = 40  # values per cited result in the verifier's input
 SCHEMA = {"name": "verification", "schema": {
     "type": "object", "additionalProperties": False, "required": ["summary", "flags"],
     "properties": {
         "summary": {"type": "string"},
         "flags": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
-            "required": ["finding_id", "quote", "problem", "severity"],
+            "required": ["finding_id", "quote", "problem", "plain", "severity"],
             "properties": {
                 "finding_id": {"type": "string"},
                 "quote": {"type": "string"},
                 "problem": {"type": "string"},
+                "plain": {"type": "string"},
                 "severity": {"type": "string", "enum": ["major", "minor"]},
             }}},
     }}}
@@ -120,8 +122,12 @@ def verifier_input(run) -> dict:
             item = {"id": e, "tool": res["tool"], "status": res["status"]}
             if pair:
                 item["values"] = _round(_pair_facts(res, pair))
-            else:
-                item["values"] = _round({k: v["v"] for k, v in res["values"].items() if "." not in k})
+            else:  # result-level values, plus every value of this result the finding's text uses
+                raw = state.findings.get(f["id"], f)  # the finding as recorded (plain is still a placeholder string)
+                used = [m[1].partition(".")[2] for m in PLACEHOLDER.finditer(f"{raw['text']} {raw.get('plain') or ''}")
+                        if m[1].partition(".")[0] == pid]
+                names = [k for k in res["values"] if "." not in k or k in used][:MAX_VALUES]
+                item["values"] = _round({k: res["values"][k]["v"] for k in names})
             evidence.append(item)
         findings.append({"id": f["id"], "claim": f["claim"], "text": f["rendered"], "badge": f["badge_label"],
                          "robustness": [r["label"] for r in f.get("robustness", [])], "evidence": evidence})

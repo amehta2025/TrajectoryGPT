@@ -255,7 +255,7 @@ export type Turn = {
 
 export type RunStatus = 'running' | 'needs_review' | 'awaiting_verification' | 'verified' | 'flagged' | 'aborted_budget' | 'error'
 
-export type VerifierFlag = { finding_id: string; quote: string; problem: string; severity: 'major' | 'minor' }
+export type VerifierFlag = { finding_id: string; quote: string; problem: string; plain?: string; severity: 'major' | 'minor' }
 /** The background Muse Wonder check of an accepted report (SPEC §9 step 7). */
 export type Verification = {
   status: 'pending' | 'verified' | 'flagged' | 'error'
@@ -424,8 +424,10 @@ export const api = {
     post<PlanResponse>('/plan', {
       question, dataset, session_id: sessionId(), follow_up: opts.followUp ?? false, selected_pair: opts.selectedPair ?? null,
     }),
-  startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = []) =>
-    post<{ run_id: string }>('/runs', { plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields }),
+  startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = [], plantOverclaim = false) =>
+    post<{ run_id: string }>('/runs', {
+      plan_id: planId, edits, step_through: stepThrough, confirmed_fields: confirmedFields, plant_overclaim: plantOverclaim,
+    }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
   /** Backend mode and switches; fetched once per page load. */
   replays: async (): Promise<{ mode: 'live' | 'replay'; recorded: Recorded[] }> => (await get('/replays')).json(),

@@ -3,7 +3,7 @@
 // Primary text is plain language built by code from the plan's own parameters; advanced parameters
 // sit under a collapsed "Settings"; tool names are small secondary tags.
 import { useEffect, useState } from 'react'
-import type { ChecklistItem, Metadata, Plan } from '../api/client'
+import { api, type ChecklistItem, type Metadata, type Plan } from '../api/client'
 import { approve, pendingConfirmations, useInvestigation } from '../state/investigation'
 
 const CONTACT_DEFINITION = 'two residues are in contact when their closest heavy atoms are within the cutoff'
@@ -80,6 +80,11 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [stepThrough, setStepThrough] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [plant, setPlant] = useState(false)
+  const [canPlant, setCanPlant] = useState(false)
+  useEffect(() => {
+    api.health().then((h) => setCanPlant(h.dev_overclaim_toggle), () => {})
+  }, [])
 
   useEffect(() => {
     if (proposal) setDraft(draftOf(proposal.plan))
@@ -88,7 +93,8 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   if (phase === 'planning') return <section className="card plan-card"><h2>Plan</h2><p className="muted">Drafting a plan… (about 10 s)</p></section>
   if (!proposal || !draft) return null
   const p = proposal.plan
-  const locked = phase !== 'plan' || !!proposal.recorded // a recorded plan cannot be edited
+  const locked = phase !== 'plan'
+  const fixed = locked || !!proposal.recorded // a recorded plan (replay mode) cannot be edited, only run
   const checklist = run?.checklist
   const done = checklist ? checklist.filter((c) => c.status === 'done' || c.status === 'skipped').length : 0
   const halves = isHalves(p, meta?.n_frames)
@@ -96,7 +102,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   // Groups and cutoff matter only to contact tools; other plans (native contacts, RMSF) leave them out of the summary.
   const usesContacts = p.steps.some((s) => CONTACT_TOOLS.has(s.tool))
   const field = (k: keyof Omit<Draft, 'drop'>, w = 56) => (
-    <input value={draft[k]} disabled={locked} style={{ width: w }} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
+    <input value={draft[k]} disabled={fixed} style={{ width: w }} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
   )
 
   return (
@@ -126,7 +132,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
                 <li key={i} className={dropped ? 'dropped' : ''} title={s.rationale}>
                   <span className="step-icon">{i + 1}</span>
                   <span className="step-text">{stepText(s.tool, p)}</span>
-                  {!locked && s.tool !== 'submit_report' && (
+                  {!fixed && s.tool !== 'submit_report' && (
                     <button className="link small step-drop" onClick={() => {
                       const drop = new Set(draft.drop)
                       if (dropped) drop.delete(i)
@@ -160,10 +166,16 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
       {!locked && (
         <div className="plan-actions">
           <label className="small muted" title="The agent stops after each step until you click Next"><input type="checkbox" checked={stepThrough} onChange={(e) => setStepThrough(e.target.checked)} /> Pause after each step</label>
+          {canPlant && !proposal.recorded && (
+            <label className="small muted dev-toggle" title="Development only: after the report passes the automatic checks, add a finding that calls an unsupported change supported, to show the second model catching it">
+              <input type="checkbox" checked={plant} onChange={(e) => setPlant(e.target.checked)} /> Plant a wrong finding (dev demo)
+            </label>
+          )}
+          {proposal.recorded && <span className="small muted">Recorded plan: its settings are fixed.</span>}
           {pending.length > 0 && <span className="small pending-note">Tick {pending.length === 1 ? 'the unsure setting' : `the ${pending.length} unsure settings`} read from the figure first</span>}
           <button className="primary" disabled={starting || pending.length > 0} onClick={async () => {
             setStarting(true)
-            await approve(editsOf(p, draft), stepThrough)
+            await approve(editsOf(p, draft), stepThrough, plant)
             setStarting(false)
           }}>{starting ? 'Starting…' : 'Run plan'}</button>
         </div>

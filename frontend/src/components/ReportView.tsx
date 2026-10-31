@@ -121,6 +121,78 @@ export function Headline({ meta }: { meta: Metadata | null }) {
         <p className="headline-interp"><span className="interp-label">Interpretation, not computed:</span> {interp.text}</p>
       )}
       <p className="headline-note">Based on one simulation.</p>
+      <VerifierLine run={run} cardOf={cardNumbers(run, meta)} />
+    </div>
+  )
+}
+
+/** Finding id -> the number on its card and 3D marker (as in the main view), when it has one. */
+function cardNumbers(run: RunView, meta: Metadata | null): Map<string, number> {
+  const out = new Map<string, number>()
+  if (!meta || !run.report) return out
+  const built = buildCards(run, meta.n_frames, meta.dt_ns !== null)
+  const located = locateNotes(built.notes).located
+  built.cards.forEach((c, i) => [c.finding, ...c.others].forEach((f) => !out.has(f.id) && out.set(f.id, i + 1)))
+  located.forEach((l, i) => out.set(l.finding.id, built.cards.length + i + 1))
+  return out
+}
+
+/** The second model's check, in plain words (SPEC §9 step 7). Details are under "Show the science". */
+function VerifierLine({ run, cardOf }: { run: RunView; cardOf: Map<string, number> }) {
+  const v = run.verification
+  // One line per flagged finding (several flags on one finding say one thing in plain words).
+  const byFinding = new Map<string, string>()
+  for (const f of (v?.flags ?? []).filter((x) => x.severity === 'major')) {
+    if (!byFinding.has(f.finding_id)) byFinding.set(f.finding_id, f.plain || f.problem)
+  }
+  let line: ReactNode
+  if (!v || v.status === 'pending') line = <span className="verify pending">A second AI model is checking this report…</span>
+  else if (v.status === 'verified') line = <span className="verify ok">✓ A second AI model checked this report: no problems found.</span>
+  else if (v.status === 'flagged') {
+    const n = byFinding.size
+    line = (
+      <span className="verify flagged">⚠ A second AI model checked this report and flagged {n === 1 ? 'one finding' : `${n} findings`}:{' '}
+        {[...byFinding].map(([fid, text]) => (
+          <span key={fid} className="flag-item">
+            {cardOf.has(fid) && <span className="marker-num" aria-label={`marker ${cardOf.get(fid)}`}>{cardOf.get(fid)}</span>}
+            {hisText(text)}{' '}
+          </span>
+        ))}
+      </span>
+    )
+  } else line = <span className="verify muted">The second AI check could not run, so this report has not been double-checked.</span>
+  if (run.status === 'needs_review') return null
+  return (
+    <p className="verify-line">
+      {line}
+      {run.planted && <span className="planted-note"> This run includes a deliberately wrong finding, added to show the check catching it.</span>}
+    </p>
+  )
+}
+
+/** Science layer: the verifier's full result. */
+function VerifierDetail({ run }: { run: RunView }) {
+  const v = run.verification
+  if (!v || v.status === 'pending') return null
+  return (
+    <div className="verifier-detail">
+      <h3>Second-model check <span className="badge">{v.status}</span></h3>
+      {v.summary && <p>{hisText(v.summary)}</p>}
+      {(v.flags ?? []).length > 0 && (
+        <ul className="plain">
+          {v.flags!.map((f, i) => (
+            <li key={i}><span className={`badge ${f.severity === 'major' ? 'unsupported' : 'descriptive'}`}>{f.severity}</span>{' '}
+              {f.finding_id}: “{hisText(f.quote)}” — {hisText(f.problem)}</li>
+          ))}
+        </ul>
+      )}
+      {v.error && <p className="muted small">{v.error}</p>}
+      {run.planted && <p className="small">Planted for the demo (development toggle): finding {run.planted}.</p>}
+      <p className="muted small">
+        {v.usage?.model ?? 'muse-wonder-1.0'} · effort {v.usage?.effort ?? 'high'} · read the report, the cited values and{' '}
+        {v.figures?.length ?? 0} plot{v.figures?.length === 1 ? '' : 's'} ({v.figures?.join(', ')}) · {v.wall_s ?? '?'} s ·{' '}
+        {v.usage?.cost_usd != null ? `$${v.usage.cost_usd.toFixed(4)}` : 'cost n/a'} (logged separately)
+      </p>
     </div>
   )
 }
@@ -444,6 +516,7 @@ export function ScienceReport({ meta }: { meta: Metadata | null }) {
   const sens = lastResult<SensitivityData>(run, 'cutoff_sensitivity')
   return (
     <section className="card report-science">
+      <VerifierDetail run={run} />
       <h2>Findings in detail</h2>
       {cmp && (
         <p className="small muted">

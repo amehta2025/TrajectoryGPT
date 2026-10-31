@@ -138,6 +138,19 @@ def evidence_problems(state, ids: list[str]) -> list[str]:
     return out
 
 
+# Counts spelled out ("four contacts") are numbers too. "one" is left out ("one simulation", "one of"), and so is
+# a number naming the setup rather than a result ("the two domains", "the two halves").
+NUMBER_WORDS = re.compile(r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+                          r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+                          r"hundred|thousand|dozen|dozens|hundreds|thousands)\b"
+                          r"(?!\s+(?:moving\s+)?(?:parts|domains|halves|windows|groups|regions|lobes|states|sides)\b)", re.I)
+
+
+def number_words(text: str) -> list[str]:
+    """Spelled-out numbers left in plain text after removing placeholders."""
+    return NUMBER_WORDS.findall(PLACEHOLDER.sub(" ", text))
+
+
 def bare_numbers(state, text: str) -> list[str]:
     """Numerals left after removing placeholders, except residue/frame numbers and approved cutoffs."""
     plan = state.plan
@@ -284,8 +297,11 @@ def plain_problems(state, f: dict, plain: str) -> list[str]:
     if len(plain) > PLAIN_LIMIT:
         return [f"plain must be at most {PLAIN_LIMIT} characters"]
     own = set(finding_problems(state, f["id"], f))
-    return [p.replace(f"{f['id']}: ", "plain: ", 1) for p in finding_problems(state, f["id"], {**f, "text": plain})
-            if p not in own]
+    out = [p.replace(f"{f['id']}: ", "plain: ", 1) for p in finding_problems(state, f["id"], {**f, "text": plain})
+           if p not in own]
+    if number_words(plain):
+        out.append(f"plain: numbers written as words {number_words(plain)} - use placeholders")
+    return out
 
 
 def headline_problems(state, args: dict) -> list[str]:
@@ -297,9 +313,9 @@ def headline_problems(state, args: dict) -> list[str]:
     if len(text) > PLAIN_LIMIT:
         return [f"headline must be at most {PLAIN_LIMIT} characters"]
     p = [f"headline: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
-    nums = bare_numbers(state, text)
+    nums = bare_numbers(state, text) + number_words(text)
     if nums:
-        p.append(f"headline: bare numbers {nums} - use placeholders")
+        p.append(f"headline: bare numbers {nums} - use placeholders such as {{{{r1.n_supported}}}}")
     findings = [state.findings[f] for f in args.get("finding_ids") or [] if f in state.findings]
     supported = [f for f in findings if f["claim"] == "supported"]
     words = [w.lower() for w in _unnegated_support_words(text)]
@@ -323,7 +339,8 @@ def next_questions(state, args: dict) -> tuple[list[str], list[str]]:
         q = q.strip() if isinstance(q, str) else ""
         why = ("must be 10-200 characters" if not 10 <= len(q) <= 200 else "must end with '?'" if not q.endswith("?")
                else "cannot contain placeholders" if PLACEHOLDER.search(q)
-               else f"bare numbers {bare_numbers(state, q)}" if bare_numbers(state, q) else None)
+               else f"bare numbers {bare_numbers(state, q) + number_words(q)}"
+               if bare_numbers(state, q) or number_words(q) else None)
         if why:
             problems.append(f"next_questions[{i}]: {why}")
         else:
@@ -338,7 +355,7 @@ def interpretation_problems(state, args: dict) -> list[str]:
         return []
     p = [] if len(text) <= PLAIN_LIMIT else [f"interpretation must be at most {PLAIN_LIMIT} characters"]
     p += [f"interpretation: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
-    nums = bare_numbers(state, text)
+    nums = bare_numbers(state, text) + number_words(text)
     if nums:
         p.append(f"interpretation: bare numbers {nums} - use placeholders")
     if _unnegated_support_words(text):
