@@ -242,10 +242,10 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium")):
 @app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body("")):
     """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
-    from app.agent.figure import UnsupportedFigure, UploadRejected
+    from app.agent.figure import NOTE_LIMIT, UnsupportedFigure, UploadRejected
     _check_dataset(dataset)
     try:
-        return session.propose_figure_plan(files, dataset, note[:2000])
+        return session.propose_figure_plan(files, dataset, note[:NOTE_LIMIT])
     except UploadRejected as e:
         raise HTTPException(400, str(e)) from None
     except UnsupportedFigure as e:

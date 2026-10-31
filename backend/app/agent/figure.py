@@ -26,6 +26,7 @@ MAX_FILES = 2
 MAGIC = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff", "application/pdf": b"%PDF-"}
 FIGURES_DIR = CACHE_DIR / "figures"  # on the Modal Volume when deployed, so ReproduceView survives restarts
 PDF_TEXT_LIMIT = 40_000  # characters of fallback text sent to the model
+NOTE_LIMIT = 8_000  # characters of pasted caption/methods text kept with a figure (was 2,000, which cut long captions)
 
 
 # Figure types figure mode can run, each mapped to tools in the planner prompt (SPEC §9; 2026-10-30).

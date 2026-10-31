@@ -173,3 +173,15 @@ def test_low_confidence_fields_must_be_confirmed_before_a_run(monkeypatch):
     with pytest.raises(PlanInvalid) as e:
         session.start_run(out["plan_id"], {}, confirmed_fields=[])
     assert "reference frames" in str(e.value) and not started
+
+
+def test_long_caption_text_reaches_extraction_intact(monkeypatch):
+    """A long pasted caption plus methods (the mdciao case was 2,170 characters) is not cut at 2,000."""
+    import app.agent.session as session
+    seen = {}
+    monkeypatch.setattr(session, "propose_figure_plan", lambda files, dataset, note: seen.setdefault("note", note) and {})
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    note = "Caption. " * 600 + "Methods: closest heavy atoms, 4.5 Å."
+    TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "note": note})
+    assert len(note) > 5000 and seen["note"] == note
+    assert figure.NOTE_LIMIT >= 8000

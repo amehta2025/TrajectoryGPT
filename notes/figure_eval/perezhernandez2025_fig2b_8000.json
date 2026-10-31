@@ -1,0 +1,138 @@
+[
+ {
+  "dataset": "none",
+  "fields": [
+   {
+    "confidence": "high",
+    "name": "analysis",
+    "source": "caption",
+    "value": "Residue-neighborhood contact-frequency analysis via onemdc_neighborhoods.py, showing per-neighbor contact frequencies as bars with backbone/sidechain hatching"
+   },
+   {
+    "confidence": "high",
+    "name": "protein",
+    "source": "caption",
+    "value": "C-terminal residues LEU393 (G.H5.25) and LEU394 (G.H5.26) of Galpha-5 helix of Galpha-beta-gamma-protein in complex with receptor, not E. coli AdK"
+   },
+   {
+    "confidence": "low",
+    "name": "data source",
+    "source": "assumed",
+    "value": "Unspecified example MD trajectory for mdciao GPCR-G protein tutorial, not AdK DIMS or Anton trajectory"
+   },
+   {
+    "confidence": "high",
+    "name": "atom selection",
+    "source": "methods",
+    "value": "Closest heavy atoms of each residue pair"
+   },
+   {
+    "confidence": "high",
+    "name": "cutoff or radius",
+    "source": "methods",
+    "value": "4.5 Å"
+   },
+   {
+    "confidence": "low",
+    "name": "reference frames or structures",
+    "source": "assumed",
+    "value": "No reference structure stated; frequencies averaged over all frames of the example trajectory"
+   },
+   {
+    "confidence": "medium",
+    "name": "x axis",
+    "source": "axis",
+    "value": "Neighbor residues with consensus labels: LEU393 neighbors LEU388, LEU275, VAL222, ALA271, THR274, ILE135; LEU394 neighbors ARG389, LEU388, LEU230, ARG385, ILE233, LYS270"
+   },
+   {
+    "confidence": "high",
+    "name": "y axis",
+    "source": "axis",
+    "value": "Contact frequency 0 to 1.0 (fraction of frames contact formed); summed contacts Σ = 5.7 for LEU393 and Σ = 5.3 for LEU394"
+   },
+   {
+    "confidence": "high",
+    "name": "contact definition",
+    "source": "methods",
+    "value": "Contact formed when closest heavy-atom residue-residue distance <= 4.5 Å; frequency is fraction of frames formed; subtypes BB-BB, SC-SC, BB-SC, SC-BB hatched in bars"
+   },
+   {
+    "confidence": "high",
+    "name": "neighbor exclusion",
+    "source": "axis",
+    "value": "4 nearest bonded neighbors excluded"
+   }
+  ],
+  "kind": "other",
+  "mode": "transfer",
+  "mode_reason": "Figure shows G-protein G.H5 residues LEU393/LEU394 and receptor/G-protein neighbors with CGN-style consensus labels from mdciao GPCR example, not E. coli AdK; no 98-frame DIMS closed-to-open path, no Q1/Q2, no 4187-frame Anton equilibrium.",
+  "question": "Transfer this neighborhood contact-frequency analysis to E. coli AdK: for selected residues compute per-neighbor contact frequencies over the trajectory using closest heavy-atom distances with 4.5 A cutoff, excluding 4 nearest bonded neighbors, breaking bars into BB-BB, SC-SC, BB-SC and SC-BB types and reporting summed totals.",
+  "summary": "Bar charts show per-neighbor contact frequencies at 4.5 Å for G-protein residues LEU393 and LEU394, split by backbone/sidechain type with summed totals 5.7 and 5.3.",
+  "pdf_fallback": false
+ },
+ {
+  "dataset": "none",
+  "fields": [
+   {
+    "confidence": "high",
+    "name": "analysis",
+    "source": "caption",
+    "value": "neighborhood contact-frequency analysis (fraction of frames each residue-residue contact is formed, shown as bars)"
+   },
+   {
+    "confidence": "high",
+    "name": "protein",
+    "source": "caption",
+    "value": "G-protein G-alpha C-terminal G.H5 helix residues LEU393 (G.H5.25) and LEU394 (G.H5.26) in G-protein-receptor complex, not E. coli AdK"
+   },
+   {
+    "confidence": "high",
+    "name": "data source",
+    "source": "caption",
+    "value": "mdciao onemdc_neighborhoods.py example G-protein-receptor simulation from Perez-Hernandez and Hildebrand (2025) Fig 2B, not AdK datasets"
+   },
+   {
+    "confidence": "high",
+    "name": "atom selection",
+    "source": "methods",
+    "value": "closest heavy atoms between two residues"
+   },
+   {
+    "confidence": "high",
+    "name": "cutoff or radius",
+    "source": "axis",
+    "value": "4.5 Ang"
+   },
+   {
+    "confidence": "low",
+    "name": "reference frames or structures",
+    "source": "assumed",
+    "value": "none - frequencies averaged over full example trajectory; no AdK closed/open reference frames"
+   },
+   {
+    "confidence": "high",
+    "name": "x axis",
+    "source": "axis",
+    "value": "neighboring residues with consensus labels, left panel LEU393 neighborhood, right panel LEU394 neighborhood"
+   },
+   {
+    "confidence": "high",
+    "name": "y axis",
+    "source": "axis",
+    "value": "contact frequency from 0 to 1.0"
+   },
+   {
+    "confidence": "high",
+    "name": "contact definition",
+    "source": "axis",
+    "value": "contact when residue-residue distance < 4.5 Ang, 4 nearest bonded neighbors excluded, subtypes BB-BB, SC-SC, BB-SC, SC-BB by hatching"
+   }
+  ],
+  "kind": "other",
+  "mode": "transfer",
+  "mode_reason": "Transfer because figure shows G-protein residues LEU393 G.H5.25 and LEU394 G.H5.26 with G.H5 and 3.54x54 / 5.61x61 / 6.33x33 consensus labels and Contact frequency @4.5 Ang with sum 5.7 and 5.3 from mdciao GPCR example (caption: Perez-Hernandez Hildebrand 2025 Fig 2B), not AdK CA 8 Ang Q1 vs Q2 98-frame DIMS path or 4187-frame Anton equilibrium.",
+  "question": "Transfer this neighborhood contact-frequency bar analysis to AdK: compute per-partner contact frequencies for chosen AdK residues over the trajectory using a 4.5 Ang closest-heavy-atom cutoff excluding 4 nearest bonded neighbors, separating backbone/sidechain types BB-BB, SC-SC, BB-SC, SC-BB, and plot as bars as in panel B.",
+  "summary": "Bar charts show per-partner contact frequencies (0 to 1.0) at 4.5 Ang for neighborhoods of G-protein residues LEU393 and LEU394, broken down by backbone/sidechain interaction type.",
+  "pdf_fallback": false
+ }
+]

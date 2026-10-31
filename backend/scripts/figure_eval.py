@@ -30,7 +30,7 @@ from app.agent.llm import LLM  # noqa: E402
 FIG = ROOT / "assets" / "figures"
 OUT = ROOT / "notes" / "figure_eval"
 RUNS = 2
-NOTE_LIMIT = 2000  # /figure/plan keeps the first 2,000 characters of the note
+NOTE_LIMIT = 2000  # /figure/plan's cap when the scores in notes/recon.md were made (now figure.NOTE_LIMIT, 8,000)
 UNKNOWN = r"unknown|not (stated|given|specified|shown|reported|provided)|unspecified|unclear|n/?a\b|none given"
 
 

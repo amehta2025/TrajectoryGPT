@@ -173,3 +173,5 @@ Scoring per field against a hand-written ground truth: **exact** = states the tr
 - The 2,000-character note limit can drop the methods text from long captions (mdciao). Raising it or putting the methods sentence first would fix that case.
 - Contact-frequency bar charts are classified "other". If they should count as contact maps, the prompt needs an explicit example.
 - Small set, one model, one effort level: this is a smoke test, not a benchmark.
+
+**Follow-up (2026-10-31): note limit raised to 8,000 characters** (`figure.NOTE_LIMIT`; `/figure/plan` used to keep only 2,000). Re-running the mdciao figure twice with its full 2,170-character text: atom scheme read as "closest heavy atoms" at high confidence in both runs, and its settings scored 10 of 10 exact (was 6 exact, 4 close; one exclusion value again filed under "contact definition"). The type is still "other". Raw specs: `notes/figure_eval/perezhernandez2025_fig2b_8000.json`. The table above keeps the original 2,000-character results.
