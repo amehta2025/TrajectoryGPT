@@ -277,3 +277,20 @@ export function locatedSentence(l: Located, run: RunView): string {
   if (tools.has('calculate_contacts') || tools.has('compare_intervals')) return 'These residues take part in the contacts described here.'
   return 'This finding is about the marked residues.'
 }
+
+// ---------- direct answer for "do these parts touch / how often" ----------
+
+const YES_NO = /^\s*(does|do|did|is|are|was|were|can|will)\b/i
+
+/**
+ * One sentence that answers the question from the stored share of frames in which two groups touch at all
+ * (calculate_contacts' any_contact_frequency). Yes/no questions get a leading Yes or No; others get the share.
+ */
+export function touchAnswer(question: string, a: string, b: string, share: number, scope: string): string {
+  const pct = share > 0 && share < 0.005 ? 'less than 1%' : `${Math.round(share * 100)}%`
+  const fact = share === 0 ? `${a} and ${b} never touch in ${scope}` : `${a} and ${b} touch in ${pct} of ${scope}`
+  if (!YES_NO.test(question)) return `${fact[0].toUpperCase()}${fact.slice(1)}.`
+  if (share === 0) return `No: ${fact}.`
+  const how = share < 0.1 ? 'Yes, but rarely' : share < 0.5 ? 'Yes, some of the time' : 'Yes, most of the time'
+  return `${how}: ${fact}.`
+}

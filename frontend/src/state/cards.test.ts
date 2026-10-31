@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Finding, RunView } from '../api/client'
-import { buildCards, domainOf, locateNotes, markersFor, plainSentence, residuesNamed, windowNames, type Card } from './cards'
+import { buildCards, domainOf, locateNotes, markersFor, plainSentence, residuesNamed, touchAnswer, windowNames, type Card } from './cards'
 
 const K = (r: string) => `adk_equilibrium:ADK:${r.slice(3)}:${r.slice(0, 3)}`
 const finding = (over: Partial<Finding>): Finding => ({
@@ -138,5 +138,18 @@ describe('numbered markers', () => {
   it('ignores numbers that come from resolved values', () => {
     const f = finding({ text: '', segments: [{ text: 'frequency ' }, { text: 'ALA12', pid: 'r1', path: 'x' }] })
     expect(residuesNamed(f)).toEqual([])
+  })
+})
+
+describe('direct answers', () => {
+  it('answers yes/no questions with Yes or No and the share', () => {
+    expect(touchAnswer('Does NMP touch LID?', 'NMP', 'LID', 0.03, 'the run')).toBe('Yes, but rarely: NMP and LID touch in 3% of the run.')
+    expect(touchAnswer('Do LID and CORE touch?', 'LID', 'CORE', 0.97, 'the run')).toBe('Yes, most of the time: LID and CORE touch in 97% of the run.')
+    expect(touchAnswer('Does NMP touch LID?', 'NMP', 'LID', 0, 'the run')).toBe('No: NMP and LID never touch in the run.')
+    expect(touchAnswer('Does NMP touch LID?', 'NMP', 'LID', 0.001, 'the run')).toBe('Yes, but rarely: NMP and LID touch in less than 1% of the run.')
+  })
+
+  it('gives the share for other questions', () => {
+    expect(touchAnswer('How often do NMP and LID touch?', 'NMP', 'LID', 0.25, 'the path')).toBe('NMP and LID touch in 25% of the path.')
   })
 })

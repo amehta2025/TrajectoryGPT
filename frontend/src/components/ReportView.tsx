@@ -12,13 +12,14 @@ import { api, type Finding, type Metadata, type RunView, type Segment, type Text
 import { toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
-import { buildCards, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
+import { buildCards, touchAnswer, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
 
 type CompareData = {
   group_a: string; group_b: string; n_tested: number; n_filtered: number; n_supported: number
   n_supported_firm: number; n_supported_provisional: number; fdr: number; ci_level: number
   window_a: [number, number]; window_b: [number, number]; rows: { supported: boolean; delta: number }[]
 }
+type ContactsData = { group_a: string; group_b: string; any_contact_frequency?: number; window?: { start: number; stop: number | null } }
 type SensitivityData = { cutoffs: number[]; n_robust: number; rows: unknown[] } // n_tested is per cutoff
 
 /** The last successful result of a tool, with its UI data. */
@@ -73,7 +74,14 @@ export function Headline({ meta }: { meta: Metadata | null }) {
   const sens = lastResult<SensitivityData>(run, 'cutoff_sensitivity')
   const findings = run.report.findings
   let main: ReactNode
-  if (cmp) {
+  // A run that measured whether two groups touch answers the question directly (no comparison needed).
+  const touch = lastResult<ContactsData>(run, 'calculate_contacts')
+  if (!cmp && touch && typeof touch.any_contact_frequency === 'number') {
+    const w = touch.window
+    const whole = !w || (w.start === 0 && (w.stop === null || w.stop >= (meta?.n_frames ?? Infinity)))
+    const scope = whole ? (meta?.dt_ns === null ? 'the path' : 'the run') : 'this part of the run'
+    main = touchAnswer(run.question, touch.group_a, touch.group_b, touch.any_contact_frequency, scope)
+  } else if (cmp) {
     const sup = cmp.rows.filter((r) => r.supported)
     const weaker = sup.filter((r) => r.delta < 0).length
     const stronger = sup.length - weaker

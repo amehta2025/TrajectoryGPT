@@ -48,7 +48,11 @@ export function Viewer({ meta }: { meta: Metadata }) {
     const s = new NGL.Stage(el, { backgroundColor: '#0c0f15', tooltip: true })
     stage.current = s
     if (import.meta.env.DEV) (window as unknown as { __nglStage: NGL.Stage }).__nglStage = s // for manual checks
-    const ro = new ResizeObserver(() => s.handleResize())
+    // Re-fit the protein when the box changes size (layout settling, window resize), so it never draws tiny.
+    const ro = new ResizeObserver(() => {
+      s.handleResize()
+      comp.current?.autoView()
+    })
     ro.observe(el)
     return () => {
       ro.disconnect()
