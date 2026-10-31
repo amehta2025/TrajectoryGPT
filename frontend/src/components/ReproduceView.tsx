@@ -148,14 +148,15 @@ export function ReproduceView() {
 }
 
 /** Start screen notice when a figure was read but is not a type we can run yet. */
-export function UnsupportedNotice({ message, figure }: { message: string; figure: Figure }) {
+export function UnsupportedNotice({ message, figure, onDismiss }: { message: string; figure: Figure; onDismiss: () => void }) {
   return (
-    <div className="unsupported">
+    <div className="unsupported" role="status">
       <img src={api.figureUrl(figure.figure_id)} alt="" />
       <div>
         <b>{message}</b>
         <p className="muted small">What we saw: {figure.spec.summary} Nothing was planned or run.</p>
       </div>
+      <button className="link dismiss" onClick={onDismiss} aria-label="Dismiss">×</button>
     </div>
   )
 }

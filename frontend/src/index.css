@@ -335,3 +335,5 @@ dl.kv dd { margin: 0; font-family: var(--mono); color: #dde2ea; }
 
 .inv > .reproduce .repro-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .inv > .reproduce .repro-grid img { max-height: 340px; object-fit: contain; }
+
+.unsupported .dismiss { margin-left: auto; font-size: 18px; color: var(--muted); line-height: 1; }

@@ -42,6 +42,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    reset() // never show a previous result or error on load (also after a hot reload in development)
     api.datasets().then(setDatasets, (e) => setError(`Backend unreachable: ${(e as Error).message}`))
   }, [])
 

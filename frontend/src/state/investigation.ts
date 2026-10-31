@@ -33,6 +33,11 @@ function set(patch: Partial<Investigation>) {
   listeners.forEach((l) => l())
 }
 
+/** Current state outside React (tests, event handlers). */
+export function getState(): Investigation {
+  return state
+}
+
 export function useInvestigation(): Investigation {
   return useSyncExternalStore(
     (l) => {
@@ -148,7 +153,13 @@ export function pendingConfirmations(s: Investigation): string[] {
   return f ? f.spec.fields.filter((x) => x.confidence === 'low' && !s.confirmed.includes(x.name)).map((x) => x.name) : []
 }
 
+/** Start from a clean slate: no previous question, result, figure or error (page load and New question). */
 export function reset() {
   closeStream?.()
   set(empty)
+}
+
+/** Drop start-screen notices from an earlier attempt (unsupported figure, planning error) once the user acts. */
+export function clearNotices() {
+  if (state.unsupported || state.error) set({ unsupported: null, error: null })
 }

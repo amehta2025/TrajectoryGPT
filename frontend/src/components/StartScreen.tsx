@@ -4,7 +4,7 @@
 // limitations), and the copy never implies they can.
 import { useState } from 'react'
 import type { DatasetInfo, Metadata } from '../api/client'
-import { ask, askFigure, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
+import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
 import { datasetLine, datasetName } from './DatasetBadge'
 import { SpinningStructure } from './Viewer'
@@ -59,6 +59,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   const info = datasets.find((d) => d.id === dataset)
 
   const addFiles = (list: FileList | File[]) => {
+    clearNotices()
     const picked = [...files, ...Array.from(list)].slice(-2)
     const bad = picked.find((f) => !['image/png', 'image/jpeg', 'application/pdf'].includes(f.type) || f.size > MAX_UPLOAD_BYTES)
     setFileError(bad ? `${bad.name}: use a PNG, JPEG or PDF under 10 MB` : null)
@@ -122,7 +123,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               </span>}
         </label>
         {fileError && <span className="error-text small">{fileError}</span>}
-        {unsupported && <UnsupportedNotice message={unsupported.message} figure={unsupported.figure} />}
+        {unsupported && <UnsupportedNotice message={unsupported.message} figure={unsupported.figure} onDismiss={clearNotices} />}
         {files.length > 0 && (
           <div className="figure-go">
             <input className="ask-input" value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}
@@ -143,7 +144,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <h2 className="or-title">Or ask a question about the simulations</h2>
           <form className="ask" onSubmit={(e) => { e.preventDefault(); startQuestion(question) }}>
             <input
-              className="ask-input" value={question} onChange={(e) => setQuestion(e.target.value)} disabled={busy}
+              className="ask-input" value={question} onChange={(e) => { clearNotices(); setQuestion(e.target.value) }} disabled={busy}
               placeholder="Which contacts change between the first and second half?" aria-label="Question"
             />
             <button type="submit" disabled={busy || !question.trim()}>{busy ? 'Planning…' : 'Plan'}</button>
@@ -161,7 +162,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
 
         <div className="ds-picker">
           <label className="muted small" htmlFor="ds">Data</label>
-          <select id="ds" value={dataset} onChange={(e) => setSelection({ dataset: e.target.value })} disabled={busy}>
+          <select id="ds" value={dataset} onChange={(e) => { clearNotices(); setSelection({ dataset: e.target.value }) }} disabled={busy}>
             {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
           </select>
           {info && <p className="muted small dataset-line">{datasetLine(info)} Analyses use these preloaded public simulations only.</p>}
