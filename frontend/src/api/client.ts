@@ -171,6 +171,8 @@ export type Finding = {
   badge_label: string
   pairs: string[]
   robustness: Robustness[]
+  /** Muse's plain sentence, checked and filled by code; null when it failed a check (the UI builds one). */
+  plain?: TextItem | null
 }
 
 export type StatRow = {
@@ -192,6 +194,11 @@ export type StatRow = {
 export type TextItem = { text: string; segments: Segment[] }
 
 export type Report = {
+  /** Muse's direct answer, checked and filled by code; null when absent or it failed a check. */
+  headline?: TextItem | null
+  interpretation?: TextItem | null
+  interpretation_label?: string
+  text_dropped?: string[]
   findings: Finding[]
   statistical_support: StatRow[]
   background: TextItem[]

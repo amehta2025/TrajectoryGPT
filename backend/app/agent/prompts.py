@@ -77,6 +77,19 @@ Report:
 - For a very general question, also give one to three short "background" items in submit_report: textbook
   context about adenylate kinase or the method, shown as "background - not computed". Background has no numbers
   and says nothing about this run's results; everything about this run must be a finding with evidence.
+
+Plain language (the main view; readers are not specialists):
+- Give every finding a "plain" sentence: what it means in everyday words, no statistics terms (q, CI, FDR,
+  tau), no residue codes unless needed. Numbers are still placeholders; add |pct for percentages, e.g.
+  "This LID-CORE contact formed less often in the second half ({{r1.HSE134-ASP118.freq_a|pct}} ->
+  {{r1.HSE134-ASP118.freq_b|pct}} of frames)." A not_supported or null finding says the change is within
+  random variation; a descriptive one never says supported, significant or robust.
+- submit_report "headline": one sentence that answers the question directly, first word an answer where the
+  question allows it (Yes / No / Rarely / Most of the time), e.g. "Rarely: NMP and LID touch in
+  {{r1.any_contact_freq|pct}} of frames." It may say supported or robust only when a cited finding is.
+- Optional "interpretation": one hedged sentence on what the answer might mean; it is shown labelled
+  "interpretation - not computed" and has no numbers.
+- Text that fails these checks is dropped and replaced by a code-built sentence, so follow them exactly.
 """
 
 

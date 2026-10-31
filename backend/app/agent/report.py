@@ -10,13 +10,15 @@ import re
 
 from app.config import dataset_config
 
-PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
+# {{r2.HSE134-ASP118.delta}}; "|pct" writes a frequency as a percentage, a change in percentage points.
+PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*(?:\|\s*(pct)\s*)?\}\}")
 NUMBER = re.compile(r"(?<![A-Za-z0-9_.])[-+−]?\d+(?:\.\d+)?(?![0-9])")
 # A number is allowed right after these words (residue numbers, frames, ranges like "residues 122-159").
 ALLOWED_CONTEXT = re.compile(r"(?:\bresidues?|\bresids?|\bframes?|\bpath steps?)\s*(?:\d+\s*(?:[-–—]|to|and)\s*)?$", re.I)
 SUPPORT_WORDS = re.compile(r"\b(supported|significant(?:ly)?|robust(?:ly)?)\b", re.I)
 NEGATION = re.compile(r"(?:\bnot|\bno|\bun|n't|\bnor|\bwithout)\s*(?:\w+\s+){0,2}$", re.I)
 TEXT_LIMIT = 1200
+PLAIN_LIMIT = 400
 
 # claim -> (badge, label shown next to the finding)
 CLAIMS = {
@@ -26,6 +28,7 @@ CLAIMS = {
     "descriptive": ("descriptive", "descriptive — not statistically tested"),
 }
 BACKGROUND_LABEL = "background — not computed"
+INTERPRETATION_LABEL = "interpretation — not computed"
 UNTESTED_CAVEAT = ("This dataset is a biased, non-stationary transition path, so no statistics were computed; "
                    "findings here are descriptive only.")
 
@@ -73,13 +76,31 @@ def format_value(v, kind: str, time_label: str = "ns") -> str:
     return str(v)
 
 
-def resolve(state, path: str) -> dict | None:
+def format_pct(v: float, kind: str) -> str | None:
+    """Plain-language percentages: a frequency as "53%", a change as "13 percentage points" (no sign:
+    the sentence says the direction). None for other kinds."""
+    if kind == "freq":
+        if 0 < v < 0.001:
+            return "less than 0.1%"
+        if 0.995 < v < 1:
+            return "more than 99%"
+        return f"{v * 100:.1f}%" if v < 0.1 else f"{v * 100:.0f}%"
+    if kind == "delta":
+        pts = abs(v) * 100
+        return "less than 1 percentage point" if 0 < pts < 0.5 else f"{pts:.0f} percentage point{'' if round(pts) == 1 else 's'}"
+    return None
+
+
+def resolve(state, path: str, fmt: str | None = None) -> dict | None:
     """'r2.HSE134-ASP118.delta' -> {"v", "kind", "pid", "text"}; None if it does not resolve."""
     pid, _, name = path.partition(".")
     res = state.results.get(pid)
     if res is None or res["status"] != "ok" or name not in res["values"]:
         return None
     val = res["values"][name]
+    if fmt == "pct":
+        text = None if val["v"] is None else format_pct(val["v"], val["kind"])
+        return None if text is None else {**val, "pid": pid, "path": path, "text": text}
     tl = dataset_config(state.plan.dataset)["time_label"]
     return {**val, "pid": pid, "path": path, "text": format_value(val["v"], val["kind"], tl)}
 
@@ -91,7 +112,7 @@ def render(state, text: str) -> tuple[str, list[dict]]:
     for m in PLACEHOLDER.finditer(text):
         if m.start() > pos:
             segments.append({"text": text[pos:m.start()]})
-        r = resolve(state, m[1])
+        r = resolve(state, m[1], m[2])
         segments.append(r if r is not None else {"text": m[0]})
         pos = m.end()
     if pos < len(text):
@@ -102,7 +123,7 @@ def render(state, text: str) -> tuple[str, list[dict]]:
 # ---------- individual checks ----------
 
 def unresolved_placeholders(state, text: str) -> list[str]:
-    return [m for m in PLACEHOLDER.findall(text) if resolve(state, m) is None]
+    return [m[1] + (f"|{m[2]}" if m[2] else "") for m in PLACEHOLDER.finditer(text) if resolve(state, m[1], m[2]) is None]
 
 
 def evidence_problems(state, ids: list[str]) -> list[str]:
@@ -246,7 +267,64 @@ def record_finding(state, args: dict) -> dict:
         return {"status": "refused", "message": "finding refused", "problems": problems}
     fid = state.next_id("f", state.findings)
     state.findings[fid] = {"id": fid, "text": text, "evidence_ids": ids, "claim": claim}
-    return {"status": "ok", "message": f"recorded {fid}", "finding_id": fid}
+    out = {"status": "ok", "message": f"recorded {fid}", "finding_id": fid}
+    plain = (args.get("plain") or "").strip()
+    if plain:
+        bad = plain_problems(state, state.findings[fid], plain)
+        if bad:  # the finding stands; the UI falls back to its code-built sentence
+            out["plain_dropped"] = bad
+        else:
+            state.findings[fid]["plain"] = plain
+    return out
+
+
+def plain_problems(state, f: dict, plain: str) -> list[str]:
+    """Checks on a finding's plain sentence: the same as on its text (placeholders, no bare numbers, wording
+    that matches the claim), reporting only what the plain sentence adds."""
+    if len(plain) > PLAIN_LIMIT:
+        return [f"plain must be at most {PLAIN_LIMIT} characters"]
+    own = set(finding_problems(state, f["id"], f))
+    return [p.replace(f"{f['id']}: ", "plain: ", 1) for p in finding_problems(state, f["id"], {**f, "text": plain})
+            if p not in own]
+
+
+def headline_problems(state, args: dict) -> list[str]:
+    """The headline answers the question in plain words. It may say supported / robust only when a cited
+    finding is supported (and, for robust, a cited pair is robust); every number is a placeholder."""
+    text = (args.get("headline") or "").strip()
+    if not text:
+        return []
+    if len(text) > PLAIN_LIMIT:
+        return [f"headline must be at most {PLAIN_LIMIT} characters"]
+    p = [f"headline: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
+    nums = bare_numbers(state, text)
+    if nums:
+        p.append(f"headline: bare numbers {nums} - use placeholders")
+    findings = [state.findings[f] for f in args.get("finding_ids") or [] if f in state.findings]
+    supported = [f for f in findings if f["claim"] == "supported"]
+    words = [w.lower() for w in _unnegated_support_words(text)]
+    if any(not w.startswith("robust") for w in words) and not supported:
+        p.append("headline: says supported/significant but no cited finding is supported")
+    robust = any(robustness(state, pair)["verdict"] == "robust"
+                 for f in supported for _, pair, _ in _cited_pairs(state, f["evidence_ids"]))
+    if any(w.startswith("robust") for w in words) and not robust:
+        p.append("headline: says robust but no supported pair has a robust cutoff_sensitivity verdict")
+    return p
+
+
+def interpretation_problems(state, args: dict) -> list[str]:
+    """Interpretation is labelled as such and, like a hypothesis, claims no statistical support and writes no numbers."""
+    text = (args.get("interpretation") or "").strip()
+    if not text:
+        return []
+    p = [] if len(text) <= PLAIN_LIMIT else [f"interpretation must be at most {PLAIN_LIMIT} characters"]
+    p += [f"interpretation: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
+    nums = bare_numbers(state, text)
+    if nums:
+        p.append(f"interpretation: bare numbers {nums} - use placeholders")
+    if _unnegated_support_words(text):
+        p.append("interpretation cannot claim statistical support")
+    return p
 
 
 def _text_items(args: dict) -> list[tuple[str, str]]:
@@ -289,7 +367,10 @@ def submit_report(state, args: dict) -> dict:
     if problems:
         return {"status": "refused", "message": "report refused; fix these and resubmit", "problems": problems}
     state.report = build_report(state, args)
-    return {"status": "submitted", "message": "report accepted", "data": state.report}
+    out = {"status": "submitted", "message": "report accepted", "data": state.report}
+    if state.report["text_dropped"]:  # Muse's headline / interpretation failed a check: code templates are shown
+        out["text_dropped"] = state.report["text_dropped"]
+    return out
 
 
 # ---------- report ----------
@@ -302,8 +383,9 @@ def build_report(state, args: dict) -> dict:
         pairs = sorted({pair for _, pair, _ in _cited_pairs(state, f["evidence_ids"])})
         rob = [{"pair": p, **robustness(state, p)} for p in pairs] if f["claim"] == "supported" else []
         badge, label = CLAIMS[f["claim"]]
+        plain = dict(zip(("text", "segments"), render(state, f["plain"]))) if f.get("plain") else None
         findings.append({**f, "rendered": text, "segments": segments, "badge": badge, "badge_label": label,
-                         "pairs": pairs, "robustness": rob})
+                         "pairs": pairs, "robustness": rob, "plain": plain})
     stat_rows = []
     for fid in args["finding_ids"]:
         for pid, pair, res in _cited_pairs(state, state.findings[fid]["evidence_ids"]):
@@ -321,7 +403,16 @@ def build_report(state, args: dict) -> dict:
 
     def section(key):
         return [dict(zip(("text", "segments"), render(state, t))) for t in (args.get(key) or [])]
+
+    def written(key, problems):
+        text = (args.get(key) or "").strip()
+        return dict(zip(("text", "segments"), render(state, text))) if text and not problems else None
+    hp, ip = headline_problems(state, args), interpretation_problems(state, args)
     return {
+        "headline": written("headline", hp),
+        "interpretation": written("interpretation", ip),
+        "interpretation_label": INTERPRETATION_LABEL,
+        "text_dropped": hp + ip,
         "findings": findings,
         "statistical_support": stat_rows,
         "background": section("background"),

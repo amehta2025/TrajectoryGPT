@@ -241,3 +241,62 @@ def test_contacts_tool_answers_how_often_groups_touch_and_lists_its_pairs():
     f = call(s, "record_finding", claim="descriptive", evidence_ids=[f"{pid}.{pair}"],
              text=f"The groups touch in {{{{{pid}.any_contact_freq}}}} of frames; the top pair {pair} in {{{{{pid}.{pair}.freq}}}}")
     assert f["status"] == "ok"
+
+
+# ---------- Muse-written plain text: headline, plain sentences, interpretation ----------
+
+def test_pct_placeholders():
+    assert report.format_pct(0.527, "freq") == "53%" and report.format_pct(0.0129, "freq") == "1.3%"
+    assert report.format_pct(0.0004, "freq") == "less than 0.1%"
+    assert report.format_pct(-0.127, "delta") == "13 percentage points"
+    assert report.format_pct(0.01, "delta") == "1 percentage point"
+    assert report.format_pct((0.1, 0.2), "ci") is None
+
+
+def test_plain_sentence_is_checked_and_falls_back(pretend_stats_valid):
+    s = new_state()
+    call(s, "calculate_contacts", window="all")
+    ok = call(s, "record_finding", text="{{r1.n_pairs_in_contact}} pairs touch", evidence_ids=["r1"], claim="descriptive",
+              plain="The two parts touch in {{r1.any_contact_freq|pct}} of frames.")
+    assert ok["status"] == "ok" and "plain_dropped" not in ok["summary_for_model"]
+    assert s.findings["f1"]["plain"].endswith("of frames.")
+    # A bare number, an unknown placeholder, or support words on a descriptive finding: finding kept, plain dropped.
+    for plain in ("They touch 40% of the time.", "They touch {{r1.nope|pct}}.", "A significant, robust contact."):
+        r = call(s, "record_finding", text="{{r1.n_pairs_in_contact}} pairs touch", evidence_ids=["r1"],
+                 claim="descriptive", plain=plain)
+        assert r["status"] == "ok" and "plain_dropped" in r["summary_for_model"]
+        assert "plain" not in s.findings[json.loads(r["summary_for_model"])["finding_id"]]
+    rep = call(s, "submit_report", finding_ids=["f1", "f2"])
+    assert rep["status"] == "submitted"
+    f1, f2 = rep["data_for_ui"]["findings"]
+    assert f1["plain"]["text"] == f"The two parts touch in {report.format_pct(s.results['r1']['values']['any_contact_freq']['v'], 'freq')} of frames."
+    assert f2["plain"] is None  # the UI uses its code-built sentence
+
+
+def test_headline_and_interpretation_checks(pretend_stats_valid):
+    s = new_state()
+    call(s, "calculate_contacts", window="all")
+    call(s, "record_finding", text="{{r1.n_pairs_in_contact}} pairs touch", evidence_ids=["r1"], claim="descriptive")
+    good = call(s, "submit_report", finding_ids=["f1"], headline="Often: they touch in {{r1.any_contact_freq|pct}} of frames.",
+                interpretation="This may reflect how the lid packs against the core.")
+    rep = good["data_for_ui"]
+    assert "%" in rep["headline"]["text"] and "{{" not in rep["headline"]["text"]
+    assert rep["interpretation"]["text"].startswith("This may") and rep["text_dropped"] == []
+    assert rep["interpretation_label"] == "interpretation — not computed"
+    s.report = None
+    bad = call(s, "submit_report", finding_ids=["f1"], headline="Yes: a significant 40% contact.",
+               interpretation="The lid is significantly closed.")
+    rep = bad["data_for_ui"]
+    assert bad["status"] == "submitted"  # prose problems never refuse the report
+    assert rep["headline"] is None and rep["interpretation"] is None
+    assert any("bare numbers" in p for p in rep["text_dropped"]) and any("no cited finding is supported" in p for p in rep["text_dropped"])
+    assert any("interpretation cannot claim" in p for p in rep["text_dropped"])
+
+
+def test_headline_may_say_robust_only_with_a_robust_verdict(pretend_stats_valid):
+    s = new_state()
+    pid, pair, _ = supported_pair(s)
+    call(s, "record_finding", text=f"{pair} changed: {{{{{pid}.{pair}.delta}}}}", evidence_ids=[f"{pid}.{pair}"], claim="supported")
+    probs = report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Yes: one contact changed, a supported and robust change."})
+    assert probs == ["headline: says robust but no supported pair has a robust cutoff_sensitivity verdict"]
+    assert report.headline_problems(s, {"finding_ids": ["f1"], "headline": "Yes: one contact changed, a supported change."}) == []

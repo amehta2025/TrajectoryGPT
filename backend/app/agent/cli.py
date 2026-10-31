@@ -43,9 +43,16 @@ def _print_report(run) -> None:
             print(f"  problem: {p}")
         return
     print("\n=== Report ===")
+    print(f"Headline: {rep['headline']['text'] if rep.get('headline') else '(code-built in the UI)'}")
+    if rep.get("interpretation"):
+        print(f"  [{rep['interpretation_label']}] {rep['interpretation']['text']}")
+    for p in rep.get("text_dropped", []):
+        print(f"  dropped: {p}")
     for f in rep["findings"]:
         rob = "; ".join(f"{r['pair']}: {r['label']}" for r in f["robustness"])
         print(f"[{f['badge_label']}] {f['rendered']}" + (f"   <{rob}>" if rob else ""))
+        if f.get("plain"):
+            print(f"    plain: {f['plain']['text']}")
         print(f"    citations: {', '.join(f['evidence_ids'])}")
     if rep["statistical_support"]:
         print("Statistical support:")
@@ -150,7 +157,29 @@ def cmd_run(a) -> int:
             break
     _print_timing(run, plan_s)
     print(f"\nSaved {path}")
-    return 0 if run.status == "awaiting_verification" else 1
+    return 0 if run.status in ("awaiting_verification", "verified", "flagged") else 1
+
+
+def _verify(run, plant: bool) -> None:
+    from app.agent import verifier
+    if plant:
+        fid = verifier.plant_overclaim(run)
+        print(f"\nPlanted overclaim (dev only): {fid or 'none - no unsupported pair to misdescribe'}")
+        if fid:
+            print(f"  {run.state.report['findings'][-1]['rendered']}")
+    print("\n=== Verifier (Muse Wonder) ===")
+    v = verifier.verify_run(run)
+    if v["status"] == "error":
+        print(f"  could not check: {v['error']}")
+        return
+    u = v["usage"]
+    print(f"  {v['status'].upper()}: {v['summary']}")
+    for fl in v["flags"]:
+        print(f"  [{fl['severity']}] {fl['finding_id']}: \"{fl['quote']}\" - {fl['problem']}")
+    print(f"  {v['wall_s']:.1f}s, effort {u['effort']}, in={u['input_tokens']} out={u['output_tokens']}, "
+          f"{_cost(u['cost_usd'])}, {len(v['figures'])} plots")
+    total = (run.cost_usd() or 0) + (u["cost_usd"] or 0)
+    print(f"  investigation total incl. verifier: {_cost(total)}")
 
 
 def main(argv=None) -> int:

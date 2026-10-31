@@ -424,10 +424,16 @@ SCHEMAS = [
         "claim": {"type": "string", "enum": ["supported", "not_supported", "null", "descriptive"],
                   "description": "supported: a statistically supported change; not_supported: an apparent change the statistics do not support; "
                                  "null: no supported change at all, citing the compare_intervals result that shows it; "
-                                 "descriptive: what a non-statistical result (contacts, distances, native contacts, metadata) shows, not statistically tested."}},
+                                 "descriptive: what a non-statistical result (contacts, distances, native contacts, metadata) shows, not statistically tested."},
+        "plain": {"type": "string", "description": "The same finding in one plain sentence for a non-specialist: no jargon or statistics terms, "
+                                                     "placeholders for every number ({{r1.ASP54-LYS157.freq_a|pct}} writes 53%)."}},
         ["text", "evidence_ids", "claim"]),
     _tool("submit_report", "Submit the report from recorded findings (at least one). Runs the full deterministic check; if it fails, fix the listed problems and resubmit.", {
         "finding_ids": {"type": "array", "items": {"type": "string"}},
+        "headline": {"type": "string", "description": "One plain sentence that answers the question directly, with placeholders for every "
+                                                        "number, e.g. 'Rarely: NMP and LID touch in {{r1.any_contact_freq|pct}} of frames.'"},
+        "interpretation": {"type": "string", "description": "Optional: one hedged plain sentence on what the answer might mean, shown "
+                                                              "labelled 'interpretation — not computed'. No numbers, no claims of support."},
         "background": {"type": "array", "items": {"type": "string"},
                        "description": "For general questions only: brief textbook context, shown as 'background — not computed'. No numbers, no claims about this run."},
         "hypotheses": {"type": "array", "items": {"type": "string"}, "description": "Possible explanations, hedged."},

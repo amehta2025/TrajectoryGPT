@@ -111,12 +111,28 @@ export function Headline({ meta }: { meta: Metadata | null }) {
       main = <>{plural(findings.length, 'finding')}: {parts.join(', ')}.</>
     }
   }
+  // Muse's own answer when it passed the checks; the code-built sentence above is the fallback.
+  const written = run.report.headline
+  const interp = run.report.interpretation
   return (
     <div className="headline">
-      <p className="headline-main">{main}</p>
+      <p className="headline-main">{written ? <Filled segments={written.segments} /> : main}</p>
+      {interp && (
+        <p className="headline-interp"><span className="interp-label">Interpretation, not computed:</span> {interp.text}</p>
+      )}
       <p className="headline-note">Based on one simulation.</p>
     </div>
   )
+}
+
+/** Filled placeholder text; each computed value shows where it came from on hover. */
+function Filled({ segments }: { segments: Segment[] }) {
+  return <>{segments.map((s, i) => (s.pid ? <span key={i} className="filled" title={`computed: ${s.path}`}>{s.text}</span> : s.text))}</>
+}
+
+/** Muse's plain sentence for a finding about one contact; the code-built sentence for anything else. */
+function cardSentence(card: Card, groups: Metadata['groups']): string {
+  return card.finding.pairs.length <= 1 && card.finding.plain ? card.finding.plain.text : plainSentence(card, groups)
 }
 
 /**
@@ -227,7 +243,7 @@ function ContactCard({ card, n, run, meta, selected, science }: { card: Card; n:
   return (
     <li className={`ccard ${card.badge} ${selected ? 'selected' : ''}`}>
       <button className="ccard-main" onClick={() => void focusCard(card, meta)} title="Show this contact in 3D">
-        <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{plainSentence(card, meta.groups)}</span>
+        <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{cardSentence(card, meta.groups)}</span>
         {card.freqs.length > 0 && <FreqBars card={card} />}
       </button>
       {science && (
@@ -268,7 +284,7 @@ function ContactCard({ card, n, run, meta, selected, science }: { card: Card; n:
 function LocatedCard({ l, n, run, science }: { l: Located; n: number; run: RunView; science: boolean }) {
   return (
     <li className="ccard located">
-      <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{locatedSentence(l, run)}</span>
+      <span className="ccard-sentence"><span className="marker-num" aria-label={`marker ${n}`}>{n}</span>{l.finding.plain?.text ?? locatedSentence(l, run)}</span>
       {science && (
         <div className="ccard-detail">
           <p className="ccard-text"><Segments segs={l.finding.segments} run={run} /></p>
