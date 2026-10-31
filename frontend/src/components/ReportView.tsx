@@ -35,12 +35,39 @@ function isHalves(c: CompareData, nFrames: number | undefined): boolean {
   return c.window_a[0] === 0 && c.window_a[1] === mid && c.window_b[0] === mid
 }
 
+// Plain wording for the deterministic checks' refusals (record_finding / submit_report) and the run's own problems.
+const PLAIN_PROBLEMS: [RegExp, string][] = [
+  [/no accepted report within \d+ turns/, 'The agent ran out of steps before its report passed the checks.'],
+  [/has no pair/, 'A finding pointed to a contact the analysis didn’t list.'],
+  [/does not resolve/, 'A finding used a number the analysis didn’t produce.'],
+  [/claims support|not supported/, 'A finding called a change real when the statistics didn’t back it.'],
+  [/bare number|numeral/, 'A finding wrote a number by hand instead of using a computed one.'],
+  [/robust/, 'A finding said a result holds at every threshold without that check.'],
+  [/evidence|cites/, 'A finding cited evidence that doesn’t exist or didn’t run.'],
+]
+
+export function plainProblems(run: RunView): string[] {
+  const raw: string[] = [...run.problems]
+  for (const t of run.turns) {
+    if (t.status !== 'refused') continue
+    try { raw.push(...((JSON.parse(t.summary) as { problems?: string[] }).problems ?? [])) } catch { /* not JSON */ }
+  }
+  const out = raw.map((p) => PLAIN_PROBLEMS.find(([re]) => re.test(p))?.[1] ?? 'A finding failed an automatic check.')
+  return [...new Set(out)]
+}
+
 /** One plain headline. Counts come from stored tool results; no units, codes or statistics words. */
 export function Headline({ meta }: { meta: Metadata | null }) {
   const { run, phase } = useInvestigation()
   if (!run || phase !== 'finished') return null
   if (!run.report) {
-    return <div className="headline"><p className="headline-main">This report couldn’t be finished: the automatic checks did not accept it.</p></div>
+    const why = plainProblems(run)
+    return (
+      <div className="headline">
+        <p className="headline-main">This report couldn’t be finished: the automatic checks did not accept it.</p>
+        {why.length > 0 && <ul className="plain why">{why.map((w) => <li key={w}>{w}</li>)}</ul>}
+      </div>
+    )
   }
   const cmp = lastResult<CompareData>(run, 'compare_intervals')
   const sens = lastResult<SensitivityData>(run, 'cutoff_sensitivity')

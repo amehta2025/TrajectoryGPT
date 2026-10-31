@@ -221,10 +221,17 @@ export function plainSentence(card: Card, groups: Record<string, { ranges: [numb
     return s
   }
   if (card.badge === 'unsupported' || card.badge === 'null') return `${what} shifted, but no more than random variation would explain.`
+  const inWin = (w: string) => (w.startsWith('the ') ? `in ${w}` : w)
   if (card.freqs.length === 2) {
-    return dir === 0 ? `${what} is present about as often ${later}.` : `${what} is present ${dir < 0 ? 'less' : 'more'} often ${later}.`
+    return dir === 0 ? `${what} is present about as often ${inWin(later!)}.` : `${what} is present ${dir < 0 ? 'less' : 'more'} often ${inWin(later!)}.`
   }
-  return card.freqs.length === 1 ? `${what} is present ${WINDOW_WORDS[card.freqs[0].name] ?? 'in this window'}.` : `${what} was observed.`
+  if (card.freqs.length === 1) {
+    // How often, in words: the bar shows the number.
+    const f = card.freqs[0].freq
+    const often = f < 0.1 ? 'rarely' : f < 0.5 ? 'sometimes' : f < 0.9 ? 'often' : 'almost always'
+    return `${what} is ${often} formed ${inWin(WINDOW_WORDS[card.freqs[0].name] ?? 'in this window')}.`
+  }
+  return `${what} was observed.`
 }
 
 // ---------- markers ----------

@@ -225,3 +225,19 @@ def test_residue_flexibility_tool_summarises_by_domain():
     assert set(summary["median_rmsf_by_domain_A"]) == {"NMP", "LID", "CORE"} and "Path RMSF" in summary["note"]
     assert len(r["data_for_ui"]["rmsf"]) == 214
     assert any(k.endswith(".rmsf") for k in s.results[r["provenance_id"]]["values"])
+
+
+# ---------- "do these parts touch / how often" (whole run, no comparison) ----------
+
+def test_contacts_tool_answers_how_often_groups_touch_and_lists_its_pairs():
+    s = new_state([{"tool": "calculate_contacts", "rationale": ""}, {"tool": "submit_report", "rationale": ""}])
+    s.plan.group_a, s.plan.group_b, s.plan.window_b = "LID", "NMP", None
+    r = call(s, "calculate_contacts", window="all")
+    summary = json.loads(r["summary_for_model"])
+    assert 0 < summary["fraction_of_frames_groups_touch"] <= 1
+    pid, pair = r["provenance_id"], summary["top_pairs_by_frequency"][0]["pair"]
+    assert pair in r["pairs"]  # a finding can cite it
+    assert f"{{{{{pid}.{pair}.freq}}}}" in summary["placeholders"] and f"{{{{{pid}.any_contact_freq}}}}" in summary["placeholders"]
+    f = call(s, "record_finding", claim="descriptive", evidence_ids=[f"{pid}.{pair}"],
+             text=f"The groups touch in {{{{{pid}.any_contact_freq}}}} of frames; the top pair {pair} in {{{{{pid}.{pair}.freq}}}}")
+    assert f["status"] == "ok"

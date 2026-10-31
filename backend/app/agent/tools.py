@@ -181,16 +181,19 @@ def _calculate_contacts(plan, args):
     freq = np.where(r["excluded"], np.nan, r["frequency"])
     flat = [(float(freq[i, j]), r["keys_a"][i], r["keys_b"][j]) for i, j in zip(*np.nonzero(freq > 0))]
     flat.sort(key=lambda t: -t[0])
-    values = {"n_pairs_in_contact": _v(len(flat), "count"), "n_frames": _v(r["n_frames"], "count")}
-    top = []
+    values = {"n_pairs_in_contact": _v(len(flat), "count"), "n_frames": _v(r["n_frames"], "count"),
+              "any_contact_freq": _v(r["any_contact_frequency"], "freq")}
+    top, pairs = [], {}
     for f, ka, kb in flat[:TOP_N]:
         lab = pair_label(ka, kb)
         values[f"{lab}.freq"] = _v(f, "freq")
         top.append({"pair": lab, "freq": _r(f)})
+        pairs[lab] = {"key_a": ka, "key_b": kb}  # so a finding can cite a listed pair, e.g. 'r1.ASP54-LYS157'
     summary = {"window": [start, stop], "n_frames": r["n_frames"], "n_pairs_ever_in_contact": len(flat),
+               "fraction_of_frames_groups_touch": _r(r["any_contact_frequency"]),
                "top_pairs_by_frequency": top}
     data = {**r, "frequency": freq, "window": {"start": start, "stop": stop, "stride": plan.stride}}
-    return data, summary, values, {}
+    return data, summary, values, pairs
 
 
 def _contact_difference_map(plan, args, state):
@@ -405,7 +408,7 @@ PAIR = {"type": "string", "description": "Residue pair from the approved groups,
 SCHEMAS = [
     _tool("get_metadata", "Dataset facts: frames, residues, time step, stats validity, groups.", {}),
     _tool("list_groups", "Named residue groups (domains) with their ranges and source.", {}),
-    _tool("calculate_contacts", "Contact frequency of every residue pair between the two approved groups over one approved window, at the approved cutoff. Returns the most frequent pairs.", {"window": WINDOW}),
+    _tool("calculate_contacts", "Contact frequency of every residue pair between the two approved groups over one approved window ('all' = the whole run), at the approved cutoff. Returns the most frequent pairs and the fraction of frames in which the two groups touch at all. Use it for 'do these parts touch / how often'.", {"window": WINDOW}),
     _tool("distance_over_time", "Minimum heavy-atom distance per frame for one residue pair.", {"pair": PAIR, "window": WINDOW}, ["pair"]),
     _tool("compare_intervals", "Per-pair contact-frequency change, window b minus window a, with autocorrelation-corrected CIs and BH-FDR q-values; says which pairs are supported.", {}),
     _tool("contact_statistics", "For one pair in one window: frequency, autocorrelation time in ns, independent chunks, and its CI.", {"pair": PAIR, "window": WINDOW}, ["pair"]),
@@ -528,7 +531,9 @@ def _store(state, name, args, status, summary, data=None, values=None, pairs=Non
     units = {"distance": "Å", "time": dataset_config(state.plan.dataset)["time_label"]}
     summary = {"provenance_id": pid, "status": status, **summary}
     if status == "ok" and values:
-        summary["placeholders"] = f"{{{{{pid}.<name>}}}} for: " + ", ".join(sorted({k.split('.')[-1] for k in values}))
+        # Exact names (a pair's values carry the pair: r2.ASP54-LYS157.freq), so the model never guesses a prefix.
+        names = sorted(values)
+        summary["placeholders"] = ", ".join(f"{{{{{pid}.{k}}}}}" for k in names[:24]) + (" ..." if len(names) > 24 else "")
     result = {
         "status": status, "tool": name, "provenance_id": pid,
         "params": {**args, **{k: v for k, v in state.plan.as_dict().items() if k != "steps"}},

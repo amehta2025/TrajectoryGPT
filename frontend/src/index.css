@@ -356,3 +356,4 @@ button.science-toggle {
 /* numbered markers (card number = 3D marker) */
 .marker-num { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; margin-right: 8px; border-radius: 10px; background: #f3f6fa; color: #0b0e14; font-size: 12px; font-weight: 700; vertical-align: 1px; }
 .ccard.located { padding-bottom: 10px; }
+.headline .why { margin: 6px 0 0; font-size: 13px; color: #c3cad6; }

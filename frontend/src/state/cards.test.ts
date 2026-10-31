@@ -110,6 +110,14 @@ describe('plain sentences', () => {
     for (const s of [noise, slow, path]) expect(s).not.toMatch(NO_JARGON)
   })
 
+  it('says how often a single-window contact forms, in words', () => {
+    const one = (f: number) => plainSentence(card({ badge: 'descriptive', freqs: [{ name: 'whole run', freq: f }] }), groups)
+    expect(one(0.01)).toBe('This LID–CORE contact is rarely formed during the run.')
+    expect(one(0.99)).toBe('This LID–CORE contact is almost always formed during the run.')
+    expect(plainSentence(card({ badge: 'descriptive', freqs: [{ name: 'window A', freq: 1 }, { name: 'window B', freq: 1 }] }), groups))
+      .toBe('This LID–CORE contact is present about as often in the second window.')
+  })
+
   it('finds the domain of a residue', () => {
     expect(domainOf(K('ASP54'), groups)).toBe('NMP')
     expect(domainOf(K('ASP118'), groups)).toBe('CORE')

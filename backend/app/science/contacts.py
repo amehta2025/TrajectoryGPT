@@ -169,6 +169,9 @@ def calculate_contacts(
     frames = validate_window(md.min_dist.shape[0], start, stop, stride)
     window = md.min_dist[frames.start:frames.stop:frames.step]
     freq = (window <= cutoff).mean(axis=0)
+    excluded = sequence_local_mask(md.keys_a, md.keys_b, sequence_exclusion)
+    # Share of frames in which the two groups touch at all: any non-local pair within the cutoff.
+    any_contact = float((window[:, ~excluded] <= cutoff).any(axis=1).mean()) if (~excluded).any() else 0.0
     cfg = dataset_config(dataset)
     return {
         "dataset": dataset,
@@ -177,7 +180,8 @@ def calculate_contacts(
         "keys_a": md.keys_a,
         "keys_b": md.keys_b,
         "frequency": freq,
-        "excluded": sequence_local_mask(md.keys_a, md.keys_b, sequence_exclusion),
+        "any_contact_frequency": any_contact,
+        "excluded": excluded,
         "sequence_exclusion": sequence_exclusion,
         "frames": np.asarray(frames),
         "n_frames": len(frames),

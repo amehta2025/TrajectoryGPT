@@ -141,3 +141,11 @@ def test_contact_difference_map_is_window_b_minus_window_a():
     assert d["delta"][i, j] < 0  # the closed-state salt bridge breaks as the path opens
     with pytest.raises(ValueError):
         contact_difference_map(DS, "LID", "NMP", (0, 60), (40, 98))
+
+
+def test_any_contact_frequency_is_share_of_frames_with_any_pair_in_contact():
+    r = calculate_contacts(DS, "LID", "NMP", 4.5)
+    md = precompute_min_distances(DS, "LID", "NMP")
+    expect = float((md.min_dist[:, ~r["excluded"]] <= 4.5).any(axis=1).mean())
+    assert r["any_contact_frequency"] == pytest.approx(expect)
+    assert r["any_contact_frequency"] >= r["frequency"][~r["excluded"]].max()
