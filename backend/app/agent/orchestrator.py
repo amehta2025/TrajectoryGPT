@@ -31,7 +31,7 @@ class Run:
     question: str
     plan: ApprovedPlan
     state: RunState
-    status: str = "running"  # running | needs_review | awaiting_verification | aborted_budget | error
+    status: str = "running"  # running | needs_review | awaiting_verification -> verified / flagged | aborted_budget | error
     turns: list[dict] = field(default_factory=list)
     plan_usage: list[dict] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
@@ -41,10 +41,15 @@ class Run:
     wall_s: float = 0.0
     error: str | None = None
     figure: dict | None = None  # figure mode: {figure_id, filename, mime, spec}
+    verification: dict | None = None  # Muse Wonder check: {status: pending|verified|flagged|error, summary, flags, usage}
+    planted: str | None = None  # dev-only planted overclaim: its finding id
 
     def cost_usd(self) -> float | None:
         costs = [t["usage"]["cost_usd"] for t in self.turns] + [u["cost_usd"] for u in self.plan_usage]
         return None if all(c is None for c in costs) else sum(c or 0.0 for c in costs)
+
+    def verifier_cost_usd(self) -> float | None:
+        return ((self.verification or {}).get("usage") or {}).get("cost_usd")
 
     def as_dict(self) -> dict:
         return jsonable({
@@ -52,7 +57,8 @@ class Run:
             "plan": self.plan.as_dict(), "checklist": self.state.checklist, "turns": self.turns,
             "plan_usage": self.plan_usage, "results": self.state.results, "findings": self.state.findings,
             "report": self.state.report, "extra_steps": self.state.extra_steps, "problems": self.problems, "wall_s": round(self.wall_s, 2),
-            "cost_usd": self.cost_usd(), "error": self.error, "figure": self.figure,
+            "cost_usd": self.cost_usd(), "verifier_cost_usd": self.verifier_cost_usd(), "error": self.error,
+            "figure": self.figure, "verification": self.verification, "planted": self.planted,
             "input_items": self.input_items,  # full history incl. encrypted reasoning, for resume_run
         })
 
@@ -183,7 +189,8 @@ def load_run(run_id: str, directory: Path | None = None) -> Run:
                      extra_steps=d.get("extra_steps", []))
     return Run(d["run_id"], d["question"], plan, state, status=d["status"], turns=d["turns"],
                plan_usage=d["plan_usage"], problems=d["problems"], input_items=d["input_items"], created=d["created"],
-               wall_s=d.get("wall_s", 0.0), error=d.get("error"), figure=d.get("figure"))
+               wall_s=d.get("wall_s", 0.0), error=d.get("error"), figure=d.get("figure"),
+               verification=d.get("verification"), planted=d.get("planted"))
 
 
 def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:
@@ -195,7 +202,7 @@ def list_runs(limit: int = 50, directory: Path | None = None) -> list[dict]:
             r = json.loads(p.read_text(encoding="utf-8"))
         except ValueError:
             continue
-        out.append({k: r.get(k) for k in ("run_id", "created", "question", "status", "cost_usd", "wall_s")}
+        out.append({k: r.get(k) for k in ("run_id", "created", "question", "status", "cost_usd", "verifier_cost_usd", "wall_s")}
                    | {"dataset": r["plan"]["dataset"]})
     return out
 

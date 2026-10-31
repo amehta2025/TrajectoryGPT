@@ -137,6 +137,9 @@ def cmd_run(a) -> int:
     run = run_investigation(llm, run, max_turns=a.turns, on_event=_print_turn)
     path = run.save()
     _print_report(run)
+    if run.status == "awaiting_verification" and not a.no_verify:
+        _verify(run, a.plant_overclaim)
+        path = run.save()
     for res in run.state.results.values():
         if res["tool"] == "reproduction_check" and res["status"] == "ok":
             d = res["data_for_ui"]
@@ -161,6 +164,8 @@ def main(argv=None) -> int:
     r.add_argument("--cutoff", type=float, help="edit the plan's main cutoff (Å)")
     r.add_argument("--robust", help="edit the robustness cutoffs, e.g. 4.0,4.5,5.0")
     r.add_argument("--budget", type=float, default=DEV_BUDGET_USD, help="abort when estimated $ passes this")
+    r.add_argument("--no-verify", action="store_true", help="skip the Muse Wonder check")
+    r.add_argument("--plant-overclaim", action="store_true", help="dev only: add an overclaiming finding before the check")
     f = sub.add_parser("figure", help="reproduce a figure: image and/or methods PDF -> spec -> plan -> run")
     f.add_argument("files", nargs="+", help="PNG/JPEG figure and optional PDF")
     f.add_argument("--note", default="", help="optional text from the user")
@@ -171,6 +176,8 @@ def main(argv=None) -> int:
         p.add_argument("--cutoff", type=float)
         p.add_argument("--robust")
         p.add_argument("--budget", type=float, default=DEV_BUDGET_USD)
+        p.add_argument("--no-verify", action="store_true")
+        p.add_argument("--plant-overclaim", action="store_true")
     a = ap.parse_args(argv)
     return cmd_run(a)
 

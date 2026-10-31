@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 
-from app.agent import session
+from app.agent import session, verifier
 from app.agent.planner import PlanInvalid
 from app.config import dataset_config, load_config
 from app.safety import budget
@@ -70,7 +70,9 @@ def _round(a: np.ndarray, nd: int = 4) -> list:
 def health():
     return {"status": "ok", "datasets": sorted(load_config()["datasets"]),
             "model": os.environ.get("META_MODEL", "muse-spark-1.3"), "mode": os.environ.get("APP_MODE", "live"),
-            "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd()}
+            "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd(),
+            "verifier_model": os.environ.get("META_VERIFIER_MODEL", "muse-wonder-1.0"),
+            "dev_overclaim_toggle": verifier.planting_allowed()}
 
 
 @app.get("/datasets")
@@ -266,9 +268,9 @@ def get_figure(figure_id: str):
 
 @app.post("/runs", dependencies=[Depends(require_passcode), Depends(require_budget)])
 def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
-              confirmed_fields: list[str] = Body([])):
+              confirmed_fields: list[str] = Body([]), plant_overclaim: bool = Body(False)):
     try:
-        return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields)}
+        return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields, plant_overclaim)}
     except KeyError as e:
         raise HTTPException(404, str(e)) from None
     except PlanInvalid as e:
@@ -300,7 +302,8 @@ def get_run(run_id: str):
 
 @app.get("/runs/{run_id}/events")
 def run_events(run_id: str, after: int = 0):
-    """Server-sent events: one `data:` line per step-log event; ends after run_finished.
+    """Server-sent events: one `data:` line per step-log event; ends after run_finished, or after
+    verification_finished when a report was accepted (the verifier runs in the background).
     A run that is no longer in memory (saved on disk) streams one run_finished event."""
     try:
         h = session.get_handle(run_id)

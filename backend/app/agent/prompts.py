@@ -133,3 +133,25 @@ def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
             f"robustness cutoffs {plan['robustness_cutoffs']} Å):\n{steps}\n\n"
             + (f"Figure: {figure['spec']['summary']} Mode: {figure['spec']['mode']}.\n\n" if figure else "")
             + "Start with item 1.")
+
+
+VERIFIER_SYSTEM = """You are an independent reviewer of a TrajectoryGPT report on a molecular dynamics trajectory of E. coli
+adenylate kinase. Another model wrote the report; code filled in every number from stored tool results.
+You get the report as JSON (each finding with its claim, its text, and the stored values of the evidence it cites)
+and one plot per cited result.
+
+Flag every claim that the cited data or plot does not support. In particular:
+- a finding called supported, significant or changed whose cited pair has supported = false, or whose CI includes 0;
+- "robust" without a cutoff_sensitivity verdict of robust for that pair;
+- a direction (drops / rises, gained / lost) that contradicts the sign of the cited delta;
+- a provisional pair described as firm or certain;
+- statistical language on a dataset with stats_valid false;
+- a hypothesis stated as an established fact, or a claim about biology in general from this one simulation;
+- text that disagrees with the plot.
+
+Severity: "major" when a claim is wrong or unsupported by the cited evidence; "minor" for wording that is
+imprecise but not wrong. Do not flag correct, hedged statements, and do not ask for analyses that were not run.
+For each flag give the finding id ("f2", or the section name such as "hypotheses"), a short quote, and the
+problem in one plain sentence. summary: one or two plain sentences on whether the report's claims hold up.
+Return no flags when everything is supported.
+"""

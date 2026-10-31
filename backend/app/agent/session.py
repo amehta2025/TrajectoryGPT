@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.agent.llm import LLM, CostTracker
-from app.agent import orchestrator
+from app.agent import orchestrator, verifier
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import PlanInvalid, make_plan, to_approved
 from app.safety import budget
@@ -33,7 +33,8 @@ class RunHandle:
     def emit(self, e: dict) -> None:
         with self.cond:
             self.events.append({"seq": len(self.events), **e})
-            if e["type"] == "run_finished":
+            # The stream ends with the run, or after the background verifier when a report was accepted.
+            if e["type"] == "verification_finished" or (e["type"] == "run_finished" and e["status"] != "awaiting_verification"):
                 self.done = True
             self.cond.notify_all()
 
@@ -96,7 +97,8 @@ def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LL
             "question": out["question"]}
 
 
-def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_fields: list[str] | None = None) -> str:
+def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_fields: list[str] | None = None,
+              plant_overclaim: bool = False) -> str:
     """Approve the stored plan with the user's edits (validated in code) and start it in the background.
 
     A figure plan runs only once the user has confirmed every low-confidence extracted setting (SPEC §4:
@@ -124,13 +126,29 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
         RUNS[run.run_id] = handle
     llm: LLM = stored["llm"]
 
+    plant = plant_overclaim and verifier.planting_allowed()
+
     def work():
         run_investigation(llm, run, on_event=handle.emit, wait_for_next=handle.wait_for_next)
+        if run.status == "awaiting_verification":
+            verify_in_background(run, handle.emit, plant)
         if ON_RUN_FINISHED:
             ON_RUN_FINISHED()
 
     threading.Thread(target=work, name=f"run-{run.run_id}", daemon=True).start()
     return run.run_id
+
+
+def verify_in_background(run: Run, emit, plant: bool = False) -> None:
+    """The report is already shown ("Verifying..."); this one Muse Wonder call then sets verified / flagged."""
+    if plant:
+        verifier.plant_overclaim(run)
+    run.verification = {"status": "pending"}
+    run.save()
+    emit({"type": "verification_started", "planted": run.planted})
+    v = verifier.verify_run(run)
+    run.save()
+    emit({"type": "verification_finished", "status": run.status, "verification": v})
 
 
 def get_handle(run_id: str) -> RunHandle:
