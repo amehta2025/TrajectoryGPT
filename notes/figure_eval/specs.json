@@ -1,0 +1,1068 @@
+{
+ "iyer2020_fig5c": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "methods",
+     "value": "differential contact map created by subtracting one contact map from the other"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "adenylate kinase (ADK)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "methods",
+     "value": "PDB models 4jzkB (closed) and 4akeA (open)"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "methods",
+     "value": "any two side-chain heavy atoms from the residues"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "methods",
+     "value": "5 A"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "methods",
+     "value": "closed 4jzkB vs open 4akeA"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Alignment position"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Alignment position"
+    },
+    {
+     "confidence": "high",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "differential map by subtraction; red contacts seen in closed conformation and blue contacts seen in open conformation"
+    }
+   ],
+   "kind": "difference_contact_map",
+   "mode": "transfer",
+   "mode_reason": "Figure is the final differential contact map of PDB 4jzkB closed vs 4akeA open using side-chain heavy-atom 5 A contacts with red=closed and blue=open, not the 98-frame DIMS closed->open CA 8 A Q1/Q2 trajectory nor the 4187-frame 1.004 us equilibrium run, so it cannot be exact.",
+   "question": "Compute the difference contact map between closed PDB 4jzkB and open PDB 4akeA adenylate kinase using side-chain heavy-atom contacts with a 5 A cutoff, with closed-only contacts in red and open-only contacts in blue versus alignment position.",
+   "summary": "The figure shows the differential contact map of adenylate kinase with closed-only contacts in red and open-only contacts in blue.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0010436
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "final differential / difference contact map created by subtracting one contact map from the other"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "adenylate kinase (ADK), E. coli adenylate kinase"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "methods",
+     "value": "PDB models 4jzk chain B (closed) and 4ake chain A (open)"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "methods",
+     "value": "any side-chain heavy atoms from each residue"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "methods",
+     "value": "5 A"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "closed conformation vs open conformation; red = closed-only, blue = open-only"
+    },
+    {
+     "confidence": "low",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Alignment position, ~0 to ~214"
+    },
+    {
+     "confidence": "low",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Alignment position, ~0 to ~214"
+    },
+    {
+     "confidence": "high",
+     "name": "contact definition",
+     "source": "methods",
+     "value": "residue pair in contact if distance between any two side-chain heavy atoms <5 A; differential map retains contacts seen only in closed (red) or only in open (blue)"
+    }
+   ],
+   "kind": "difference_contact_map",
+   "mode": "transfer",
+   "mode_reason": "Transfer: caption and methods state the map compares static PDBs 4jzkB (closed) vs 4akeA (open) with side-chain heavy-atom <5 A contacts, red=closed and blue=open. This matches neither adk_transition (98-frame DIMS closed->open path, CA 8 A Q1/Q2) nor adk_equilibrium (4187-frame 1.004 us Anton run).",
+   "question": "Compute the difference contact map for E. coli adenylate kinase between closed (PDB 4jzk chain B) and open (PDB 4ake chain A) using side-chain heavy-atom contacts with a 5 A cutoff, subtract one contact map from the other, and plot closed-only contacts in red and open-only contacts in blue versus alignment position.",
+   "summary": "Differential contact map of adenylate kinase showing closed-specific contacts in red and open-specific contacts in blue versus alignment position.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0009484000000000001
+  }
+ ],
+ "userguide_q1q2": [
+  {
+   "dataset": "adk_transition",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "Fraction of native contacts Q1 and Q2 along trajectory"
+    },
+    {
+     "confidence": "low",
+     "name": "protein",
+     "source": "assumed",
+     "value": "E. coli adenylate kinase (AdK)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "DIMS closed-to-open transition trajectory from MDAnalysis User Guide published code (98 frames)"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "assumed",
+     "value": "C-alpha atoms (name CA)"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "8 A radius"
+    },
+    {
+     "confidence": "medium",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "Q1 against closed reference (first frame), Q2 against open reference (last frame)"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Left panel: Frame 0 to ~97; Right panel: Q1 (fraction)"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Left panel: Fraction of native contacts (~0.92 to 1.00); Right panel: Q2 (fraction)"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "Native contacts as defined by MDAnalysis contacts.q1q2 method"
+    }
+   ],
+   "kind": "native_contacts",
+   "mode": "exact",
+   "mode_reason": "Footer states 'Regenerated from the MDAnalysis User Guide's published code', title 'Q1: closed reference, Q2: open reference' matches the Guide example 'Fraction of native contacts over a trajectory' with contacts.q1q2(u, 'name CA', radius=8) Q1 first frame Q2 last, and Frame axis 0-100 matches the 98-frame adk_transition DIMS closed->open path.",
+   "question": "Compute the fraction of native contacts Q1 (closed/first-frame reference) and Q2 (open/last-frame reference) along the adk_transition path with C-alpha atoms and an 8 A radius, and reproduce Q1/Q2 vs frame and Q2 vs Q1 plots to check against the published code.",
+   "summary": "Left panel shows Q1 decreasing from 1.0 and Q2 increasing to 1.0 over ~98 frames from closed to open, and right panel shows the corresponding Q1 vs Q2 path.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0008170000000000001
+  },
+  {
+   "dataset": "adk_transition",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "Fraction of native contacts Q1 and Q2 along trajectory"
+    },
+    {
+     "confidence": "low",
+     "name": "protein",
+     "source": "assumed",
+     "value": "E. coli adenylate kinase (AdK)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "DIMS closed-to-open transition path from MDAnalysis User Guide published code"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "assumed",
+     "value": "name CA (C-alpha atoms)"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "8 A radius"
+    },
+    {
+     "confidence": "medium",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "Q1 against closed reference (first frame), Q2 against open reference (last frame)"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Left: Frame 0 to ~98; Right: Q1"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Left: Fraction of native contacts ~0.92 to 1.00; Right: Q2"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "Q1/Q2 fraction of native contacts as computed by contacts.q1q2"
+    }
+   ],
+   "kind": "native_contacts",
+   "mode": "exact",
+   "mode_reason": "Exact because footer states 'Regenerated from the MDAnalysis User Guide's published code' and title/axes 'Fraction of native contacts (Q1: closed reference, Q2: open reference)' vs Frame 0-100 match the adk_transition 98-frame DIMS closed->open path used in the User Guide Q1 vs Q2 example.",
+   "question": "Compute the fraction of native contacts Q1 (closed reference, first frame) and Q2 (open reference, last frame) along the AdK transition path with C-alpha atoms and an 8 A radius, and plot Q1/Q2 vs frame and Q2 vs Q1 to check against the published code.",
+   "summary": "The figure shows fraction of native contacts Q1 decreasing and Q2 increasing across frames from closed to open, and Q2 plotted versus Q1.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0007444000000000001
+  }
+ ],
+ "milano2017_fig5": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "minimum distance between two residues versus simulation time, two panels (A and B)"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR, holo (black) and apo (red) forms, chains A and B"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "MD simulations of GabR from Milano et al. 2017 PLoS ONE 12(12):e0189270, not AdK datasets"
+    },
+    {
+     "confidence": "medium",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "Panel A: Ile104B in figure title (caption says Ile140B) and Leu340A; Panel B: Leu99B and Pro326A; hydrophobic residues"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "no cutoff; continuous minimum distance reported"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "two conditions: holo trajectory (black, ~350 ns) vs apo trajectory (red, ~200 ns); no AdK reference frames"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Time (ns), 0 to ~350 ns for holo and 0 to 200 ns for apo"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Distance (nm), 0.0 to 2.5 nm"
+    },
+    {
+     "confidence": "medium",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "minimum distance over all inter-residue atom pairs between the two residues vs time"
+    }
+   ],
+   "kind": "distance_trace",
+   "mode": "transfer",
+   "mode_reason": "Transfer because protein is GabR holo/apo from Milano et al. 2017, with time in ns to ~350 ns and distance in nm for Ile-Leu and Leu-Pro pairs, not the 98-frame AdK DIMS transition or 4187-frame AdK equilibrium.",
+   "question": "Compute the minimum distance between Ile104B (caption says Ile140B)-Leu340A and between Leu99B-Pro326A versus simulation time for holo and apo GabR trajectories, and transfer the same minimum-distance trace workflow to AdK.",
+   "summary": "Two minimum-distance-vs-time traces in nm for GabR pairs Ile104B/140B-Leu340A and Leu99B-Pro326A comparing holo (black, ~350 ns) and apo (red, 200 ns) simulations.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0010549000000000001
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "minimum distance between hydrophobic residue pairs versus simulation time for holo vs apo"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR holo and apo, not E. coli AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "GabR MD simulations from Milano et al. 2017 PLoS ONE, not adk_transition or adk_equilibrium"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "axis",
+     "value": "Panel A: Ile104B-Leu340A in plot title (caption says Ile140B-Leu340A); Panel B: Leu99B-Pro326A; atom subset not specified"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "none stated; minimum distance reported, no contact cutoff"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "two trajectories: holo GabR (black trace) and apo GabR (red trace)"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Time (ns), 0 to ~350 ns for holo (black) and 0 to ~200 ns for apo (red)"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Distance (nm), 0.0 to 2.5 nm"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "minimum distance between the two hydrophobic residues; whether all-atom or sidechain minimum not specified"
+    }
+   ],
+   "kind": "distance_trace",
+   "mode": "transfer",
+   "mode_reason": "Figure is GabR holo/apo MD from Milano et al. 2017 with GabR residues Ile104B/Ile140B-Leu340A and Leu99B-Pro326A and 0-350 ns time axis, not the 98-frame AdK DIMS adk_transition path or the 4187-frame AdK Anton adk_equilibrium trajectory.",
+   "question": "Transfer this minimum-distance trace analysis to AdK: compute the minimum distance between a selected pair of hydrophobic residues in AdK along the trajectory versus time to compare states, analogous to the holo vs apo GabR traces.",
+   "summary": "The figure shows minimum distance in nm versus time in ns for two hydrophobic pairs in GabR, holo (black, ~350 ns) versus apo (red, ~200 ns).",
+   "pdf_fallback": false,
+   "_cost_usd": 0.000548298
+  }
+ ],
+ "milano2017_fig2bc": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "per-residue RMSF variations for subunit A and subunit B"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR holo form (black) and apo form (red), Chain A (panel B) and Chain B (panel C)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Milano et al. 2017 PLoS ONE holo and apo GabR simulations, not AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "only main chain atoms"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "not stated, not applicable to RMSF"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "all frames superimposed to the initial structure"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Residue"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "RMSF in nm, 0.0 to 1.5 nm"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "not applicable to RMSF"
+    }
+   ],
+   "kind": "rmsf",
+   "mode": "transfer",
+   "mode_reason": "Caption states holo and apo GabR forms, not E. coli AdK, and neither adk_transition nor adk_equilibrium matches; therefore transfer mode with dataset none.",
+   "question": "Compute per-residue RMSF for AdK using only main-chain atoms with all frames superimposed to the initial structure, plotting RMSF in nm versus residue, as a transfer of the GabR holo vs apo analysis in panels B and C.",
+   "summary": "Panels B and C show per-residue RMSF in nm versus residue for Chain A and Chain B of holo (black) and apo (red) GabR.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0008022999999999999
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "per-residue RMSF"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR holo (black) and apo (red) forms, subunit A (Chain A, panel B) and subunit B (Chain B, panel C)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "GabR MD simulations from Milano et al. 2017 PLoS ONE 12(12): e0189270, not AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "main chain atoms only"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "not applicable to RMSF"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "all frames superimposed to the initial reference structure"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Residue number, 0 to ~470"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "RMSF (nm), 0.0 to 1.5 nm"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "not applicable to RMSF"
+    }
+   ],
+   "kind": "rmsf",
+   "mode": "transfer",
+   "mode_reason": "Figure is from Milano et al. 2017 GabR holo/apo simulations, caption states RMSF for GabR Chain A/B in nm vs residue with main-chain atoms, not E. coli AdK 98-frame DIMS transition or Anton equilibrium; protein and data source do not match our datasets.",
+   "question": "Compute per-residue RMSF for AdK using only main-chain atoms after superimposing all frames to the initial structure, and plot RMSF in nm versus residue number, analogous to the GabR Chain A/B comparison.",
+   "summary": "Panels B and C show per-residue RMSF in nm versus residue number for Chain A and Chain B of holo (black) and apo (red) GabR.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0008721
+  }
+ ],
+ "milano2017_fig2a": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "RMSD variations versus time per subunit"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR holo and apo forms, subunits A and B"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Milano et al. 2017 PLoS ONE holo and apo GabR MD simulations"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "main chain atoms only"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "not applicable, no cutoff for RMSD"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "initial reference structure, all frames superimposed to initial structure"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Time (ns), 0 to ~350 ns"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "RMSD (nm), 0 to 1.5 nm"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "not applicable, RMSD analysis not contacts"
+    }
+   ],
+   "kind": "other",
+   "mode": "transfer",
+   "mode_reason": "Transfer because figure shows GabR holo/apo subunits A/B RMSD in nm vs Time in ns to ~350 ns, not E. coli AdK; caption names holo and apo GabR and axis labels do not match 98-frame DIMS transition or 4187-frame AdK equilibrium datasets.",
+   "question": "Transfer the RMSD-versus-time analysis to E. coli AdK: compute main-chain RMSD in nm versus time in ns relative to the initial structure along the trajectory.",
+   "summary": "Panel A shows main-chain RMSD in nm versus time in ns for subunits A and B of holo and apo GabR relative to the initial structure.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0006801060000000001
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "RMSD variation over simulation time"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "GabR holo and apo forms, subunits A and B"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Milano et al 2017 PLoS ONE GabR holo and apo MD simulations"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "main chain atoms only"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "not applicable - RMSD analysis with no contact cutoff"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "initial reference structure, all frames superimposed to initial structure"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Time (ns), 0 to about 350 ns"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "RMSD (nm), 0 to 1.5 nm"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "assumed",
+     "value": "not applicable - RMSD analysis with no contact definition"
+    }
+   ],
+   "kind": "other",
+   "mode": "transfer",
+   "mode_reason": "Figure is GabR holo/apo RMSD vs time from Milano et al 2017, not E coli AdK; caption, legend and axes show GabR subunits A/B with 0-350 ns time, incompatible with adk_transition 98-frame DIMS path or adk_equilibrium 4187-frame Anton MD",
+   "question": "Transfer the RMSD-vs-time analysis to AdK: compute main-chain RMSD in nm versus time after superimposing all frames to the initial structure",
+   "summary": "Panel A shows main-chain RMSD in nm versus time in ns for holo subunit A, holo subunit B, apo subunit A and apo subunit B of GabR with holo subunit B showing large excursions to about 1 point 0 nm near 175 to 200 ns",
+   "pdf_fallback": false,
+   "_cost_usd": 0.00038337800000000003
+  }
+ ],
+ "chen2011_fig7c": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "distance trace vs simulation time for two independent runs (free MD 1 and free MD 2)"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "integrin U1 partially-extended / bent conformation, not E. coli AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "U1 free MD 1 and U1 free MD 2 from Chen et al 2011 PLoS Comput Biol 7(2):e1001086, Figure 7C"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "Hybrid-EGF4 nonpolar group and Asp393-Arg633 salt bridge at hybrid/betaTD and hybrid/EGF4 interfaces; exact atoms not specified"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "equilibrated bent U1 structure distances shown as upper and lower dashed lines for nonpolar group and Asp393-Arg633 respectively"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Simulation Time (ns), 0 to 30 ns"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Distance (Å), 0 to 60 Å"
+    },
+    {
+     "confidence": "medium",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "inter-residue distance in Angstroms, not fraction of native contacts"
+    }
+   ],
+   "kind": "distance_trace",
+   "mode": "transfer",
+   "mode_reason": "Figure is integrin U1 free MD showing Hybrid-EGF4 nonpolar and Asp393-Arg633 distances over 0-30 ns from Chen et al 2011, not the 98-frame AdK DIMS closed->open path or the 1.004 us AdK equilibrium MD, so it cannot be exact.",
+   "question": "Transfer this distance-trace design to AdK: compute inter-residue interface distances versus simulation time and plot traces with reference-state distances as dashed lines, as done for Hybrid-EGF4 nonpolar and Asp393-Arg633 in U1 free MD 1 and 2.",
+   "summary": "Panel C shows distance versus simulation time over ~0-29 ns for the Hybrid-EGF4 nonpolar group and Asp393-Arg633 pair in two U1 free MD runs, with equilibrated bent U1 reference distances as dashed lines.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0010365
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "distance between interacting residues vs simulation time for U1 free MD 1 and 2"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "integrin U1 (hybrid, betaTD, EGF4 domains), not E. coli AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Chen et al. 2011 PLoS Comput Biol Fig 7C, U1 free MD 1 and 2 from partially-extended conformation"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "Hybrid-EGF4 nonpolar group residues and Asp393-Arg633 pair; exact atoms (e.g., CA vs sidechain) unspecified"
+    },
+    {
+     "confidence": "low",
+     "name": "cutoff or radius",
+     "source": "assumed",
+     "value": "no cutoff; continuous distance measurement"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "caption",
+     "value": "equilibrated bent U1 structure distances shown as upper and lower dashed lines"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Simulation Time (ns), 0 to ~29 ns"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Distance (A), 0 to 60 A"
+    },
+    {
+     "confidence": "low",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "inter-residue distance for nonpolar group and Asp393-Arg633 salt bridge at hybrid/betaTD and hybrid/EGF4 interfaces; calculation method unspecified"
+    }
+   ],
+   "kind": "distance_trace",
+   "mode": "transfer",
+   "mode_reason": "Figure is from Chen et al. 2011 integrin U1 free MD simulations (Hybrid-EGF4 nonpolar, Asp393-Arg633, 0-29 ns timescale), not from AdK 98-frame DIMS path or Anton equilibrium MD; caption, legend and axes show integrin system.",
+   "question": "Transfer this distance-trace analysis to AdK: compute distances between selected inter-domain interacting residue pairs versus simulation time, with reference distances from a reference structure, analogous to the Hybrid-EGF4 nonpolar and Asp393-Arg633 traces.",
+   "summary": "Panel C shows distance traces for Hybrid-EGF4 nonpolar contacts and Asp393-Arg633 salt bridge over ~0-29 ns of two integrin U1 free MD runs, with bent-state reference distances as dashed lines.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.000536554
+  }
+ ],
+ "habibi2016_fig7a": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "Per-residue fraction of native contacts Qk as a function of total native contacts Q during mechanical unfolding, for four models: All-atom, HA-Go, AWSEM, C-alpha-Go"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "axis",
+     "value": "Not E. coli AdK; ~110-residue beta protein labeled beta1-beta8, coil, turn (y-axis Residue ~1-110, incompatible with 214-residue AdK)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Habibi M, Rottler J, Plotkin SS (2016) PLoS Comput Biol Fig 7 panel A mechanical unfolding simulations; not MDAnalysis AdK DIMS or Anton equilibrium"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "caption",
+     "value": "a) All-atom, b) HA-Go, c) AWSEM, d) C-alpha-Go"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "methods",
+     "value": "0.6 nm between heavy atoms in native state"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "methods",
+     "value": "Native-state contact list as reference; no AdK closed (first frame) or open (last frame) reference"
+    },
+    {
+     "confidence": "low",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Total fraction/number of native contacts Q, ~0 to 1.0 (ticks 0.2, 0.4, 0.6, 0.8, partly cut off)"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Residue number ~1 to 110"
+    },
+    {
+     "confidence": "high",
+     "name": "contact definition",
+     "source": "methods",
+     "value": "Any two heavy atoms within 0.6 nm in native state and three or more residues apart form a native contact; Qk is per-residue fraction, Q is total; color red = 1 all native contacts present, white = 0 no native contacts"
+    }
+   ],
+   "kind": "native_contacts",
+   "mode": "transfer",
+   "mode_reason": "Transfer because caption cites Habibi et al 2016 mechanical unfolding with AA, HA-Go, AWSEM, C-alpha-Go models and Qk(Q); y-axis shows Residue ~1-110 with beta1-beta8 labels, incompatible with 214-residue AdK 98-frame DIMS closed->open path or 4187-frame Anton equilibrium; methods uses 0.6 nm heavy-atom cutoff, not CA 8 A Q1/Q2.",
+   "question": "Transfer the Qk(Q) analysis to E. coli AdK: compute per-residue fraction of native contacts Qk and total Q using heavy atoms within 0.6 nm and sequence separation >=3 residues, and plot Qk (0 white to 1 red) versus residue versus total Q along the trajectory.",
+   "summary": "Panel A shows per-residue fraction of native contacts Qk (white 0 to red 1) versus total native contacts Q during mechanical unfolding of a ~110-residue beta protein in four models (AA, HA-Go, AWSEM, C-alpha-Go).",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0012902
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "Per-residue fraction of native contacts Qk plotted versus total fraction of native contacts Q during mechanical unfolding, for four models"
+    },
+    {
+     "confidence": "low",
+     "name": "protein",
+     "source": "assumed",
+     "value": "~110-residue beta-sheet protein with strands beta1-beta8, coil and turn labels - not E. coli adenylate kinase (214 residues)"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "Mechanical unfolding simulations with four models: a) All-atom (AA), b) HA-Go, c) AWSEM, d) C-alpha-Go"
+    },
+    {
+     "confidence": "medium",
+     "name": "atom selection",
+     "source": "methods",
+     "value": "Any heavy atoms for native contact definition; coarse-grained panels use their respective model beads"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "methods",
+     "value": "0.6 nm (6 A) in the native state"
+    },
+    {
+     "confidence": "high",
+     "name": "reference frames or structures",
+     "source": "methods",
+     "value": "Native state contact set as reference for Q and Qk"
+    },
+    {
+     "confidence": "low",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Total fraction of native contacts Q, range 0 to 1 with ticks at 0.2, 0.4, 0.6, 0.8"
+    },
+    {
+     "confidence": "medium",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Residue number, approximately 0 to 110"
+    },
+    {
+     "confidence": "high",
+     "name": "contact definition",
+     "source": "methods",
+     "value": "Any two heavy atoms within 0.6 nm in the native state and three or more residues apart form a native contact; Qk is fraction per residue, color white Qk=0 to red Qk=1"
+    }
+   ],
+   "kind": "native_contacts",
+   "mode": "transfer",
+   "mode_reason": "Transfer because figure is from Habibi et al 2016 Fig 7A mechanical unfolding with AA, HA-Go, AWSEM, C-alpha-Go models, y-axis Residue ~0-110 with beta1-beta8 labels, and 0.6 nm heavy-atom, i+3 contact definition - not the 214-residue AdK 98-frame DIMS closed-to-open path with CA 8 A Q1/Q2 nor the 4187-frame Anton equilibrium.",
+   "question": "Transfer the per-residue native-contact analysis to AdK: compute per-residue fraction of native contacts Qk versus total fraction of native contacts Q using heavy-atom contacts within 0.6 nm in the native state with sequence separation of 3 or more residues, with Qk from 0 (white, no contacts) to 1 (red, all contacts).",
+   "summary": "Four heatmaps show per-residue fraction of native contacts Qk from 0 white to 1 red versus total native contacts Q for AA, HA-Go, AWSEM and C-alpha-Go models during mechanical unfolding.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.000769254
+  }
+ ],
+ "perezhernandez2025_fig2b": [
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "Contact-frequency neighborhood analysis via mdciao onemdc_neighborhoods.py, bars containing backbone/sidechain interaction-type hatching"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "G-alpha-5 helix C-terminal residues LEU393 and LEU394 of G-alpha-beta-gamma-protein in complex with receptor"
+    },
+    {
+     "confidence": "low",
+     "name": "data source",
+     "source": "assumed",
+     "value": "Unspecified GPCR-G protein MD trajectory, full length and frame count unknown, not AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "atom selection",
+     "source": "axis",
+     "value": "Residue-residue contacts sub-typed as BB-BB, SC-SC, BB-SC, SC-BB"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "axis",
+     "value": "4.5 Angstrom"
+    },
+    {
+     "confidence": "low",
+     "name": "reference frames or structures",
+     "source": "assumed",
+     "value": "No single reference structure; frequencies averaged over full simulation trajectory"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "Neighbor residues with consensus labels, e.g. LEU388 G.H5.20, LEU275 6.37x37 for LEU393; ARG389 G.H5.21, LEU388 G.H5.20 for LEU394"
+    },
+    {
+     "confidence": "high",
+     "name": "y axis",
+     "source": "axis",
+     "value": "Contact frequency from 0 to 1.0, with summed totals SUM = 5.7 for LEU393 and SUM = 5.3 for LEU394"
+    },
+    {
+     "confidence": "medium",
+     "name": "contact definition",
+     "source": "axis",
+     "value": "Residue-residue contact when inter-residue distance < 4.5 Angstrom, 4 nearest bonded neighbors excluded, typed as BB-BB, SC-SC, BB-SC, SC-BB"
+    }
+   ],
+   "kind": "other",
+   "mode": "transfer",
+   "mode_reason": "Figure shows G-protein residues LEU393 G.H5.25 and LEU394 G.H5.26 with GPCR consensus labels and file neighborhood.overall@4.5_Ang.svg, not AdK DIMS 98-frame closed-to-open path or Anton 4187-frame equilibrium AdK (caption, axis titles and labels).",
+   "question": "Transfer the mdciao neighborhood contact-frequency analysis to AdK: compute residue-residue contact frequencies at 4.5 Angstrom excluding 4 nearest bonded neighbors, split into BB-BB / SC-SC / BB-SC / SC-BB types, and plot per-neighbor bars with summed totals as in panel B.",
+   "summary": "Panel B shows per-neighbor contact-frequency bars at 4.5 Angstrom for G-protein residues LEU393 and LEU394, hatched by backbone/sidechain interaction type.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0008370060000000001
+  },
+  {
+   "dataset": "none",
+   "fields": [
+    {
+     "confidence": "high",
+     "name": "analysis",
+     "source": "caption",
+     "value": "residue-neighborhood contact-frequency analysis from mdciao onemdc_neighborhoods.py, displayed as frequency bars with sidechain/backbone hatching"
+    },
+    {
+     "confidence": "high",
+     "name": "protein",
+     "source": "caption",
+     "value": "G-alpha-beta-gamma protein G-alpha H5 helix C-terminus (LEU393 and LEU394) in receptor complex, not AdK"
+    },
+    {
+     "confidence": "high",
+     "name": "data source",
+     "source": "caption",
+     "value": "mdciao overview example trajectory for G-protein-receptor system (https://proteinformatics.uni-leipzig.de/mdciao/overview.html)"
+    },
+    {
+     "confidence": "low",
+     "name": "atom selection",
+     "source": "assumed",
+     "value": "all heavy atoms grouped as backbone (BB) vs sidechain (SC); full selection string not stated"
+    },
+    {
+     "confidence": "high",
+     "name": "cutoff or radius",
+     "source": "axis",
+     "value": "4.5 Angstrom"
+    },
+    {
+     "confidence": "low",
+     "name": "reference frames or structures",
+     "source": "assumed",
+     "value": "ensemble average over full example trajectory, no single AdK closed/open reference frame; 4 nearest bonded neighbors excluded"
+    },
+    {
+     "confidence": "high",
+     "name": "x axis",
+     "source": "axis",
+     "value": "neighbor residue identity with consensus labels, e.g. LEU388 G.H5.20, VAL222 5.61x61"
+    },
+    {
+     "confidence": "medium",
+     "name": "y axis",
+     "source": "axis",
+     "value": "contact frequency from 0 to 1.0 (fraction of frames in contact)"
+    },
+    {
+     "confidence": "medium",
+     "name": "contact definition",
+     "source": "caption",
+     "value": "contact if distance <4.5 Angstrom, decomposed into BB-BB, SC-SC, BB-SC, SC-BB types by bar hatching; sum Sigma = 5.7 for LEU393 and 5.3 for LEU394"
+    }
+   ],
+   "kind": "other",
+   "mode": "transfer",
+   "mode_reason": "transfer because figure shows G-protein residues LEU393 G.H5.25 and LEU394 G.H5.26 with G-protein vs receptor consensus labels and 4.5 Angstrom mdciao neighborhoods, not AdK CA Q1/Q2 or 98-frame DIMS or Anton data; caption cites Perez-Hernandez and Hildebrand 2025 mdciao overview example.",
+   "question": "Transfer this neighborhood contact-frequency analysis to AdK: compute per-neighbor contact frequencies at 4.5 Angstrom excluding 4 bonded neighbors with BB/SC breakdown and sum for selected AdK residues along the transition path.",
+   "summary": "Bar charts of residue-residue contact frequencies at 4.5 Angstrom for G-protein residues LEU393 and LEU394 against their receptor and G-protein neighbors, split by backbone/sidechain type.",
+   "pdf_fallback": false,
+   "_cost_usd": 0.0008461019999999999
+  }
+ ]
+}

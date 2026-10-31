@@ -1,0 +1,3 @@
+From: Milano T, Gulzar A, Narzi D, Guidoni L, Pascarella S (2017). PLoS ONE 12(12): e0189270. doi:10.1371/journal.pone.0189270. CC BY. This image is Fig 5.
+
+Caption: "Minimum distance plot. Plot of the minimum distance between the hydrophobic residues Ile140B and Leu340A (A) and Leu99B and Pro326A (B) versus simulation time. Black and red line traces refer to holo and apo GabR, respectively."

@@ -1,0 +1,5 @@
+From: Habibi M, Rottler J, Plotkin SS (2016). PLoS Comput Biol 12(11): e1005211. doi:10.1371/journal.pcbi.1005211. CC BY. This image is panel A of Fig 7.
+
+Caption: "A) Fraction of native contacts for each residue Qk(Q) vs. total number of native contacts (Q) a) All-atom, b) HA-Gō, c) AWSEM, and d) Cα-Gō. The color red shows the presence of all the native contacts and white represents a residue that shares no native contacts with the other residues in the protein. B) Another representation of the loss of native structure as the protein is mechanically unfolded. The color scheme represents which residue loses more than 50% of its contacts (Qk < 0.5) first in Q. The white color shows the least stable residues and the dark blue represents the most persistent residues."
+
+Methods: "Any two heavy atoms that are within a cut-off distance 0.6 nm in the native state and are three or more residues apart are defined to form a native contact."

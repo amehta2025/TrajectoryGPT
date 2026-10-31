@@ -146,3 +146,30 @@ and `coverage_by_chunks.csv`.
   The point for viewers: a large-looking change in one trajectory is not established when the frames are correlated
   and many pairs are tested.
 
+
+## Figure-mode extraction test set (2026-10-31)
+
+How accurately figure mode reads a figure's method. 8 figures: 6 panels cropped from CC-BY PLOS articles (licenses checked in each article's metadata; attribution in `assets/figures/ATTRIBUTION.md`) plus the two app samples. Each was sent the way the app sends it (image plus the caption a user would paste, capped at 2,000 characters like `/figure/plan`) through the production `extract_spec`, **twice**, on the dev model (`muse-spark-1.3-contributor`, medium effort). Script: `backend/scripts/figure_eval.py`; raw specs and scores: `notes/figure_eval/`. Cost of all 16 calls: $0.013.
+
+Scoring per field against a hand-written ground truth: **exact** = states the truth; **close** = right in substance but incomplete, or right value at the wrong confidence; **wrong** = a different value stated as fact; **missing** = absent, or "unknown" where the text states it. For a setting the given text does not state, "exact" means the model said so (or marked it low confidence). Auto-scores were reviewed against every raw spec; 11 field scores were overridden, each with its reason in the script (mostly values filed under a different field name).
+
+| Figure (expected type) | Type, run 1 / 2 | Fields (2 runs) exact · close · wrong · missing | Unsure (low) settings, run 1 / 2 | Notes |
+|---|---|---|---|---|
+| Iyer 2020 Fig 5C + caption (difference contact map) | ✓ / ✓ | 10 · 2 · 0 · 0 | 0 / 2 | PDB 4jzkB/4akeA, side-chain heavy atoms, 5 Å all read from the caption text |
+| MDAnalysis Q1/Q2 re-plot, image only (native contacts, exact on adk_transition) | ✓ / ✓ | 6 · 6 · 0 · 0 | 4 / 4 | Exact mode and dataset right both times; CA, 8 Å and AdK are right but marked low ("assumed"), because the image does not state them |
+| Milano 2017 Fig 5 (distance trace) | ✓ / ✓ | 11 · 1 · 0 · 0 | 1 / 3 | Both runs flag the caption's Ile140B against the plot's Ile104B; units nm read from the axis |
+| Milano 2017 Fig 2B–C (RMSF) | ✓ / ✓ | 10 · 0 · 0 · 0 | 2 / 2 | Main-chain atoms, fit to the initial structure, nm |
+| Milano 2017 Fig 2A (RMSD; should be refused) | other ✓ / ✓ | – | 2 / 2 | Refused as "not supported yet" both times |
+| Chen 2011 Fig 7C (distance trace) | ✓ / ✓ | 12 · 0 · 0 · 0 | 1 / 3 | Atom definition is not in the caption; both runs say so (low) instead of inventing one |
+| Habibi 2016 Fig 7A + methods sentence (native contacts, per residue vs Q) | ✓ / ✓ | 9 · 3 · 0 · 0 | 1 / 2 | 0.6 nm, heavy atoms, ≥ 3 residues apart; protein (SOD1) is not in the text and neither run names one |
+| Pérez-Hernández 2025 (mdciao) Fig 2B (contact-frequency bars) | other ✗ / ✗ | 6 · 4 · 0 · 0 | 2 / 2 | Classified "other" both times (a safe refusal, but wrong: we could compute these frequencies). The 2,000-character cap cut the methods sentence ("closest heavy atoms"), so atom scheme is only partly right |
+
+**Totals.** Figure type: 14 of 16 runs right (the 2 misses are the mdciao bars, refused rather than guessed). Exact vs transfer mode and dataset: 16 of 16. Settings: 80 field scores, **64 exact, 16 close, 0 wrong, 0 missing**. No run asserted a value the text contradicts, and settings absent from the text were marked unknown or low confidence every time.
+
+**Consistency between the two runs.** Same type, mode and dataset in every pair; field scores identical for 5 of 8 figures. The count of unsure settings varies by up to 2 between runs (e.g. Milano Fig 5: 1 vs 3), so the number of boxes a user must tick is not stable.
+
+**Takeaways.**
+- With the caption, extraction is reliable on these figures; without it (the Iyer image alone earlier: 7 unsure settings), the model correctly says what it cannot see.
+- The 2,000-character note limit can drop the methods text from long captions (mdciao). Raising it or putting the methods sentence first would fix that case.
+- Contact-frequency bar charts are classified "other". If they should count as contact maps, the prompt needs an explicit example.
+- Small set, one model, one effort level: this is a smoke test, not a benchmark.
