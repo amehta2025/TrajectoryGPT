@@ -249,7 +249,7 @@ def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibr
     except UploadRejected as e:
         raise HTTPException(400, str(e)) from None
     except UnsupportedFigure as e:
-        raise HTTPException(422, {"unsupported": str(e), "spec": e.spec, "figure": e.figure}) from None
+        raise HTTPException(422, {"unsupported": str(e), "reason": e.reason, "spec": e.spec, "figure": e.figure}) from None
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 

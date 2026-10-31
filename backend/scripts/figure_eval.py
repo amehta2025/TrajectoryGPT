@@ -30,7 +30,7 @@ from app.agent.llm import LLM  # noqa: E402
 FIG = ROOT / "assets" / "figures"
 OUT = ROOT / "notes" / "figure_eval"
 RUNS = 2
-NOTE_LIMIT = 2000  # /figure/plan's cap when the scores in notes/recon.md were made (now figure.NOTE_LIMIT, 8,000)
+from app.agent.figure import NOTE_LIMIT  # noqa: E402  the same cap /figure/plan applies (8,000; the first table used 2,000)
 UNKNOWN = r"unknown|not (stated|given|specified|shown|reported|provided)|unspecified|unclear|n/?a\b|none given"
 
 
@@ -115,10 +115,27 @@ TESTSET = [
          exclusion=(["exclu", "neighbor", "neighbour", "separation"], "4 nearest bonded neighbours excluded", [r"\b4\b|four"], [r"exclu|neighbo"], False),
          axes=(["y axis", "y-axis"], "contact frequency", [r"frequenc"], [], False),
      )},
+    {"id": "food_carbonara", "image": FIG / "testset" / "food_spaghetti_carbonara.png", "text": None,
+     "is_figure": False, "kind": "other", "mode": "transfer", "dataset": "none", "fields": {}},
 ]
 
-# Manual overrides after reading the raw specs: (figure id, run, field) -> (score, reason). Filled in by hand.
+# Manual overrides after reading the raw specs: (figure id, run, field) -> (score, reason). They apply to the current
+# specs.json (round 2: 8,000-character note, is_figure, bar charts as contact maps). Round 1's list is kept below.
 OVERRIDES: dict[tuple[str, int, str], tuple[str, str]] = {
+    ("iyer2020_fig5c", 1, "contact"): ("exact", "'side-chain heavy atoms <5A' is right; the regex missed '5A'"),
+    ("milano2017_fig5", 1, "pairs"): ("exact", "pairs given under 'atom selection', with the image's Ile104B"),
+    ("milano2017_fig5", 2, "pairs"): ("exact", "pairs under 'atom selection'; flags Ile104B (image) vs Ile140B (caption)"),
+    ("milano2017_fig5", 1, "atoms"): ("close", "'all atoms implied' at medium confidence; the text does not say which atoms"),
+    ("milano2017_fig5", 2, "atoms"): ("exact", "names no atom subset: 'minimum interatomic distance between the residue pair'"),
+    ("chen2011_fig7c", 1, "pairs"): ("exact", "Asp393-Arg633 and the nonpolar group given under 'atom selection'"),
+    ("chen2011_fig7c", 2, "pairs"): ("exact", "Asp393-Arg633 and the nonpolar group given under 'atom selection'"),
+    ("habibi2016_fig7a", 1, "protein"): ("exact", "names no protein; '~110-residue beta-sheet protein, not AdK', which the axis supports"),
+    ("perezhernandez2025_fig2b", 1, "exclusion"): ("exact", "'4 nearest bonded neighbors excluded' given under 'contact definition'"),
+    ("perezhernandez2025_fig2b", 2, "exclusion"): ("exact", "'4 nearest bonded neighbors excluded' given under 'contact definition'"),
+}
+
+# Round 1 (2,000-character note; specs_v1.json, scores_v1.json), for the record.
+OVERRIDES_V1: dict[tuple[str, int, str], tuple[str, str]] = {
     ("milano2017_fig5", 1, "pairs"): ("exact", "pairs given under 'atom selection'; flags Ile104B (image) vs Ile140B (caption)"),
     ("milano2017_fig5", 2, "pairs"): ("exact", "pairs given under 'atom selection'; flags Ile104B (image) vs Ile140B (caption)"),
     ("milano2017_fig5", 1, "atoms"): ("close", "'all inter-residue atom pairs' at medium confidence; the text does not say which atoms"),
@@ -172,7 +189,7 @@ def main() -> None:
             spec, usages = extract_spec(llm, files, note)
             spec["_cost_usd"] = sum(u.cost_usd or 0 for u in usages)
             specs[t["id"]].append(spec)
-            print(f"{t['id']} run {run + 1}: kind={spec['kind']} mode={spec['mode']} dataset={spec['dataset']} "
+            print(f"{t['id']} run {run + 1}: figure={spec.get('is_figure')} kind={spec['kind']} mode={spec['mode']} dataset={spec['dataset']} "
                   f"low={sum(f['confidence'] == 'low' for f in spec['fields'])}", flush=True)
     (OUT / "specs.json").write_text(json.dumps(specs, indent=1, ensure_ascii=False), encoding="utf-8")
     rescore(specs)
@@ -184,9 +201,12 @@ def rescore(specs: dict[str, list[dict]] | None = None) -> None:
     for t in TESTSET:
         rows = []
         for run, spec in enumerate(specs[t["id"]]):
-            row = {"kind": "exact" if spec["kind"] == t["kind"] else "wrong",
-                   "mode": "exact" if spec["mode"] == t["mode"] else "wrong",
-                   "dataset": "exact" if spec["dataset"] == t["dataset"] else "wrong"}
+            is_fig = t.get("is_figure", True)
+            row = {"is_figure": "exact" if spec.get("is_figure", True) == is_fig else "wrong"}
+            if is_fig:
+                row.update({"kind": "exact" if spec["kind"] == t["kind"] else "wrong",
+                            "mode": "exact" if spec["mode"] == t["mode"] else "wrong",
+                            "dataset": "exact" if spec["dataset"] == t["dataset"] else "wrong"})
             for name, rule in t["fields"].items():
                 row[name] = score_field(find(spec["fields"], rule[0]), rule)
             for (fid, r, field), (s, _) in OVERRIDES.items():

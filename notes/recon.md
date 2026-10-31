@@ -149,7 +149,7 @@ and `coverage_by_chunks.csv`.
 
 ## Figure-mode extraction test set (2026-10-31)
 
-How accurately figure mode reads a figure's method. 8 figures: 6 panels cropped from CC-BY PLOS articles (licenses checked in each article's metadata; attribution in `assets/figures/ATTRIBUTION.md`) plus the two app samples. Each was sent the way the app sends it (image plus the caption a user would paste, capped at 2,000 characters like `/figure/plan`) through the production `extract_spec`, **twice**, on the dev model (`muse-spark-1.3-contributor`, medium effort). Script: `backend/scripts/figure_eval.py`; raw specs and scores: `notes/figure_eval/`. Cost of all 16 calls: $0.013.
+How accurately figure mode reads a figure's method. 8 figures: 6 panels cropped from CC-BY PLOS articles (licenses checked in each article's metadata; attribution in `assets/figures/ATTRIBUTION.md`) plus the two app samples. Each was sent the way the app sends it (image plus the caption a user would paste, capped at 2,000 characters like `/figure/plan`) through the production `extract_spec`, **twice**, on the dev model (`muse-spark-1.3-contributor`, medium effort). Script: `backend/scripts/figure_eval.py`; raw specs and scores: `notes/figure_eval/specs_v1.json`, `scores_v1.json`. Cost of all 16 calls: $0.013.
 
 Scoring per field against a hand-written ground truth: **exact** = states the truth; **close** = right in substance but incomplete, or right value at the wrong confidence; **wrong** = a different value stated as fact; **missing** = absent, or "unknown" where the text states it. For a setting the given text does not state, "exact" means the model said so (or marked it low confidence). Auto-scores were reviewed against every raw spec; 11 field scores were overridden, each with its reason in the script (mostly values filed under a different field name).
 
@@ -175,3 +175,21 @@ Scoring per field against a hand-written ground truth: **exact** = states the tr
 - Small set, one model, one effort level: this is a smoke test, not a benchmark.
 
 **Follow-up (2026-10-31): note limit raised to 8,000 characters** (`figure.NOTE_LIMIT`; `/figure/plan` used to keep only 2,000). Re-running the mdciao figure twice with its full 2,170-character text: atom scheme read as "closest heavy atoms" at high confidence in both runs, and its settings scored 10 of 10 exact (was 6 exact, 4 close; one exclusion value again filed under "contact definition"). The type is still "other". Raw specs: `notes/figure_eval/perezhernandez2025_fig2b_8000.json`. The table above keeps the original 2,000-character results.
+
+### Round 2 (2026-10-31): 8,000-character note, "is it a figure?", bar charts as contact maps
+
+Same script and figures, plus one non-figure: a CC0 photo of spaghetti carbonara (`testset/food_spaghetti_carbonara.png`). Changes since round 1: the note keeps up to 8,000 characters; the spec has an `is_figure` answer (a non-figure gets "This doesn't look like a scientific figure." instead of the unsupported-type message, and no plan is made); the prompt counts contact-frequency bar charts as contact maps. Two runs per item, dev model; 18 calls, $0.015. Raw specs and scores: `notes/figure_eval/specs.json`, `scores.json`; 10 reviewed overrides with reasons in the script (round 1's are kept there too).
+
+| Item | Type, run 1 / 2 | Fields (2 runs) exact · close · wrong · missing | Unsure, run 1 / 2 | Change from round 1 |
+|---|---|---|---|---|
+| Iyer 2020 Fig 5C + caption | ✓ / ✓ | 12 · 0 · 0 · 0 | 0 / 0 | was 10 · 2 |
+| MDAnalysis Q1/Q2, image only | ✓ / ✓ | 6 · 6 · 0 · 0 | 4 / 4 | same (CA, 8 Å, AdK right but not stated in the image) |
+| Milano 2017 Fig 5 | ✓ / ✓ | 11 · 1 · 0 · 0 | 1 / 1 | same |
+| Milano 2017 Fig 2B–C (RMSF) | ✓ / ✓ | 10 · 0 · 0 · 0 | 0 / 2 | same |
+| Milano 2017 Fig 2A (RMSD) | other ✓ / ✓ | – | 2 / 2 | same: refused as unsupported |
+| Chen 2011 Fig 7C | ✓ / ✓ | 12 · 0 · 0 · 0 | 3 / 3 | same |
+| Habibi 2016 Fig 7A + methods | ✓ / ✓ | 12 · 0 · 0 · 0 | 0 / 1 | was 9 · 3 |
+| mdciao Fig 2B (contact-frequency bars) | ✓ / ✓ (contact map) | 10 · 0 · 0 · 0 | 1 / 2 | was "other" both runs, 6 · 4 |
+| Spaghetti photo (not a figure) | not a figure ✓ / ✓ | – | – | new |
+
+**Totals, round 2.** "Is it a figure?": 18 of 18. Figure type: 16 of 16 (was 14 of 16). Mode and dataset: 16 of 16. Settings: 80 field scores, **73 exact, 7 close, 0 wrong, 0 missing** (was 64 · 16 · 0 · 0). Still a smoke test: small set, one model, one effort level.

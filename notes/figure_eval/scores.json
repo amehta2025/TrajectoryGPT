@@ -1,0 +1,202 @@
+{
+ "iyer2020_fig5c": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "data_source": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "axes": "exact",
+   "contact": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "data_source": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "axes": "exact",
+   "contact": "exact"
+  }
+ ],
+ "userguide_q1q2": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "close",
+   "data_source": "exact",
+   "atoms": "close",
+   "cutoff": "close",
+   "reference": "exact",
+   "axes": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "close",
+   "data_source": "exact",
+   "atoms": "close",
+   "cutoff": "close",
+   "reference": "exact",
+   "axes": "exact"
+  }
+ ],
+ "milano2017_fig5": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "pairs": "exact",
+   "measure": "exact",
+   "atoms": "close",
+   "axes": "exact",
+   "units": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "pairs": "exact",
+   "measure": "exact",
+   "atoms": "exact",
+   "axes": "exact",
+   "units": "exact"
+  }
+ ],
+ "milano2017_fig2bc": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "fit": "exact",
+   "axes": "exact",
+   "units": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "fit": "exact",
+   "axes": "exact",
+   "units": "exact"
+  }
+ ],
+ "milano2017_fig2a": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact"
+  }
+ ],
+ "chen2011_fig7c": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "pairs": "exact",
+   "atoms": "exact",
+   "axes": "exact",
+   "units": "exact",
+   "reference": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "pairs": "exact",
+   "atoms": "exact",
+   "axes": "exact",
+   "units": "exact",
+   "reference": "exact"
+  }
+ ],
+ "habibi2016_fig7a": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "separation": "exact",
+   "reference": "exact",
+   "axes": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "separation": "exact",
+   "reference": "exact",
+   "axes": "exact"
+  }
+ ],
+ "perezhernandez2025_fig2b": [
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "exclusion": "exact",
+   "axes": "exact"
+  },
+  {
+   "is_figure": "exact",
+   "kind": "exact",
+   "mode": "exact",
+   "dataset": "exact",
+   "protein": "exact",
+   "atoms": "exact",
+   "cutoff": "exact",
+   "exclusion": "exact",
+   "axes": "exact"
+  }
+ ],
+ "food_carbonara": [
+  {
+   "is_figure": "exact"
+  },
+  {
+   "is_figure": "exact"
+  }
+ ]
+}

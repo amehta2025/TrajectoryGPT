@@ -18,7 +18,7 @@ SAMPLE = REPO_ROOT / "assets" / "figures" / "userguide_q1q2_replot.png"
 PNG = SAMPLE.read_bytes()
 PDF = b"%PDF-1.4\n%fake\n"
 
-SPEC = {"summary": "Q1 and Q2 along the AdK transition path", "kind": "native_contacts", "mode": "exact",
+SPEC = {"summary": "Q1 and Q2 along the AdK transition path", "is_figure": True, "kind": "native_contacts", "mode": "exact",
         "dataset": "adk_transition", "mode_reason": "caption cites the MDAnalysis User Guide Q1 vs Q2 example",
         "fields": [{"name": "atom selection", "value": "name CA", "confidence": "high", "source": "caption"},
                    {"name": "radius", "value": "8 Å", "confidence": "medium", "source": "assumed"}],
@@ -185,3 +185,26 @@ def test_long_caption_text_reaches_extraction_intact(monkeypatch):
     TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "note": note})
     assert len(note) > 5000 and seen["note"] == note
     assert figure.NOTE_LIMIT >= 8000
+
+
+def test_a_photo_that_is_not_a_figure_gets_its_own_message():
+    llm = SchemaLLM([{**SPEC, "is_figure": False, "kind": "other", "summary": "A plate of pasta."}])
+    with pytest.raises(figure.NotAFigure) as e:
+        figure.plan_from_figure(llm, [{"filename": "food.png", "mime": "image/png", "data": b64(PNG)}], "adk_equilibrium")
+    assert str(e.value) == "This doesn't look like a scientific figure." and e.value.reason == "not_a_figure"
+    assert len(llm.calls) == 1  # no planning call
+
+
+def test_not_a_figure_endpoint_says_so(monkeypatch):
+    import app.agent.session as session
+    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([{**SPEC, "is_figure": False, "kind": "other"}]))
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    r = TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
+    d = r.json()["detail"]
+    assert r.status_code == 422 and d["reason"] == "not_a_figure" and "scientific figure" in d["unsupported"]
+
+
+def test_schema_asks_whether_it_is_a_figure_and_counts_bar_charts_as_contact_maps():
+    from app.agent import prompts
+    assert "is_figure" in figure.spec_schema()["schema"]["required"]
+    assert "bar chart" in prompts.FIGURE_SYSTEM

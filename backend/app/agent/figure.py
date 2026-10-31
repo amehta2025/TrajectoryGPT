@@ -46,10 +46,21 @@ class UploadRejected(ValueError):
 class UnsupportedFigure(ValueError):
     """The figure is not one of SUPPORTED_KINDS. No plan is made (and no planning call is spent)."""
 
-    def __init__(self, spec: dict, figure: dict):
+    reason = "unsupported_type"
+
+    def __init__(self, spec: dict, figure: dict, message: str | None = None):
         kinds = ", ".join(SUPPORTED_KINDS.values())
-        super().__init__(f"This figure type isn't supported yet. TrajectoryGPT can reproduce {kinds}.")
+        super().__init__(message or f"This figure type isn't supported yet. TrajectoryGPT can reproduce {kinds}.")
         self.spec, self.figure = spec, figure
+
+
+class NotAFigure(UnsupportedFigure):
+    """The upload is not a scientific figure at all (a photo, a meme, a screenshot of text). No plan is made."""
+
+    reason = "not_a_figure"
+
+    def __init__(self, spec: dict, figure: dict):
+        super().__init__(spec, figure, "This doesn't look like a scientific figure.")
 
 
 def low_confidence(spec: dict) -> list[str]:
@@ -108,6 +119,9 @@ def spec_schema() -> dict:
         "type": "object",
         "properties": {
             "summary": {"type": "string", "description": "One sentence: what the figure shows."},
+            "is_figure": {"type": "boolean",
+                          "description": "True only for a scientific figure or plot (axes, data, a structure image from a paper). "
+                                         "False for photos of everyday things, memes, selfies, or screenshots of plain text."},
             "kind": {"type": "string", "enum": sorted(SUPPORTED_KINDS) + ["other"],
                      "description": "The figure type; 'other' for anything not in the list. Never force-fit."},
             "mode": {"type": "string", "enum": ["exact", "transfer"]},
@@ -117,7 +131,7 @@ def spec_schema() -> dict:
             "fields": {"type": "array", "items": field},
             "question": {"type": "string", "description": "The analysis to run, as a plain request for the planner."},
         },
-        "required": ["summary", "kind", "mode", "dataset", "mode_reason", "fields", "question"],
+        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "question"],
         "additionalProperties": False,
     }}
 
@@ -171,6 +185,8 @@ def plan_from_figure(llm: LLM, raw_files: list[dict], selected_dataset: str, not
         raise UploadRejected(f"attach 1-{MAX_FILES} files (a figure image and/or a methods PDF)")
     files = [decode_upload(f) for f in raw_files]
     spec, usages = extract_spec(llm, files, note)
+    if not spec.get("is_figure", True):
+        raise NotAFigure(spec, {**save_figure(files), "spec": spec})
     if spec["kind"] not in SUPPORTED_KINDS:
         raise UnsupportedFigure(spec, {**save_figure(files), "spec": spec})
     dataset = spec["dataset"] if spec["mode"] == "exact" else selected_dataset

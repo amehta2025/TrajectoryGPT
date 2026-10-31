@@ -92,7 +92,11 @@ Our datasets:
 Rules:
 - mode "exact" only if the figure was made from one of our datasets; name it in dataset and give the evidence in
   mode_reason (caption, axis labels, frame count, cited source). Otherwise mode "transfer" and dataset "none".
-- kind: contact_map, difference_contact_map (contacts gained/lost between two states), distance_trace (a distance
+- is_figure: false if the image is not a scientific figure at all (a photo of food, people, places or objects, a meme, a
+  screenshot of plain text); then the rest of the spec does not matter. A figure from a paper is true even if its type
+  is not supported.
+- kind: contact_map (a residue-residue contact or contact-frequency map, including contact-frequency bar charts with one bar
+  per residue pair or neighbour), difference_contact_map (contacts gained/lost between two states), distance_trace (a distance
   versus time or frame), native_contacts (fraction of native contacts, Q), rmsf (per-residue RMSF or B-factor
   style flexibility). Anything else (RMSD, free-energy surfaces, PCA, secondary structure, spectra, bar charts of
   other quantities, structure images) is "other": say so rather than picking the nearest type.
