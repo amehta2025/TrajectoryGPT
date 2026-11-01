@@ -13,7 +13,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
+from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+
 from app.agent.tools import res_label  # noqa: E402
+
+# The UI's colours for a change (frontend/src/theme.ts CHANGE_COLORS): lost orange, gained blue.
+CHANGE_CMAP = LinearSegmentedColormap.from_list("change", ["#f0874f", "#151a24", "#5aa5f0"])
 
 
 def png_b64(fig, dpi: int = 80) -> str:
@@ -49,9 +54,10 @@ def plot_result(res: dict, time_label: str):
     elif tool in ("calculate_contacts", "contact_difference_map") and (d.get("frequency") or d.get("delta")):
         m = np.array(d.get("frequency") or d.get("delta"), dtype=float)
         fig, ax = plt.subplots(figsize=(6, 4))
-        im = ax.imshow(m, aspect="auto", cmap="viridis" if tool == "calculate_contacts" else "RdBu_r",
+        im = ax.imshow(m, aspect="auto", cmap="viridis" if tool == "calculate_contacts" else CHANGE_CMAP,
                        **({} if tool == "calculate_contacts" else {"vmin": -1, "vmax": 1}))
-        fig.colorbar(im, ax=ax, label="contact frequency" if tool == "calculate_contacts" else "Δ frequency (B − A)")
+        fig.colorbar(im, ax=ax, label="contact frequency" if tool == "calculate_contacts"
+                     else "Δ frequency (B − A): orange = lost, blue = gained")
         ax.set_xlabel(f"{d.get('group_b')} residue index")
         ax.set_ylabel(f"{d.get('group_a')} residue index")
     elif tool == "distance_over_time" and d.get("distance"):

@@ -27,6 +27,7 @@ image = (
     .pip_install_from_requirements(str(HERE / "requirements.txt"))
     .add_local_dir(HERE / "app", "/root/app", ignore=IGNORE)
     .add_local_dir(HERE.parent / "config", "/config")
+    .add_local_dir(HERE / "replay", "/backend/replay")  # recorded runs for replay mode (app/safety/replay.py)
 )
 SECRETS = [modal.Secret.from_name("trajectorygpt-meta"), modal.Secret.from_name("trajectorygpt-passcode")]
 app = modal.App("trajectorygpt", image=image)

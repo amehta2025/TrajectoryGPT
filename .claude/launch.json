@@ -4,30 +4,90 @@
     {
       "name": "backend",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
-      "env": { "ALLOW_PLANTED_OVERCLAIM": "1" },
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "backend",
+        "--port",
+        "8000"
+      ],
+      "env": {
+        "ALLOW_PLANTED_OVERCLAIM": "1"
+      },
       "port": 8000
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
       "port": 5173
     },
     {
       "name": "backend-alt",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8010"],
-      "env": { "ALLOWED_ORIGINS": "http://localhost:5180" },
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "backend",
+        "--port",
+        "8010"
+      ],
+      "env": {
+        "ALLOWED_ORIGINS": "http://localhost:5180"
+      },
       "port": 8010,
       "autoPort": false
     },
     {
       "name": "frontend-alt",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5180", "--strictPort"],
-      "env": { "VITE_API_URL": "http://localhost:8010" },
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5180",
+        "--strictPort"
+      ],
+      "env": {
+        "VITE_API_URL": "http://localhost:8010"
+      },
       "port": 5180,
+      "autoPort": false
+    },
+    {
+      "name": "backend-replay",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "backend",
+        "--port",
+        "8000"
+      ],
+      "env": {
+        "APP_MODE": "replay",
+        "META_API_KEY": "",
+        "BASETEN_API_KEY": ""
+      },
+      "port": 8000,
       "autoPort": false
     }
   ]

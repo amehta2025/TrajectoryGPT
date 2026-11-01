@@ -140,6 +140,7 @@ def cmd_run(a) -> int:
     run = new_run(a.question, approved)
     run.plan_usage = [u.as_dict() for u in usages]
     run.figure = figure
+    run.proposal = plan  # the plan as proposed, as the UI saves it (replay shows it on the PlanCard)
     print(f"\nRun {run.run_id}")
     run = run_investigation(llm, run, max_turns=a.turns, on_event=_print_turn)
     path = run.save()
