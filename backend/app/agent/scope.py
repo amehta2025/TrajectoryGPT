@@ -20,6 +20,8 @@ APP_TERMS = re.compile(r"\b(LID|NMP|CORE|AdK|adenylate|kinase|contacts?|native|Q
                        r"frames?|distances?|opening|domains?|residues?|autocorrelation|N_eff|trajector\w*|"
                        r"simulations?|equilibrium|transition)\b", re.I)
 FIGURE = re.compile(r"\b(figures?|plots?|graphs?|images?|panels?)\b", re.I)
+# "my figure", "this plot", "the attached contact map image": the user's own figure, which a typed question lacks.
+OWN_FIGURE = re.compile(r"\b(my|this|our|attached)\s+(?:[\w'-]+\s+){0,2}(figure|plot|graph|image|panel)s?\b", re.I)
 
 EXAMPLES = [
     "Which LID–CORE contacts change between the first and second half of the run?",
@@ -69,6 +71,8 @@ def check(llm: LLM, question: str, has_context: bool = False) -> tuple[dict | No
     verdict = precheck(question)
     if verdict:
         return declined(verdict, "no letters", ask_anyway=False), []
+    if OWN_FIGURE.search(question):  # typed questions come without a figure; figure uploads go to /figure/plan
+        return declined("needs_figure", "own figure, none attached"), []
     r = llm.run_turn([{"role": "system", "content": prompts.SCOPE_SYSTEM},
                       {"role": "user", "content": prompts.scope_user(question, has_context)}],
                      schema=schema(), effort=EFFORT["scope"])

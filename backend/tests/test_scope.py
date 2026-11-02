@@ -70,9 +70,22 @@ def test_off_topic_verdicts_still_win_over_app_words():
     assert scope.check(Classifier("other_protein"), "Which contacts change in insulin?")[0]["verdict"] == "other_protein"
 
 
-def test_question_about_a_missing_figure_asks_for_the_figure():
-    reply, _ = scope.check(Classifier("needs_context"), "Does my figure's contact map match yours?")
-    assert reply["verdict"] == "needs_figure" and "attached" in reply["message"]
+@pytest.mark.parametrize("q", ["Does my figure's contact map match yours?", "Reproduce this plot",
+                               "Is the attached contact map image right?"])
+def test_question_about_the_users_own_figure_asks_for_it_without_a_model_call(q):
+    llm = Classifier("answerable")
+    reply, usages = scope.check(llm, q)
+    assert reply["verdict"] == "needs_figure" and "attached" in reply["message"] and llm.calls == 0
+    assert reply["ask_anyway"] is True
+
+
+def test_unsure_verdict_on_a_figure_question_asks_for_the_figure():
+    reply, _ = scope.check(Classifier("needs_context"), "Does the figure match?")
+    assert reply["verdict"] == "needs_figure"
+
+
+def test_figure_words_alone_do_not_need_an_upload():
+    assert scope.check(Classifier("answerable"), "Plot the LID opening over time")[0] is None
 
 
 def test_every_decline_but_no_letters_offers_ask_anyway():
