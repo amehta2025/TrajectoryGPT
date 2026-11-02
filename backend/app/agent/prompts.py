@@ -93,6 +93,9 @@ Plain language (the main view; readers are not specialists):
   "interpretation - not computed" and has no numbers.
 - "next_questions": one or two short questions worth asking next, grounded in what you found (e.g. whether a
   supported change persists, or what an unsupported one would need). Each must end with "?".
+- Findings and the headline say what was measured, never why: no causal or linking words (causes, drives, due
+  to, because of, leads to, linked to, associated with, explains). A possible explanation goes in the
+  interpretation or the hypotheses, hedged.
 - Counts written as words ("four contacts", "two pairs") are numbers too: use placeholders such as
   {{r1.n_supported}} or {{r1.n_tested}}, or say "several" / "a few".
 - Text that fails these checks is dropped and replaced by a code-built sentence, so follow them exactly.
@@ -159,7 +162,8 @@ def scope_user(question: str, has_context: bool) -> str:
     return f"Earlier investigation in this session: {earlier}\nQuestion: {question}"
 
 
-def planner_user(question: str, dataset: str, datasets: dict, context: dict | None = None) -> str:
+def planner_user(question: str, dataset: str, datasets: dict, context: dict | None = None,
+                 notes: list[str] | None = None) -> str:
     lines = [f"Selected dataset: {dataset}", "Datasets:"]
     for ds, d in datasets.items():
         time = f"{d['dt_ns']} ns per frame" if d["dt_ns"] else "path steps, no physical time"
@@ -168,6 +172,8 @@ def planner_user(question: str, dataset: str, datasets: dict, context: dict | No
     lines.append(f"Default sequence_exclusion: {datasets[dataset]['sequence_exclusion']}")
     if context:
         lines.append(follow_up_block(context))
+    if notes:
+        lines.append("Data notes (checked by code; plan within what the data has):\n" + "\n".join(f"- {n}" for n in notes))
     lines.append(f"\nQuestion: {question}")
     return "\n".join(lines)
 
@@ -194,6 +200,8 @@ def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
             f"cutoff {plan['cutoff']} Å, window_a {plan['window_a']}{wb}, stride {plan['stride']}, "
             f"robustness cutoffs {plan['robustness_cutoffs']} Å):\n{steps}\n\n"
             + (f"Figure: {figure['spec']['summary']} Mode: {figure['spec']['mode']}.\n\n" if figure else "")
+            + ("Data notes (checked by code, already in the report's caveats; do not contradict them):\n"
+               + "\n".join(f"- {n}" for n in plan["notes"]) + "\n\n" if plan.get("notes") else "")
             + "Start with item 1.")
 
 

@@ -199,6 +199,17 @@ def robustness(state, pair: str) -> dict:
     return {"verdict": "not checked", "pid": None, "label": "robustness not checked"}
 
 
+# Causal or linking wording (red-team A11): findings and the headline say what was measured; an explanation
+# of why belongs in the labelled interpretation or the hypotheses, which this check does not cover.
+CAUSAL = re.compile(r"\b(caus(?:e|es|ed|ing)|because of|due to|driv(?:e|es|en|ing)|drove|lead(?:s)? to|led to|"
+                    r"result(?:s|ed)? in|responsible for|trigger(?:s|ed)?|explain(?:s|ed)?|underl(?:ie|ies|ying)|"
+                    r"link(?:s|ed)? (?:to|with)|associated with|correlat(?:es|ed) with|mechanism)\b", re.I)
+
+
+def causal_words(text: str) -> list[str]:
+    return [m.group(0) for m in CAUSAL.finditer(PLACEHOLDER.sub(" ", text))]
+
+
 def finding_problems(state, fid: str, f: dict) -> list[str]:
     """Full deterministic check for one finding (SPEC §9 step 7)."""
     p = [f"{fid}: {x}" for x in evidence_problems(state, f["evidence_ids"])]
@@ -245,6 +256,9 @@ def finding_problems(state, fid: str, f: dict) -> list[str]:
         for _, pair, _ in cited:
             if robustness(state, pair)["verdict"] != "robust":
                 p.append(f"{fid}: calls {pair} robust, but no cutoff_sensitivity result shows it robust")
+    if causal_words(f["text"]):
+        p.append(f"{fid}: causal or linking wording {causal_words(f['text'])} - state what was measured; put possible "
+                 f"explanations in the interpretation or hypotheses")
     return p
 
 
@@ -318,6 +332,8 @@ def headline_problems(state, args: dict) -> list[str]:
     nums = bare_numbers(state, text) + number_words(text)
     if nums:
         p.append(f"headline: bare numbers {nums} - use placeholders such as {{{{r1.n_supported}}}}")
+    if causal_words(text):
+        p.append(f"headline: causal or linking wording {causal_words(text)} - answer with what was measured")
     findings = [state.findings[f] for f in args.get("finding_ids") or [] if f in state.findings]
     supported = [f for f in findings if f["claim"] == "supported"]
     words = [w.lower() for w in _unnegated_support_words(text)]
@@ -458,7 +474,7 @@ def build_report(state, args: dict) -> dict:
         "background": section("background"),
         "background_label": BACKGROUND_LABEL,
         "hypotheses": section("hypotheses"),
-        "caveats": [{"text": c, "segments": [{"text": c}]} for c in caveats] + section("caveats"),
+        "caveats": [{"text": c, "segments": [{"text": c}]} for c in list(state.plan.notes) + caveats] + section("caveats"),
         "gaps": section("gaps"),
         "follow_ups": [fu for fu in (args.get("follow_ups") or []) if isinstance(fu, dict)],
     }

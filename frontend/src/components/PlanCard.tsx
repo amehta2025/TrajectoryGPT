@@ -119,6 +119,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
           {robustStep ? ', double-checked at several distance thresholds' : ''}.
         </p>
       )}
+      {(p.notes ?? []).map((n) => <p key={n} className="plan-note">Note: {n}</p>)}
       <ol className="steps">
         {checklist
           ? checklist.map((c) => (

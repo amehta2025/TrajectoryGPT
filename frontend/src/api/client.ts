@@ -119,6 +119,7 @@ export type Plan = {
   sequence_exclusion: number
   robustness_cutoffs: number[]
   steps: PlanStep[]
+  notes?: string[] // code-written: what the question asks that the data cannot give (e.g. a longer time range)
 }
 
 export type Usage = {
@@ -276,6 +277,7 @@ export type Verification = {
 export type RunView = {
   run_id: string
   question: string
+  plan?: { notes?: string[] } // the approved plan (only its data notes are read here)
   status: RunStatus
   checklist: ChecklistItem[]
   turns: Turn[]

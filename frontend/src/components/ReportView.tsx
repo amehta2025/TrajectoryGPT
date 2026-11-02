@@ -119,6 +119,7 @@ export function Headline({ meta }: { meta: Metadata | null }) {
   return (
     <div className="headline">
       <p className="headline-main">{written ? <Filled segments={written.segments} /> : main}</p>
+      {(run.plan?.notes ?? []).map((n) => <p key={n} className="plan-note">Note: {n}</p>)}
       {interp && (
         <p className="headline-interp"><span className="interp-label">Interpretation, not computed:</span> {interp.text}</p>
       )}

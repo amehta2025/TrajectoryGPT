@@ -51,6 +51,7 @@ class ApprovedPlan:
     sequence_exclusion: int = 2
     robustness_cutoffs: list[float] = field(default_factory=lambda: list(cs.DEFAULT_ROBUST_CUTOFFS))
     steps: list[dict] = field(default_factory=list)  # [{tool, rationale}]
+    notes: list[str] = field(default_factory=list)  # code-written data notes (agent/limits.py), shown as caveats
 
     def as_dict(self) -> dict:
         return asdict(self)

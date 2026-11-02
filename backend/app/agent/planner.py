@@ -132,13 +132,17 @@ def to_approved(p: dict) -> ApprovedPlan:
         stride=p["stride"], sequence_exclusion=p["sequence_exclusion"],
         robustness_cutoffs=cs.validate_robustness_cutoffs(p["robustness_cutoffs"], p["cutoff"]),
         steps=[{"tool": s["tool"], "rationale": s["rationale"]} for s in p["steps"]],
+        notes=[str(n) for n in p.get("notes") or []],
     )
 
 
 def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None) -> tuple[dict, list]:
-    """Returns (plan dict, usages). One retry with the validation errors."""
+    """Returns (plan dict, usages). One retry with the validation errors. The plan carries code-written data
+    notes for what the question asks that the data cannot give (agent/limits.py)."""
+    from app.agent.limits import data_notes
+    notes = data_notes(question, dataset)
     history = [{"role": "system", "content": prompts.PLANNER_SYSTEM},
-               {"role": "user", "content": prompts.planner_user(question, dataset, dataset_facts(), context)}]
+               {"role": "user", "content": prompts.planner_user(question, dataset, dataset_facts(), context, notes)}]
     usages = []
     for attempt in range(2):
         r = llm.run_turn(history, schema=plan_schema(), effort=EFFORT["plan"])
@@ -146,7 +150,9 @@ def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None
         plan = r.parsed
         errs = validate_plan(plan) if isinstance(plan, dict) else ["the plan is not a JSON object"]
         if not errs:
-            return plan, usages
+            if plan["dataset"] != dataset:
+                notes = data_notes(question, plan["dataset"])
+            return {**plan, "notes": notes}, usages
         history += r.output_items + [{"role": "user", "content": "The plan is invalid:\n- " + "\n- ".join(errs)
                                       + "\nReturn a corrected plan."}]
     raise PlanInvalid(errs, plan)
