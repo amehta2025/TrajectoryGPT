@@ -175,6 +175,21 @@ def test_null_finding_needs_a_comparison_with_nothing_supported(pretend_stats_va
     assert r["status"] == "submitted" and s.report["findings"][0]["badge"] == "null"
 
 
+def test_json_null_claim_is_the_null_type_but_a_missing_claim_is_refused(pretend_stats_valid):
+    """Muse Spark Open sends "claim": null for the claim type named "null" (red-team G2)."""
+    s = new_state()
+    pid = call(s, "compare_intervals")["provenance_id"]
+    r = run_tool(s, "record_finding", json.dumps({"text": f"None of the {{{{{pid}.n_tested}}}} tested pairs is supported.",
+                                                  "evidence_ids": [pid], "claim": None}))
+    fid = json.loads(r["summary_for_model"])["finding_id"]
+    assert s.findings[fid]["claim"] == "null"
+    assert call(s, "submit_report", finding_ids=[fid])["status"] == "submitted"
+    s2 = new_state()
+    pid2 = call(s2, "compare_intervals")["provenance_id"]
+    r = run_tool(s2, "record_finding", json.dumps({"text": "None is supported.", "evidence_ids": [pid2]}))
+    assert r["status"] == "refused" and "claim must be one of" in r["summary_for_model"]
+
+
 def test_results_carry_provenance():
     s = new_state()
     r = call(s, "calculate_contacts")

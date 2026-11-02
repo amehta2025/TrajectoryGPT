@@ -267,6 +267,8 @@ def record_finding(state, args: dict) -> dict:
     text = (args.get("text") or "").strip()
     ids = [str(e) for e in (args.get("evidence_ids") or [])]
     claim = args.get("claim")
+    if claim is None and "claim" in args:
+        claim = "null"  # Muse Spark Open sends JSON null for the claim type named "null" (red-team G2)
     problems = []
     if not text or len(text) > TEXT_LIMIT:
         problems.append(f"text must be 1-{TEXT_LIMIT} characters")
