@@ -215,12 +215,16 @@ def verify_in_background(run: Run, emit, plant: bool = False) -> None:
     """The report is already shown ("Verifying..."); this one Muse Wonder call then sets verified / flagged."""
     if plant:
         verifier.plant_overclaim(run)
-    run.verification = {"status": "pending"}
-    run.save()
+    run.verification = verifier.pending()
+    run.save()  # a restart now leaves 'pending' on disk, which run_view shows as timed out
     emit({"type": "verification_started", "planted": run.planted})
-    v = verifier.verify_run(run)
+    worker = threading.Thread(target=verifier.verify_run, args=(run,), name=f"verify-{run.run_id}", daemon=True)
+    worker.start()
+    worker.join(verifier.TIMEOUT_S)
+    if worker.is_alive():
+        verifier.settle(run, verifier.timed_out())
     run.save()
-    emit({"type": "verification_finished", "status": run.status, "verification": v})
+    emit({"type": "verification_finished", "status": run.status, "verification": run.verification})
 
 
 def get_handle(run_id: str) -> RunHandle:
@@ -255,4 +259,5 @@ def run_view(run_id: str) -> dict:
             raise KeyError(f"unknown run {run_id}") from None
     d.pop("input_items")
     d["step_through"] = step
+    d["verification"] = verifier.resolve_stale(d.get("verification"), live=h is not None)
     return d

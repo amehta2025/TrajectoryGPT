@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 
 from app.agent import prompts
@@ -165,10 +166,44 @@ def figures(run) -> list[tuple[str, str]]:
 
 # ---------- the call ----------
 
+TIMEOUT_S = 120  # after this the report says the check couldn't finish (red-team E: no endless "checking...")
+_settle_lock = threading.Lock()
+
+
+def pending() -> dict:
+    return {"status": "pending", "started_at": time.time()}
+
+
+def timed_out() -> dict:
+    return {"status": "timeout", "error": f"The check did not finish within {TIMEOUT_S // 60} minutes."}
+
+
+def settle(run, verification: dict, status: str | None = None) -> bool:
+    """Record the outcome once: a check that finishes after it was declared timed out changes nothing."""
+    with _settle_lock:
+        if (run.verification or {}).get("status") not in (None, "pending"):
+            return False
+        run.verification = verification
+        if status:
+            run.status = status
+        return True
+
+
+def resolve_stale(verification: dict | None, live: bool) -> dict | None:
+    """A saved 'pending' check with no live thread behind it (the server restarted), or one past the limit,
+    is shown as timed out instead of spinning forever."""
+    if (verification or {}).get("status") == "pending":
+        age = time.time() - (verification.get("started_at") or 0)
+        if not live or age > TIMEOUT_S + 30:
+            return timed_out()
+    return verification
+
+
 def verify_run(run, llm: LLM | None = None) -> dict:
     """Run the model check on an accepted report; sets run.verification and run.status (verified / flagged)."""
     t0 = time.perf_counter()
-    run.verification = {"status": "pending"}
+    if (run.verification or {}).get("status") != "pending":
+        run.verification = pending()
     try:
         llm = llm or verifier_llm()
         doc = verifier_input(run)
@@ -182,10 +217,8 @@ def verify_run(run, llm: LLM | None = None) -> dict:
         out = resp.parsed or {"summary": "", "flags": []}
         flags = [fl for fl in out["flags"] if isinstance(fl, dict)]
         status = "flagged" if any(fl["severity"] == "major" for fl in flags) else "verified"
-        run.verification = {"status": status, "summary": out["summary"], "flags": flags, "figures": [p for p, _ in figs],
-                            "usage": resp.usage.as_dict(), "wall_s": round(time.perf_counter() - t0, 2)}
-        run.status = status
+        settle(run, {"status": status, "summary": out["summary"], "flags": flags, "figures": [p for p, _ in figs],
+                     "usage": resp.usage.as_dict(), "wall_s": round(time.perf_counter() - t0, 2)}, status)
     except Exception as e:  # a failed check is shown as "could not be checked", never as verified
-        run.verification = {"status": "error", "error": f"{type(e).__name__}: {e}",
-                            "wall_s": round(time.perf_counter() - t0, 2)}
+        settle(run, {"status": "error", "error": f"{type(e).__name__}: {e}", "wall_s": round(time.perf_counter() - t0, 2)})
     return run.verification

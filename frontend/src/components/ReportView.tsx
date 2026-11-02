@@ -140,15 +140,26 @@ function cardNumbers(run: RunView, meta: Metadata | null): Map<string, number> {
 }
 
 /** The second model's check, in plain words (SPEC §9 step 7). Details are under "Show the science". */
+// The backend gives up after 2 minutes; this backstop covers a lost connection (red-team E).
+const VERIFY_GIVE_UP_S = 150
+
 function VerifierLine({ run, cardOf }: { run: RunView; cardOf: Map<string, number> }) {
   const v = run.verification
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  useEffect(() => {
+    if (v?.status !== 'pending') return
+    const t = window.setInterval(() => setNow(Date.now() / 1000), 5000)
+    return () => window.clearInterval(t)
+  }, [v?.status])
+  const stale = v?.status === 'pending' && !!v.started_at && now - v.started_at > VERIFY_GIVE_UP_S
   // One line per flagged finding (several flags on one finding say one thing in plain words).
   const byFinding = new Map<string, string>()
   for (const f of (v?.flags ?? []).filter((x) => x.severity === 'major')) {
     if (!byFinding.has(f.finding_id)) byFinding.set(f.finding_id, f.plain || f.problem)
   }
   let line: ReactNode
-  if (!v || v.status === 'pending') line = <span className="verify pending">A second AI model is checking this report…</span>
+  if (v?.status === 'timeout' || stale) line = <span className="verify muted">The second AI check couldn't finish, so this report has not been double-checked.</span>
+  else if (!v || v.status === 'pending') line = <span className="verify pending">A second AI model is checking this report…</span>
   else if (v.status === 'verified') line = <span className="verify ok">✓ A second AI model checked this report: no problems found.</span>
   else if (v.status === 'flagged') {
     const n = byFinding.size

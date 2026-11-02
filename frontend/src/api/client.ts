@@ -263,7 +263,8 @@ export type RunStatus = 'running' | 'needs_review' | 'awaiting_verification' | '
 export type VerifierFlag = { finding_id: string; quote: string; problem: string; plain?: string; severity: 'major' | 'minor' }
 /** The background Muse Wonder check of an accepted report (SPEC §9 step 7). */
 export type Verification = {
-  status: 'pending' | 'verified' | 'flagged' | 'error'
+  status: 'pending' | 'verified' | 'flagged' | 'error' | 'timeout'
+  started_at?: number // epoch seconds, while pending
   summary?: string
   flags?: VerifierFlag[]
   figures?: string[]

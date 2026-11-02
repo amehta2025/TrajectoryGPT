@@ -117,3 +117,34 @@ def test_result_level_evidence_includes_the_values_the_text_uses(run):
     run.state.report = report.build_report(run.state, {"finding_ids": ["f1"]})
     vals = verifier.verifier_input(run)["findings"][0]["evidence"][0]["values"]
     assert vals["SER30-ASP84.freq_a"] == 0.46 and vals["n_tested"] == 2
+
+
+class SlowWonder(FakeWonder):
+    def run_turn(self, *a, **k):
+        import time
+        time.sleep(0.6)
+        return super().run_turn(*a, **k)
+
+
+def test_check_that_runs_past_the_limit_is_shown_as_not_finished(run, monkeypatch):
+    from app.agent import session
+    monkeypatch.setattr(verifier, "TIMEOUT_S", 0.2)
+    late = SlowWonder({"summary": "Fine.", "flags": []})
+    monkeypatch.setattr(verifier, "verifier_llm", lambda: late)
+    monkeypatch.setattr(type(run), "save", lambda self: None)
+    events = []
+    session.verify_in_background(run, events.append)
+    assert events[-1]["type"] == "verification_finished" and events[-1]["verification"]["status"] == "timeout"
+    import time
+    time.sleep(0.8)  # the slow check finishes afterwards...
+    assert run.verification["status"] == "timeout" and run.status == "awaiting_verification"  # ...and changes nothing
+
+
+def test_saved_pending_check_without_a_live_thread_is_not_endless(monkeypatch, tmp_path, run):
+    import app.agent.orchestrator as orch
+    from app.agent import session
+    monkeypatch.setattr(orch, "INVESTIGATIONS_DIR", tmp_path)
+    run.verification = verifier.pending()
+    run.save()
+    assert session.run_view(run.run_id)["verification"]["status"] == "timeout"  # e.g. after a server restart
+    assert verifier.resolve_stale(verifier.pending(), live=True)["status"] == "pending"  # a live check keeps spinning
