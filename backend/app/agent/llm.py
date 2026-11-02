@@ -24,12 +24,23 @@ load_dotenv(REPO_ROOT / ".env", override=False)
 EFFORT = {"loop": "low", "plan": "medium", "extract": "medium", "verify": "high"}
 
 # USD per 1M tokens (docs_local/meta/pricing-rate-limits.txt). The one price table for every $ estimate.
-# Baseten's Muse Spark Open price is not in our docs: None means "unknown", shown as n/a.
+# Baseten's Muse Spark Open price is not in our docs: it is counted at Muse Spark Standard rates so the
+# daily budget still sees it, and shown as an estimate (ESTIMATED_PRICES).
+_SPARK_STANDARD = {"input": 1.25, "cached": 0.15, "output": 4.25}
 PRICES: dict[str, dict[str, float] | None] = {
-    "muse-spark-1.3": {"input": 1.25, "cached": 0.15, "output": 4.25},
+    "muse-spark-1.3": _SPARK_STANDARD,
     "muse-spark-1.3-contributor": {"input": 0.10, "cached": 0.002, "output": 0.20},
     "muse-wonder-1.0": {"input": 4.00, "cached": 0.20, "output": 20.00},
+    "meta-models/muse-spark-open-1026": _SPARK_STANDARD,
+    "meta-models/muse-spark-open": _SPARK_STANDARD,
 }
+ESTIMATED_PRICES = {"meta-models/muse-spark-open-1026", "meta-models/muse-spark-open"}
+PROVIDERS = {"meta": "META_API_KEY", "baseten": "BASETEN_API_KEY"}
+
+
+def available_providers() -> list[str]:
+    """Providers whose API key is set (the key itself is never read out)."""
+    return [p for p, key in PROVIDERS.items() if os.environ.get(key)]
 
 TIMEOUT_S = 120
 MAX_TRIES = 3

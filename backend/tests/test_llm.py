@@ -101,7 +101,7 @@ def test_history_converts_to_chat_messages():
 
 
 def test_cost_unknown_model_is_none():
-    assert estimate_cost("meta-models/muse-spark-open-1026", 100, 0, 100) is None
+    assert estimate_cost("some-unpriced-model", 100, 0, 100) is None
 
 
 def test_budget_guard_aborts():

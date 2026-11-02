@@ -145,3 +145,33 @@ def test_replay_plays_a_recorded_run_without_any_llm(recorded, monkeypatch):
     miss = c.post("/plan", json={"question": "Something never recorded?"})
     assert miss.status_code == 409 and miss.json()["detail"]["recorded"][0]["run_id"] == recorded.run_id
     assert c.get("/health").json()["mode"] == "replay"
+
+
+# ---------- model provider toggle: Meta (default) or Baseten open weights (SPEC §6b) ----------
+
+def test_provider_is_validated_and_reaches_the_planner(monkeypatch):
+    from app.agent import session
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    monkeypatch.setenv("META_API_KEY", "x")
+    monkeypatch.delenv("BASETEN_API_KEY", raising=False)
+    seen = {}
+    monkeypatch.setattr(session, "propose_plan", lambda *a, **k: seen.update(k) or {"plan_id": "p"})
+    c = TestClient(app)
+    assert c.post("/plan", json={"question": "q", "provider": "openai"}).status_code == 400
+    assert c.post("/plan", json={"question": "q", "provider": "baseten"}).status_code == 503  # no key set
+    assert c.get("/health").json()["providers"] == ["meta"]
+    monkeypatch.setenv("BASETEN_API_KEY", "y")
+    assert c.post("/plan", json={"question": "q", "provider": "baseten"}).status_code == 200
+    assert seen["provider"] == "baseten"
+    assert c.post("/plan", json={"question": "q"}).status_code == 200 and seen["provider"] is None  # default
+    assert c.get("/health").json()["providers"] == ["meta", "baseten"]
+
+
+def test_open_weight_model_is_priced_as_an_estimate(monkeypatch):
+    from app.agent import llm, session
+    monkeypatch.setenv("BASETEN_API_KEY", "y")
+    monkeypatch.delenv("BASETEN_MODEL", raising=False)
+    m = session.new_llm("baseten")
+    assert m.provider == "baseten" and m.model == "meta-models/muse-spark-open-1026"
+    assert m.model in llm.ESTIMATED_PRICES
+    assert llm.estimate_cost(m.model, 1_000_000, 0, 0) == pytest.approx(1.25)  # counted in the daily budget

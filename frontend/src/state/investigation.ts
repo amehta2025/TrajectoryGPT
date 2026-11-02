@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Figure, type Plan, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -50,6 +50,13 @@ export function useInvestigation(): Investigation {
   )
 }
 
+// The model chosen on the start screen; kept across questions (follow-ups use it too). Undefined = server default.
+let provider: Provider | undefined
+export const getProvider = () => provider
+export function setProvider(p: Provider) {
+  provider = p
+}
+
 /** A pair's backend label ("HSE134-ASP118") from residue keys. */
 function pairLabel(keyA: string, keyB: string): string {
   const [a, b] = [parseResidueKey(keyA), parseResidueKey(keyB)]
@@ -64,7 +71,7 @@ export async function ask(question: string, dataset: string, followUp = false) {
   const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
   set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
   try {
-    const proposal = await api.plan(question, dataset, { followUp, selectedPair })
+    const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider })
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
@@ -94,7 +101,7 @@ export async function askFigure(files: File[], dataset: string, note: string, la
   set({ ...empty, phase: 'planning', question: label, dataset })
   try {
     const uploads = await Promise.all(files.map(toUpload))
-    const proposal = await api.figurePlan(uploads, dataset, note)
+    const proposal = await api.figurePlan(uploads, dataset, note, provider)
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })

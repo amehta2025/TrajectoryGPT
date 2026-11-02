@@ -7,6 +7,7 @@ import { api, type DatasetInfo, type Metadata, type Recorded } from '../api/clie
 import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
 import { setSelection } from '../state/selection'
 import { datasetName } from './DatasetBadge'
+import { ModelToggle } from './ModelToggle'
 import { SpinningStructure } from './Viewer'
 import { UnsupportedNotice } from './ReproduceView'
 
@@ -192,6 +193,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <select id="ds" value={dataset} onChange={(e) => { clearNotices(); setSelection({ dataset: e.target.value }) }} disabled={busy}>
             {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
           </select>
+          <ModelToggle disabled={busy} />
         </div>
       </div>
       <div className="start-art">{meta && <SpinningStructure meta={meta} />}</div>

@@ -86,6 +86,9 @@ export default function App() {
             {(inv.run?.recorded_from || inv.proposal?.recorded) && (
               <span className="recorded-badge" title="Replayed from a real run recorded earlier; no AI model is called">Recorded run</span>
             )}
+            {inv.proposal?.provider === 'baseten' && (
+              <span className="open-badge" title={inv.proposal.model}>Open-weight model · Muse Spark Open on Baseten</span>
+            )}
             <span className="muted small">You asked</span>
             <h1 className="inv-question">{inv.question}</h1>
             <Headline meta={meta} />

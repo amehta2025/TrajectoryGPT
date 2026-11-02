@@ -38,6 +38,7 @@ class SchemaLLM:
     """Returns the scripted parsed objects in order; raises an exception if one is scripted."""
 
     model = "fake"
+    provider = "fake"
 
     def __init__(self, script):
         self.script, self.calls = list(script), []
@@ -155,7 +156,7 @@ def test_unsupported_figure_stops_before_planning():
 
 def test_unsupported_figure_endpoint_returns_a_clear_message(monkeypatch):
     import app.agent.session as session
-    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([{**SPEC, "kind": "other"}]))
+    monkeypatch.setattr(session, "LLM", lambda *a, **kw: SchemaLLM([{**SPEC, "kind": "other"}]))
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     r = TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
     assert r.status_code == 422 and "isn't supported yet" in r.json()["detail"]["unsupported"]
@@ -165,7 +166,7 @@ def test_low_confidence_fields_must_be_confirmed_before_a_run(monkeypatch):
     import app.agent.session as session
     from app.agent.planner import PlanInvalid
     spec = {**SPEC, "fields": SPEC["fields"] + [{"name": "reference frames", "value": "first and last", "confidence": "low", "source": "assumed"}]}
-    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([spec, PLAN]))
+    monkeypatch.setattr(session, "LLM", lambda *a, **kw: SchemaLLM([spec, PLAN]))
     started = []
     monkeypatch.setattr(session, "RunHandle", lambda run, step_through=False: started.append(run) or type("H", (), {"start": lambda self: None})())
     out = session.propose_figure_plan([{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "adk_transition")
@@ -179,7 +180,7 @@ def test_long_caption_text_reaches_extraction_intact(monkeypatch):
     """A long pasted caption plus methods (the mdciao case was 2,170 characters) is not cut at 2,000."""
     import app.agent.session as session
     seen = {}
-    monkeypatch.setattr(session, "propose_figure_plan", lambda files, dataset, note: seen.setdefault("note", note) and {})
+    monkeypatch.setattr(session, "propose_figure_plan", lambda files, dataset, note, **kw: seen.setdefault("note", note) and {})
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     note = "Caption. " * 600 + "Methods: closest heavy atoms, 4.5 Å."
     TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}], "note": note})
@@ -197,7 +198,7 @@ def test_a_photo_that_is_not_a_figure_gets_its_own_message():
 
 def test_not_a_figure_endpoint_says_so(monkeypatch):
     import app.agent.session as session
-    monkeypatch.setattr(session, "LLM", lambda **kw: SchemaLLM([{**SPEC, "is_figure": False, "kind": "other"}]))
+    monkeypatch.setattr(session, "LLM", lambda *a, **kw: SchemaLLM([{**SPEC, "is_figure": False, "kind": "other"}]))
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     r = TestClient(app).post("/figure/plan", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
     d = r.json()["detail"]

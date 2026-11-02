@@ -10,6 +10,7 @@ from tests.test_verifier import run  # noqa: F401  (fixture: a run with an accep
 
 class _Fake:
     model = "fake"
+    provider = "fake"
 
 
 FAKE_LLM = _Fake()

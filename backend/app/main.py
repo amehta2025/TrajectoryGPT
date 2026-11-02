@@ -10,6 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 
 from app.agent import session, verifier
+from app.agent.llm import PROVIDERS, available_providers
 from app.agent.planner import PlanInvalid
 from app.config import dataset_config, load_config
 from app.safety import budget, replay
@@ -75,7 +76,9 @@ def health():
             "mode_reason": replay.mode()[1],
             "spent_today_usd": round(budget.spent_today(), 4), "daily_budget_usd": budget.daily_limit_usd(),
             "verifier_model": os.environ.get("META_VERIFIER_MODEL", "muse-wonder-1.0"),
-            "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1"}
+            "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1",
+            "providers": available_providers(), "default_provider": os.environ.get("MODEL_PROVIDER", "meta"),
+            "open_model": os.environ.get("BASETEN_MODEL", "meta-models/muse-spark-open-1026")}
 
 
 @app.get("/datasets")
@@ -241,6 +244,16 @@ def _replay_miss() -> HTTPException:
                                           "Pick one of them; charts and the 3D viewer stay live."})
 
 
+def _check_provider(provider: str | None) -> None:
+    """None = the default (MODEL_PROVIDER). A provider without its key set is refused before any call."""
+    if provider is None:
+        return
+    if provider not in PROVIDERS:
+        raise HTTPException(400, f"provider must be one of {sorted(PROVIDERS)}")
+    if provider not in available_providers():
+        raise HTTPException(503, "That model is not available on this server right now.")
+
+
 def require_budget():
     try:
         budget.check()
@@ -261,7 +274,7 @@ def replays():
 
 @app.post("/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
 def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), session_id: str | None = Body(None),
-         selected_pair: str | None = Body(None), follow_up: bool = Body(False)):
+         selected_pair: str | None = Body(None), follow_up: bool = Body(False), provider: str | None = Body(None)):
     _check_dataset(dataset)
     if not question.strip() or len(question) > 2000:
         raise HTTPException(400, "question must be 1-2000 characters")
@@ -274,10 +287,11 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), sess
         if r is None:
             raise _replay_miss()
         return replay.proposal(r)
+    _check_provider(provider)
     require_budget()
     try:
         return session.propose_plan(question.strip(), dataset, session_id=session_id, selected_pair=selected_pair,
-                                    follow_up=follow_up)
+                                    follow_up=follow_up, provider=provider)
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 
@@ -287,7 +301,8 @@ PAIR_LABEL = re.compile(r"[A-Z]{3}\d{1,4}-[A-Z]{3}\d{1,4}")
 
 
 @app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
-def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body("")):
+def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body(""),
+                provider: str | None = Body(None)):
     """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
     from app.agent.figure import NOTE_LIMIT, UnsupportedFigure, UploadRejected, decode_upload
     _check_dataset(dataset)
@@ -299,9 +314,10 @@ def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibr
         if r is None:
             raise _replay_miss()
         return replay.proposal(r)
+    _check_provider(provider)
     require_budget()
     try:
-        return session.propose_figure_plan(files, dataset, note[:NOTE_LIMIT])
+        return session.propose_figure_plan(files, dataset, note[:NOTE_LIMIT], provider=provider)
     except UploadRejected as e:
         raise HTTPException(400, str(e)) from None
     except UnsupportedFigure as e:

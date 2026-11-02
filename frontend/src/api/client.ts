@@ -153,11 +153,13 @@ export type UploadFile = { filename: string; mime: string; data: string }
 
 export type FollowUp = { run_id: string; question: string; focus_pair: string | null }
 export type PlanResponse = {
-  plan_id: string; plan: Plan; usage: Usage[]; model: string; figure?: Figure; question?: string
+  plan_id: string; plan: Plan; usage: Usage[]; model: string; provider?: Provider; figure?: Figure; question?: string
   follow_up?: FollowUp | null // set when the plan follows up the session's previous investigation
   recorded?: boolean // replay mode: a recorded run's plan (settings are fixed)
 }
-export type PlanOptions = { followUp?: boolean; selectedPair?: string | null }
+/** Which model plans and runs the investigation: Muse Spark on the Meta API, or open-weight Muse Spark Open on Baseten. */
+export type Provider = 'meta' | 'baseten'
+export type PlanOptions = { followUp?: boolean; selectedPair?: string | null; provider?: Provider }
 export type Recorded = { run_id: string; label: string; question: string; dataset: string; figure: boolean; figure_id: string | null }
 
 /** Replay mode: the question matched no recorded run (the AI is off). */
@@ -381,6 +383,7 @@ async function get(path: string, params: Record<string, string | number | undefi
 export type Health = {
   status: string; mode: 'live' | 'replay'; mode_reason: string | null; model: string; verifier_model: string
   spent_today_usd: number; daily_budget_usd: number; dev_overclaim_toggle: boolean; sandbox: boolean
+  providers?: Provider[]; default_provider?: Provider; open_model?: string
 }
 /** The clean-sandbox re-run of a run's export script. */
 export type SandboxJob = {
@@ -417,12 +420,13 @@ export const api = {
   compare: async (ds: string, groupA: string, groupB: string, a: [number, number], b: [number, number], cutoff = 4.5): Promise<Compare> =>
     (await get(`/compare/${ds}`, { group_a: groupA, group_b: groupB, a_start: a[0], a_stop: a[1], b_start: b[0], b_stop: b[1], cutoff })).json(),
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
-  figurePlan: (files: UploadFile[], dataset: string, note: string) =>
-    post<PlanResponse>('/figure/plan', { files, dataset, note }),
+  figurePlan: (files: UploadFile[], dataset: string, note: string, provider?: Provider) =>
+    post<PlanResponse>('/figure/plan', { files, dataset, note, provider: provider ?? null }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
   plan: (question: string, dataset: string, opts: PlanOptions = {}) =>
     post<PlanResponse>('/plan', {
       question, dataset, session_id: sessionId(), follow_up: opts.followUp ?? false, selected_pair: opts.selectedPair ?? null,
+      provider: opts.provider ?? null,
     }),
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = [], plantOverclaim = false) =>
     post<{ run_id: string }>('/runs', {

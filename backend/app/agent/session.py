@@ -123,10 +123,16 @@ def follow_up_context(session_id: str | None) -> dict | None:
             "focus_pair": pair, "focus_reason": why}
 
 
+def new_llm(provider: str | None = None) -> LLM:
+    """The agent's model: Meta (Muse Spark) by default, or Baseten (Muse Spark Open, open weights).
+    The plan stores this client, so the run uses the same provider; the verifier is always Muse Wonder."""
+    return LLM(provider, tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
+
+
 def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id: str | None = None,
-                 selected_pair: str | None = None, follow_up: bool = False) -> dict:
+                 selected_pair: str | None = None, follow_up: bool = False, provider: str | None = None) -> dict:
     """A follow-up uses the session's last run (its params, findings, and the pair "that" refers to)."""
-    llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
+    llm = llm or new_llm(provider)
     if selected_pair is not None:
         remember(session_id, selected_pair=selected_pair)
     context = follow_up_context(session_id) if follow_up else None
@@ -137,21 +143,23 @@ def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id
         PLANS[pid] = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
                       "llm": llm, "session_id": session_id}
     follow = {k: context[k] for k in ("run_id", "question", "focus_pair")} if context else None
-    return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model, "follow_up": follow}
+    return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model, "provider": llm.provider,
+            "follow_up": follow}
 
 
-def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LLM | None = None) -> dict:
+def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LLM | None = None,
+                        provider: str | None = None) -> dict:
     """Figure mode: uploads -> extracted spec -> plan, stored like a question's plan."""
     from app.agent.figure import plan_from_figure
-    llm = llm or LLM(tracker=CostTracker(limit_usd=RUN_BUDGET_USD, on_usage=budget.record))
+    llm = llm or new_llm(provider)
     out = plan_from_figure(llm, files, dataset, note)
     pid = uuid.uuid4().hex[:12]
     usage = [u.as_dict() for u in out["usages"]]
     with _lock:
         PLANS[pid] = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
                       "usage": usage, "llm": llm, "figure": out["figure"]}
-    return {"plan_id": pid, "plan": out["plan"], "usage": usage, "model": llm.model, "figure": out["figure"],
-            "question": out["question"]}
+    return {"plan_id": pid, "plan": out["plan"], "usage": usage, "model": llm.model, "provider": llm.provider,
+            "figure": out["figure"], "question": out["question"]}
 
 
 def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_fields: list[str] | None = None,
