@@ -1,8 +1,10 @@
 """FastAPI app: thin HTTP wrappers around the science functions. No science here."""
+import base64
 import json
 import os
 import re
 
+import httpx
 import numpy as np
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,7 +80,8 @@ def health():
             "verifier_model": os.environ.get("META_VERIFIER_MODEL", "muse-wonder-1.0"),
             "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1",
             "providers": available_providers(), "default_provider": os.environ.get("MODEL_PROVIDER", "meta"),
-            "open_model": os.environ.get("BASETEN_MODEL", "meta-models/muse-spark-open-1026")}
+            "open_model": os.environ.get("BASETEN_MODEL", "meta-models/muse-spark-open-1026"),
+            "voice": "meta" in available_providers() and replay.mode()[0] == "live"}
 
 
 @app.get("/datasets")
@@ -324,6 +327,26 @@ def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibr
         raise HTTPException(422, {"unsupported": str(e), "reason": e.reason, "spec": e.spec, "figure": e.figure}) from None
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
+
+
+@app.post("/transcribe", dependencies=[Depends(require_passcode), Depends(rate_limit("voice"))])
+def transcribe(audio: str = Body(..., embed=True)):
+    """Push-to-talk (SPEC §9d): base64 WAV (mono, 16-bit, 16/24 kHz) -> text for the question box."""
+    from app.agent import voice
+    if replay.mode()[0] == "replay":
+        raise HTTPException(409, "Voice input is off while the AI is off.")
+    require_budget()
+    if len(audio) > voice.MAX_BYTES * 4 // 3 + 4:
+        raise HTTPException(413, f"Recording too long: keep it under {voice.MAX_S:.0f} seconds.")
+    try:
+        out = voice.transcribe(base64.b64decode(audio, validate=True))
+    except (ValueError, voice.AudioRejected) as e:  # binascii.Error is a ValueError
+        raise HTTPException(400, str(e) if isinstance(e, voice.AudioRejected) else "audio must be base64") from None
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Transcription failed ({e.response.status_code}). Type the question instead.") from None
+    budget.record({"provider": "meta", "model": out["model"], "effort": "n/a", "audio_s": out["seconds"],
+                   "latency_s": out["latency_s"], "cost_usd": out["cost_usd"]})
+    return {"text": out["text"], "seconds": out["seconds"]}
 
 
 @app.get("/figures/{figure_id}")

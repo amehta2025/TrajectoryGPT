@@ -16,12 +16,14 @@ import { ReproduceView } from './components/ReproduceView'
 import { AnalysisCards } from './components/AnalysisViews'
 import { DOMAIN_COLORS } from './theme'
 import { hisText } from './state/residueKey'
+import { VoiceHint, VoiceLayer } from './components/VoiceInput'
 
 function Structure({ meta }: { meta: Metadata }) {
   return (
     <section className="card viewer-card">
       <header className="card-head">
         <h2>Structure</h2>
+        <VoiceHint />
         <div className="legend">
           {Object.entries(meta.groups).map(([g, { ranges }]) => (
             <span key={g} title={ranges.map(([a, b]) => `${a}–${b}`).join(', ')}>
@@ -81,6 +83,7 @@ export default function App() {
           {asking && <button className="new-q" onClick={reset}>New question</button>}
         </div>
       </header>
+      <VoiceLayer />
       {waking && !error && (
         <div className="waking banner" role="status">Starting the server. After a quiet spell this takes a few seconds.</div>
       )}

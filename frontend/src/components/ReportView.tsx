@@ -13,6 +13,8 @@ import { ask, toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
 import { buildCards, touchAnswer, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
+import { MicButton } from './VoiceInput'
+import { onTranscript } from '../state/voice'
 
 type CompareData = {
   group_a: string; group_b: string; n_tested: number; n_filtered: number; n_supported: number
@@ -461,6 +463,7 @@ function Reproduce({ run, science }: { run: RunView; science: boolean }) {
 /** Suggested next questions (written by Muse, checked by code) and a follow-up box. Each goes through plan approval. */
 function NextQuestions({ run, meta }: { run: RunView; meta: Metadata }) {
   const [text, setText] = useState('')
+  useEffect(() => onTranscript(setText), []) // a spoken follow-up lands here for review
   const suggestions = run.report?.next_questions ?? []
   const go = (q: string) => q.trim() && void ask(q.trim(), meta.dataset, true)
   return (
@@ -474,6 +477,7 @@ function NextQuestions({ run, meta }: { run: RunView; meta: Metadata }) {
       <form className="follow-up" onSubmit={(e) => { e.preventDefault(); go(text) }}>
         <input value={text} onChange={(e) => setText(e.target.value)} maxLength={2000}
           placeholder="Ask a follow-up, e.g. “Does that persist?”" aria-label="Follow-up question" />
+        <MicButton />
         <button type="submit" disabled={!text.trim()}>Ask</button>
       </form>
       <p className="muted small">Follow-ups use this investigation’s settings and the contact you selected. You approve the plan before it runs.</p>

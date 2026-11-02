@@ -167,6 +167,12 @@ export function toggleScience() {
   set({ science: !state.science })
 }
 
+/** Show the passcode prompt without re-sending a question afterwards (voice input asks this way). */
+export function askForPasscode() {
+  retry = null
+  set({ needPasscode: true })
+}
+
 /** Tick or untick one low-confidence figure setting. */
 export function toggleConfirmed(name: string) {
   set({ confirmed: state.confirmed.includes(name) ? state.confirmed.filter((n) => n !== name) : [...state.confirmed, name] })

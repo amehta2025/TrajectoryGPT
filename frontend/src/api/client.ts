@@ -383,7 +383,7 @@ async function get(path: string, params: Record<string, string | number | undefi
 export type Health = {
   status: string; mode: 'live' | 'replay'; mode_reason: string | null; model: string; verifier_model: string
   spent_today_usd: number; daily_budget_usd: number; dev_overclaim_toggle: boolean; sandbox: boolean
-  providers?: Provider[]; default_provider?: Provider; open_model?: string
+  providers?: Provider[]; default_provider?: Provider; open_model?: string; voice?: boolean
 }
 /** The clean-sandbox re-run of a run's export script. */
 export type SandboxJob = {
@@ -422,6 +422,8 @@ export const api = {
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
   figurePlan: (files: UploadFile[], dataset: string, note: string, provider?: Provider) =>
     post<PlanResponse>('/figure/plan', { files, dataset, note, provider: provider ?? null }),
+  /** Push-to-talk: base64 WAV (mono, 16-bit, 24 kHz) -> text for the question box. */
+  transcribe: (audio: string) => post<{ text: string; seconds: number }>('/transcribe', { audio }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
   plan: (question: string, dataset: string, opts: PlanOptions = {}) =>
     post<PlanResponse>('/plan', {

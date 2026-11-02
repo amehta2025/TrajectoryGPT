@@ -35,6 +35,8 @@ PRICES: dict[str, dict[str, float] | None] = {
     "meta-models/muse-spark-open": _SPARK_STANDARD,
 }
 ESTIMATED_PRICES = {"meta-models/muse-spark-open-1026", "meta-models/muse-spark-open"}
+# USD per hour of audio processed (docs_local/meta/speech-to-text.txt), for push-to-talk voice input.
+AUDIO_PRICES = {"muse-voice-transcribe-1.0": 0.18}
 PROVIDERS = {"meta": "META_API_KEY", "baseten": "BASETEN_API_KEY"}
 
 

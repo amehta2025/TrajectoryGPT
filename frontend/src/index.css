@@ -398,3 +398,15 @@ button.science-toggle {
 .verifier-detail h3 { margin: 0 0 6px; font-size: 15px; }
 .dev-toggle { color: #f0a36b; }
 .flag-item .marker-num { margin: 0 4px 0 2px; }
+
+/* Push-to-talk voice input */
+.mic { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; touch-action: none; user-select: none; }
+.mic.on { color: #fff; background: #b8433a; border-color: #b8433a; }
+.voice-toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--border-strong); color: var(--text); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
+.voice-toast.listening { border-color: #b8433a; }
+.voice-toast.error { color: #ffb4a3; }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #e0524a; animation: rec-pulse 1s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+.voice-hint kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 4px; }
+.start-art .voice-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; }
+.viewer-card .card-head .voice-hint { margin-left: 10px; margin-right: auto; }

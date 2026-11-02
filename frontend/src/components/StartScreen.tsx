@@ -8,6 +8,8 @@ import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInve
 import { setSelection } from '../state/selection'
 import { datasetName } from './DatasetBadge'
 import { ModelToggle } from './ModelToggle'
+import { MicButton, VoiceHint } from './VoiceInput'
+import { onTranscript } from '../state/voice'
 import { SpinningStructure } from './Viewer'
 import { UnsupportedNotice } from './ReproduceView'
 
@@ -85,6 +87,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   const [fileError, setFileError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const busy = phase === 'planning'
+  useEffect(() => onTranscript((text) => { clearNotices(); setQuestion(text) }), []) // spoken question, to review
 
   const addFiles = (list: FileList | File[]) => {
     clearNotices()
@@ -175,6 +178,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               className="ask-input" value={question} onChange={(e) => { clearNotices(); setQuestion(e.target.value) }} disabled={busy}
               placeholder="Which contacts change between the first and second half?" aria-label="Question"
             />
+            <MicButton />
             <button type="submit" disabled={busy || !question.trim()}>{busy ? 'Planning…' : 'Plan'}</button>
           </form>
           <div className="example-row">
@@ -196,7 +200,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <ModelToggle disabled={busy} />
         </div>
       </div>
-      <div className="start-art">{meta && <SpinningStructure meta={meta} />}</div>
+      <div className="start-art">{meta && <SpinningStructure meta={meta} />}<VoiceHint /></div>
     </section>
   )
 }
