@@ -18,6 +18,7 @@ FAKE_LLM = _Fake()
 
 @pytest.fixture(autouse=True)
 def clean(tmp_path, monkeypatch):
+    monkeypatch.setattr(session.scope, "check", lambda llm, q, has_context=False: (None, []))  # tested in test_scope.py
     monkeypatch.setattr(orch, "INVESTIGATIONS_DIR", tmp_path)
     monkeypatch.setattr(session, "SESSIONS", {})
     monkeypatch.setattr(session, "PLANS", {})

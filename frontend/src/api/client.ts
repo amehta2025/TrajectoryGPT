@@ -154,11 +154,14 @@ export type UploadFile = { filename: string; mime: string; data: string }
 export type FollowUp = { run_id: string; question: string; focus_pair: string | null }
 export type PlanResponse = {
   plan_id: string; plan: Plan; usage: Usage[]; model: string; provider?: Provider; figure?: Figure; question?: string
+  declined?: Declined // the scope gate turned the question away: no plan was made
   follow_up?: FollowUp | null // set when the plan follows up the session's previous investigation
   recorded?: boolean // replay mode: a recorded run's plan (settings are fixed)
 }
 /** Which model plans and runs the investigation: Muse Spark on the Meta API, or open-weight Muse Spark Open on Baseten. */
 export type Provider = 'meta' | 'baseten'
+/** The scope gate's polite refusal (nonsense, off-topic, other protein, creative, or "that" with no earlier run). */
+export type Declined = { verdict: string; message: string; examples: string[] }
 export type PlanOptions = { followUp?: boolean; selectedPair?: string | null; provider?: Provider }
 export type Recorded = { run_id: string; label: string; question: string; dataset: string; figure: boolean; figure_id: string | null }
 

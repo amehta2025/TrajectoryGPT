@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -19,11 +19,12 @@ export type Investigation = {
   confirmed: string[] // low-confidence figure settings the user has checked (the backend requires all of them)
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
+  declined: (Declined & { question: string }) | null // the question was turned away before planning
 }
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
-  confirmed: [], unsupported: null, science: false,
+  confirmed: [], unsupported: null, science: false, declined: null,
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
@@ -72,7 +73,8 @@ export async function ask(question: string, dataset: string, followUp = false) {
   set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
   try {
     const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider })
-    set({ phase: 'plan', proposal })
+    if (proposal.declined) set({ phase: 'idle', declined: { ...proposal.declined, question } })
+    else set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
@@ -192,5 +194,5 @@ export function reset() {
 
 /** Drop start-screen notices from an earlier attempt (unsupported figure, planning error) once the user acts. */
 export function clearNotices() {
-  if (state.unsupported || state.error) set({ unsupported: null, error: null })
+  if (state.unsupported || state.error || state.declined) set({ unsupported: null, error: null, declined: null })
 }

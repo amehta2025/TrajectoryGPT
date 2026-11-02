@@ -411,3 +411,5 @@ button.science-toggle {
 .start-art .voice-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; }
 .viewer-card .card-head .voice-hint { margin-left: 10px; margin-right: auto; }
 .heatmap-hint { margin: 6px 0 0; }
+.declined { margin: 8px 0 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); }
+.declined p { margin: 0 0 8px; line-height: 1.45; }

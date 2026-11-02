@@ -80,7 +80,7 @@ function ReplayBanner({ busy, onQuestion, onFigure }: {
 }
 
 export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo[]; dataset: string; meta: Metadata | null }) {
-  const { phase, needPasscode, unsupported } = useInvestigation()
+  const { phase, needPasscode, unsupported, declined } = useInvestigation()
   const [question, setQuestion] = useState('')
   const [note, setNote] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -173,6 +173,16 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
 
         <div className="or-ask">
           <h2 className="or-title">Or ask a question about the simulations</h2>
+          {declined && (
+            <div className="declined" role="status">
+              <p><span className="muted">You asked “{declined.question}”.</span> {declined.message}</p>
+              <div className="example-row">
+                {declined.examples.map((q) => (
+                  <button key={q} className="example-chip" disabled={busy} onClick={() => startQuestion(q, 'adk_equilibrium')}>{q}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <form className="ask" onSubmit={(e) => { e.preventDefault(); startQuestion(question) }}>
             <input
               className="ask-input" value={question} onChange={(e) => { clearNotices(); setQuestion(e.target.value) }} disabled={busy}

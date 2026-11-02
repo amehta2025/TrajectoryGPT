@@ -21,7 +21,7 @@ from app.config import REPO_ROOT
 load_dotenv(REPO_ROOT / ".env", override=False)
 
 # Reasoning effort per call type (SPEC §9c). Never "none": Muse Spark and Muse Wonder reject it.
-EFFORT = {"loop": "low", "plan": "medium", "extract": "medium", "verify": "high"}
+EFFORT = {"loop": "low", "plan": "medium", "extract": "medium", "verify": "high", "scope": "low"}
 
 # USD per 1M tokens (docs_local/meta/pricing-rate-limits.txt). The one price table for every $ estimate.
 # Baseten's Muse Spark Open price is not in our docs: it is counted at Muse Spark Standard rates so the

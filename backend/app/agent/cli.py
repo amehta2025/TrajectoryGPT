@@ -113,6 +113,11 @@ def cmd_run(a) -> int:
             plan, usages, figure, a.question = out["plan"], out["usages"], out["figure"], out["question"]
             _print_figure(figure)
         else:
+            from app.agent import scope
+            gate, _ = scope.check(llm, a.question)
+            if gate:
+                print(f"Declined ({gate['verdict']}): {gate['message']}\n  - " + "\n  - ".join(gate["examples"]))
+                return 0
             plan, usages = make_plan(llm, a.question, a.dataset)
     except PlanInvalid as e:
         print("Plan invalid after one retry:\n  - " + "\n  - ".join(e.errors))

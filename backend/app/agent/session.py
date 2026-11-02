@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.agent.llm import LLM, CostTracker
-from app.agent import orchestrator, verifier
+from app.agent import orchestrator, scope, verifier
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import PlanInvalid, make_plan, to_approved
 from app.agent.tools import res_label
@@ -137,7 +137,12 @@ def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id
         remember(session_id, selected_pair=selected_pair)
     context = follow_up_context(session_id) if follow_up else None
     dataset = context["plan"]["dataset"] if context else dataset  # a follow-up stays on the previous dataset
+    gate, gate_usages = scope.check(llm, question, has_context=context is not None)
+    if gate:  # nonsense, off-topic, other protein, creative, or "that" with nothing before it: no plan, no tools
+        return {"declined": gate, "usage": [u.as_dict() for u in gate_usages], "model": llm.model,
+                "provider": llm.provider}
     plan, usages = make_plan(llm, question, dataset, context)
+    usages = gate_usages + usages
     pid = uuid.uuid4().hex[:12]
     with _lock:
         PLANS[pid] = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
