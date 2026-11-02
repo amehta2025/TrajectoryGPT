@@ -178,11 +178,25 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           {declined && (
             <div className="declined" role="status">
               <p><span className="muted">You asked “{declined.question}”.</span> {declined.message}</p>
-              <div className="example-row">
-                {declined.examples.map((q) => (
-                  <button key={q} className="example-chip" disabled={busy} onClick={() => startQuestion(q, 'adk_equilibrium')}>{q}</button>
-                ))}
-              </div>
+              {!!declined.choices?.length && (
+                <div className="example-row">
+                  {declined.choices.map((c) => (
+                    <button key={c.label} className="example-chip" disabled={busy} title={c.question}
+                      onClick={() => void ask(c.question, dataset, declined.followUp)}>{c.label}</button>
+                  ))}
+                </div>
+              )}
+              {!!declined.examples.length && (
+                <div className="example-row">
+                  {declined.examples.map((q) => (
+                    <button key={q} className="example-chip" disabled={busy} onClick={() => startQuestion(q, 'adk_equilibrium')}>{q}</button>
+                  ))}
+                </div>
+              )}
+              {declined.ask_anyway && (
+                <p className="small"><button className="link" disabled={busy} onClick={() => void ask(declined.question, dataset, declined.followUp, true)}>
+                  Ask anyway</button> <span className="muted">if this is about the simulation, and I'll propose a plan you can check.</span></p>
+              )}
             </div>
           )}
           <form className="ask" onSubmit={(e) => { e.preventDefault(); startQuestion(question) }}>

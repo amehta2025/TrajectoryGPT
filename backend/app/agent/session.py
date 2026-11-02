@@ -130,14 +130,20 @@ def new_llm(provider: str | None = None) -> LLM:
 
 
 def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id: str | None = None,
-                 selected_pair: str | None = None, follow_up: bool = False, provider: str | None = None) -> dict:
-    """A follow-up uses the session's last run (its params, findings, and the pair "that" refers to)."""
+                 selected_pair: str | None = None, follow_up: bool = False, provider: str | None = None,
+                 skip_scope: bool = False) -> dict:
+    """A follow-up uses the session's last run (its params, findings, and the pair "that" refers to).
+    skip_scope: the user clicked "Ask anyway" on a declined question, so plan it without the scope gate."""
+    from app.agent.limits import residue_check
     llm = llm or new_llm(provider)
     if selected_pair is not None:
         remember(session_id, selected_pair=selected_pair)
     context = follow_up_context(session_id) if follow_up else None
     dataset = context["plan"]["dataset"] if context else dataset  # a follow-up stays on the previous dataset
-    gate, gate_usages = scope.check(llm, question, has_context=context is not None)
+    check = residue_check(question, dataset)
+    if check:  # a residue that doesn't match the protein: the user picks one before anything is planned
+        return {"declined": check, "usage": [], "model": llm.model, "provider": llm.provider}
+    gate, gate_usages = (None, []) if skip_scope else scope.check(llm, question, has_context=context is not None)
     if gate:  # nonsense, off-topic, other protein, creative, or "that" with nothing before it: no plan, no tools
         return {"declined": gate, "usage": [u.as_dict() for u in gate_usages], "model": llm.model,
                 "provider": llm.provider}

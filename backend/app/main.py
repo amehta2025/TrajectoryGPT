@@ -294,7 +294,8 @@ def replays():
 
 @app.post("/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
 def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), session_id: str | None = Body(None),
-         selected_pair: str | None = Body(None), follow_up: bool = Body(False), provider: str | None = Body(None)):
+         selected_pair: str | None = Body(None), follow_up: bool = Body(False), provider: str | None = Body(None),
+         skip_scope: bool = Body(False)):
     _check_dataset(dataset)
     if not question.strip() or len(question) > 2000:
         raise HTTPException(400, "question must be 1-2000 characters")
@@ -311,7 +312,7 @@ def plan(question: str = Body(...), dataset: str = Body("adk_equilibrium"), sess
     require_budget()
     try:
         return session.propose_plan(question.strip(), dataset, session_id=session_id, selected_pair=selected_pair,
-                                    follow_up=follow_up, provider=provider)
+                                    follow_up=follow_up, provider=provider, skip_scope=skip_scope)
     except PlanInvalid as e:
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 

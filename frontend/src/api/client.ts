@@ -162,8 +162,12 @@ export type PlanResponse = {
 /** Which model plans and runs the investigation: Muse Spark on the Meta API, or open-weight Muse Spark Open on Baseten. */
 export type Provider = 'meta' | 'baseten'
 /** The scope gate's polite refusal (nonsense, off-topic, other protein, creative, or "that" with no earlier run). */
-export type Declined = { verdict: string; message: string; examples: string[] }
-export type PlanOptions = { followUp?: boolean; selectedPair?: string | null; provider?: Provider }
+export type Declined = {
+  verdict: string; message: string; examples: string[]
+  choices?: { label: string; question: string }[] // a residue that doesn't match: the question rewritten per likely residue
+  ask_anyway?: boolean // the user may plan it without the scope check
+}
+export type PlanOptions = { followUp?: boolean; selectedPair?: string | null; provider?: Provider; skipScope?: boolean }
 export type Recorded = { run_id: string; label: string; question: string; dataset: string; figure: boolean; figure_id: string | null }
 
 /** Replay mode: the question matched no recorded run (the AI is off). */
@@ -437,7 +441,7 @@ export const api = {
   plan: (question: string, dataset: string, opts: PlanOptions = {}) =>
     post<PlanResponse>('/plan', {
       question, dataset, session_id: sessionId(), follow_up: opts.followUp ?? false, selected_pair: opts.selectedPair ?? null,
-      provider: opts.provider ?? null,
+      provider: opts.provider ?? null, skip_scope: opts.skipScope ?? false,
     }),
   startRun: (planId: string, edits: Partial<Plan>, stepThrough: boolean, confirmedFields: string[] = [], plantOverclaim = false) =>
     post<{ run_id: string }>('/runs', {

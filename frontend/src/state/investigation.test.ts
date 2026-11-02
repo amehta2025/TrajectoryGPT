@@ -49,3 +49,20 @@ describe('passcode first', () => {
     reset()
   })
 })
+
+describe('turned-away questions', () => {
+  it('keeps the residue choices, and Ask anyway re-plans with the scope check skipped', async () => {
+    const declined = { verdict: 'check_residue', message: 'Residue 143 is GLU, not HSE.', examples: [],
+      choices: [{ label: 'HSE134', question: 'Does HSE134 touch ASP118?' }] }
+    vi.mocked(api.plan).mockResolvedValueOnce({ declined } as never)
+    await ask('Does HSE143 touch ASP118?', 'adk_equilibrium')
+    expect(getState().phase).toBe('idle')
+    expect(getState().declined?.choices?.[0].question).toBe('Does HSE134 touch ASP118?')
+    expect(getState().declined?.followUp).toBe(false)
+
+    vi.mocked(api.plan).mockResolvedValueOnce({ declined: { verdict: 'unclear', message: 'm', examples: [] } } as never)
+    await ask('contacts', 'adk_equilibrium', false, true)
+    expect(vi.mocked(api.plan).mock.lastCall?.[2]).toMatchObject({ skipScope: true })
+    reset()
+  })
+})

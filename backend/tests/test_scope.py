@@ -56,3 +56,40 @@ def test_plan_endpoint_returns_the_decline(monkeypatch):
     monkeypatch.setattr(session, "new_llm", lambda provider=None: Classifier("off_topic"))
     r = TestClient(app).post("/plan", json={"question": "What's the weather in Chicago?"})
     assert r.status_code == 200 and r.json()["declined"]["verdict"] == "off_topic"
+
+
+# ---------- Round 2: terse questions about this app are not turned away ----------
+
+@pytest.mark.parametrize("q", ["contacts", "RMSF?", "Explain Q1 and Q2", "ser30?", "How flexible is the LID?"])
+@pytest.mark.parametrize("verdict", ["unclear", "needs_context"])
+def test_unsure_verdict_on_an_app_question_goes_on_to_planning(q, verdict):
+    assert scope.check(Classifier(verdict), q)[0] is None
+
+
+def test_off_topic_verdicts_still_win_over_app_words():
+    assert scope.check(Classifier("other_protein"), "Which contacts change in insulin?")[0]["verdict"] == "other_protein"
+
+
+def test_question_about_a_missing_figure_asks_for_the_figure():
+    reply, _ = scope.check(Classifier("needs_context"), "Does my figure's contact map match yours?")
+    assert reply["verdict"] == "needs_figure" and "attached" in reply["message"]
+
+
+def test_every_decline_but_no_letters_offers_ask_anyway():
+    assert scope.check(Classifier("off_topic"), "weather?")[0]["ask_anyway"] is True
+    assert scope.check(Classifier("answerable"), "???")[0]["ask_anyway"] is False
+
+
+def test_ask_anyway_plans_without_the_gate(monkeypatch):
+    monkeypatch.setattr(session, "make_plan", lambda llm, q, ds, ctx=None: ({"dataset": ds, "steps": []}, []))
+    llm = Classifier("off_topic")
+    out = session.propose_plan("Write me a poem about LID", "adk_transition", llm=llm, skip_scope=True)
+    assert "plan_id" in out and llm.calls == 0
+
+
+def test_skip_scope_reaches_the_planner_over_http(monkeypatch):
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    seen = {}
+    monkeypatch.setattr(session, "propose_plan", lambda *a, **k: seen.update(k) or {"declined": None})
+    TestClient(app).post("/plan", json={"question": "contacts", "skip_scope": True})
+    assert seen["skip_scope"] is True

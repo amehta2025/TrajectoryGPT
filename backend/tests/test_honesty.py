@@ -83,3 +83,43 @@ def test_causal_headline_is_dropped_and_causal_finding_refused():
                                                  "headline": "LID opening is linked to these contacts."}))
     assert r["status"] == "submitted" and s.report["headline"] is None
     assert any("causal" in p for p in s.report["text_dropped"])
+
+
+# ---------- Round 2: a residue that doesn't match is never guessed ----------
+
+@pytest.mark.parametrize("q, first_choice, as_numbered", [
+    ("Does HSE143 touch ASP118?", "Does HSD134 touch ASP118?", "Does GLU143 touch ASP118?"),  # HSD on this dataset
+    ("Is ASP48 near LID?", "Is ASP84 near LID?", "Is GLN48 near LID?"),
+    ("lys30 contacts", "LYS40 contacts", "SER30 contacts"),
+])
+def test_mismatched_residue_offers_choices(q, first_choice, as_numbered):
+    out = limits.residue_check(q, DS)
+    questions = [c["question"] for c in out["choices"]]
+    assert out["verdict"] == "check_residue" and questions[0] == first_choice and questions[-1] == as_numbered
+
+
+def test_matching_residues_need_no_check():
+    for q in ["Does HSE134 touch ASP118?", "HIS134 and asp-118", "ser30-asp84", "we met 3 times", "Explain Q1 and Q2"]:
+        assert limits.residue_check(q, DS) is None, q
+
+
+def test_residue_out_of_range_says_the_range():
+    out = limits.residue_check("Does TRP999 move?", DS)
+    assert out["message"].startswith("There is no residue 999: this protein has residues 1–214.")
+
+
+def test_near_numbers_tries_swapped_digits_first():
+    assert limits.near_numbers(143)[:1] == [134] and 143 not in limits.near_numbers(143)
+
+
+def test_plan_stops_at_a_mismatched_residue_before_any_model_call(monkeypatch):
+    from app.agent import session
+
+    class NoCalls:
+        model, provider = "fake", "meta"
+
+        def run_turn(self, *a, **k):
+            pytest.fail("no model call before the user picks a residue")
+
+    out = session.propose_plan("Does HSE143 touch ASP118?", DS, llm=NoCalls())
+    assert out["declined"]["verdict"] == "check_residue" and "plan_id" not in out

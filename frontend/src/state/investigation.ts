@@ -19,7 +19,7 @@ export type Investigation = {
   confirmed: string[] // low-confidence figure settings the user has checked (the backend requires all of them)
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
-  declined: (Declined & { question: string }) | null // the question was turned away before planning
+  declined: (Declined & { question: string; followUp: boolean }) | null // turned away before planning, or a residue to pick
 }
 
 const empty: Investigation = {
@@ -88,10 +88,11 @@ export async function watchRecorded(runId: string, label: string) {
   }
 }
 
-/** A question; a follow-up also sends the selected pair, and the backend adds this session's last run. */
-export async function ask(question: string, dataset: string, followUp = false) {
+/** A question; a follow-up also sends the selected pair, and the backend adds this session's last run.
+ *  skipScope: "Ask anyway" after the scope check turned the question away. */
+export async function ask(question: string, dataset: string, followUp = false, skipScope = false) {
   closeStream?.()
-  retry = () => ask(question, dataset, followUp)
+  retry = () => ask(question, dataset, followUp, skipScope)
   if (await passcodeMissing()) {
     set({ ...empty, phase: 'idle', question, dataset, needPasscode: true })
     return
@@ -100,8 +101,8 @@ export async function ask(question: string, dataset: string, followUp = false) {
   const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
   set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
   try {
-    const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider })
-    if (proposal.declined) set({ phase: 'idle', declined: { ...proposal.declined, question } })
+    const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider, skipScope })
+    if (proposal.declined) set({ phase: 'idle', declined: { ...proposal.declined, question, followUp } })
     else set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
