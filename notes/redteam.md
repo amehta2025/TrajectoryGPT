@@ -37,7 +37,7 @@ The table rows below keep the original result. **FIXED →** in a row points her
 
 These ran locally against the production model, because the live site needs the passcode, which was not entered.
 
-Still open: items 9 and 12–15 in the ranked list (refresh mid-run, the double run from one plan id, SSE replays, heatmap selectors during a run, small items).
+Still open: items 9 and 13–15 in the ranked list (refresh mid-run, SSE replays, heatmap selectors during a run, small items). Item 12 (double run) was fixed in Round 2.
 
 ## A. Bogus questions
 
@@ -115,7 +115,7 @@ Still open: items 9 and 12–15 in the ranked list (refresh mid-run, the double 
 | Refresh mid-run | Back on the start screen with no way back to the run. The server finishes it anyway, so it costs money and the result is lost to the user. | FAIL | 🟡 |
 | Back mid-run | The app adds no history entries, so Back leaves the site; same loss (by code). | FAIL | 🟡 |
 | Same run in two tabs | Not possible: runs have no URL, and each tab has its own session (by code). | N/A | |
-| Double-click Run | UI guarded (button disabled while starting). But **the API starts a second run for the same plan_id** (two run ids returned), so a script or retry pays twice. | PARTIAL | 🟢 |
+| Double-click Run | UI guarded (button disabled while starting). But **the API starts a second run for the same plan_id** (two run ids returned), so a script or retry pays twice. | PARTIAL | 🟢 FIXED (Round 2) |
 | New question mid-run | The stream closes but the server run continues to the end and costs money (by code). | PARTIAL | 🟢 |
 | Change dataset or model after approving | The pickers exist only on the start screen. The heatmap's group selectors stay live during a run, so its chart can drift from the report's groups (by code). | PASS | 🟢 |
 | Cutoff 0, −4.5, 100 Å; window A = window B; robustness cutoff 50; stride 0; window past the end | All refused by `to_approved` with clear reasons, and the backend re-validates on `/runs`. The UI's display of these errors was not checked. | PASS | |
@@ -174,7 +174,7 @@ Items 1–8, 10 and 11 were fixed the same day (see the table at the top); 9 and
 9. 🟡 **Refresh or Back mid-run loses the run.** Keep the run id in `sessionStorage` (or the URL) and reattach on load.
 10. 🟡 **A password-protected PDF gives a 500.** Catch the decrypt error and say "This PDF is password-protected."
 11. 🟡 **LYS30–ASP84 ends needs_review.** A residue number in a caveat counts as a bare number, and the user isn't told that 30 is SER.
-12. 🟢 **The API starts two runs for one plan_id.** Consume the plan on start.
+12. 🟢 **The API starts two runs for one plan_id.** Consume the plan on start. **FIXED (Round 2):** a repeated or concurrent `POST /runs` returns the first run.
 13. 🟢 **SSE reconnect replays every event (duplicates).** Send `id:` and honour `after`.
 14. 🟢 **Heatmap group selectors stay live during a run.**
 15. 🟢 **Small items:**
@@ -206,7 +206,7 @@ Items 1–8, 10 and 11 were fixed the same day (see the table at the top); 9 and
 
 **Not tested in this round:** the step-through Next button during a recorded run without the passcode (covered by code review only); a real microphone; the production site, where live AI needs the passcode.
 
-### Round 2 fixes (2026-11-02, local; not yet deployed)
+### Round 2 fixes (2026-11-02, deployed)
 
 | # | Fix | Commit | How it was checked |
 |---|---|---|---|
@@ -214,7 +214,33 @@ Items 1–8, 10 and 11 were fixed the same day (see the table at the top); 9 and
 | 2 | **Residue typos.** A named residue that doesn't match the protein stops **before planning**, with no model call. The user picks from buttons: the same name at swapped digits first, then one digit off, dropped or added (closest first), then the residue as numbered. Each button re-asks the question with that residue written in. Lowercase or mixed case counts when joined ("lys30", "Ser-30"); "we met 3 times" is not read as MET3. | 3dd3e16 | "HSE143" offers HSE134 or GLU143; "ASP48" offers ASP84 or GLN48; "GLN106" offers GLN160, GLN16 or VAL106; "lys30" offers LYS40, LYS50 or SER30. In the local UI, HSE143 showed the choice, and HSE134 then planned normally. 7 new tests in `test_honesty.py` and 1 in `investigation.test.ts`. |
 | 3 | **Shared network.** Limits are counted per browser tab (a random `X-Session-Id` header, allowed through CORS) and per IP. <br>• **Wrong passcodes:** 5 per 10 min per tab, 50 per hour per IP. <br>• **Plans and runs:** 10 per tab, 40 per IP, per hour. <br>• **Figures:** 3 per tab, 15 per IP, per hour. <br>A request without a session id only meets the per-IP cap. | ae45485 | New tests: <br>• 5 judges on one IP each mistype twice, then log in and plan 3 questions: all accepted. <br>• One tab locked after 5 wrong passcodes; its neighbour logs in fine. <br>• The lock lifts after 10 min. <br>• 50 guesses from invented session ids lock the IP. <br>• Figures: 3 per tab, 15 per IP. <br>In the local UI, the passcode and plan calls went through with the new header (CORS preflight 200). |
 
+| 4 | **One plan, one run** (first-round item 12). Starting a run claims its plan under a per-plan lock. A repeated or concurrent `POST /runs` for the same plan returns the first run instead of starting and billing a second. A refused start (invalid edits, unconfirmed figure settings) leaves the plan free to start. | 176428c | Tests: 4 concurrent starts of one plan give one run id and one run; a refused start, then a good one, runs. In the production-model reruns below, starting each plan a second time returned the same run id 3 of 3. |
+
 **Still open:**
 - One-letter codes ("K30") and a letter O typed for a zero ("SER3O") are still not recognised (#4).
 - #5 and #6 are unchanged.
-- Tests: 308 backend fast and 25 frontend, all passing.
+- Tests: 310 backend fast and 25 frontend, all passing.
+
+### Round 2 deploy (2026-11-02, before the feature freeze)
+
+**Deploy:**
+- Pushed `main` (176428c), so Vercel rebuilt the frontend; then `modal deploy` for the backend.
+- `/health` on production: `ok`, live mode, `muse-spark-1.3`, verifier `muse-wonder-1.0`, passcode required, both providers, voice on.
+- The CORS preflight allows `X-Session-Id`.
+- A `/plan` call without the passcode is refused (401).
+
+**The 3 demo questions,** rerun on `muse-spark-1.3` with Muse Wonder through the backend's own plan → run → verify code at the deployed commit. As in the first round, they ran locally against the production model, because the live site needs the passcode, which was not entered.
+
+| Question | Result | Check | Time (with check) | Cost (run + check) |
+|---|---|---|---|---|
+| LID–CORE halves | 4 supported; HSE134–ASP118 and THR155–GLN160 robust 4.0–5.0 Å; GLY122–ARG119 and GLY122–ASP118 cutoff-sensitive (hold at 4.0, 4.5) | verified | 41 s | $0.053 + $0.034 |
+| SER30–ASP84 | "No: the SER30-ASP84 drop is within random variation among 53 tested pairs." | verified | 31 s | $0.048 + $0.032 |
+| NMP–CORE | "None: no NMP-CORE contact changes between halves among 53 tested pairs." | verified | 23 s | $0.032 + $0.034 |
+
+Total: $0.233. Each plan was started twice, and both calls returned the same run.
+
+**Noticed, not fixed (feature freeze):**
+- Production `/health` showed $0.00 spent today.
+- The Volume has no usage log or saved run after Oct 31. This is consistent with no live AI work on the deployed site since then, since all testing ran locally.
+- But the usage log is committed to the Volume only when a run finishes. So the cost of plans that never ran is lost on a redeploy or container restart, and the daily budget can undercount by that amount.
+- Low risk: plans cost about $0.01 each, and the per-session and per-IP limits still apply.
