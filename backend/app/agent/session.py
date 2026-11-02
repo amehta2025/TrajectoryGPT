@@ -179,28 +179,37 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
 
     A figure plan runs only once the user has confirmed every low-confidence extracted setting (SPEC §4:
     consequential choices need human approval, enforced here rather than in the prompt).
+
+    One plan starts one run: a repeated or concurrent call (a retry, a double click, a script) gets the run
+    the first call started, with its edits, and is never billed twice (red-team: double run from one plan).
     """
     from app.agent.figure import low_confidence
     with _lock:
         stored = PLANS.get(plan_id)
+        if stored is not None:
+            plan_lock = stored.setdefault("lock", threading.Lock())
     if stored is None:
         raise KeyError(f"unknown plan {plan_id}")
-    if stored.get("figure"):
-        missing = [n for n in low_confidence(stored["figure"]["spec"]) if n not in (confirmed_fields or [])]
-        if missing:
-            raise PlanInvalid([f"Confirm these low-confidence settings read from the figure first: {', '.join(missing)}"], None)
-    plan = {**stored["plan"], **{k: v for k, v in edits.items() if k in EDITABLE}}
-    if "steps" in edits:  # the user may drop steps, never add tools the planner did not propose
-        proposed = {s["tool"] for s in stored["plan"]["steps"]}
-        plan["steps"] = [s for s in edits["steps"] if s.get("tool") in proposed]
-    approved = to_approved(plan)  # raises PlanInvalid with the problems
-    run = new_run(stored["question"], approved)
-    run.plan_usage = stored["usage"]
-    run.figure = stored.get("figure")
-    run.proposal = stored["plan"]
-    handle = RunHandle(run, step_through=step_through)
-    with _lock:
-        RUNS[run.run_id] = handle
+    with plan_lock:
+        if stored.get("run_id"):
+            return stored["run_id"]
+        if stored.get("figure"):
+            missing = [n for n in low_confidence(stored["figure"]["spec"]) if n not in (confirmed_fields or [])]
+            if missing:
+                raise PlanInvalid([f"Confirm these low-confidence settings read from the figure first: {', '.join(missing)}"], None)
+        plan = {**stored["plan"], **{k: v for k, v in edits.items() if k in EDITABLE}}
+        if "steps" in edits:  # the user may drop steps, never add tools the planner did not propose
+            proposed = {s["tool"] for s in stored["plan"]["steps"]}
+            plan["steps"] = [s for s in edits["steps"] if s.get("tool") in proposed]
+        approved = to_approved(plan)  # raises PlanInvalid with the problems; the plan stays unclaimed
+        run = new_run(stored["question"], approved)
+        run.plan_usage = stored["usage"]
+        run.figure = stored.get("figure")
+        run.proposal = stored["plan"]
+        handle = RunHandle(run, step_through=step_through)
+        with _lock:
+            RUNS[run.run_id] = handle
+        stored["run_id"] = run.run_id
     remember(stored.get("session_id"), last_run_id=run.run_id)
     llm: LLM = stored["llm"]
 

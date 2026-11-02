@@ -54,6 +54,32 @@ def test_edits_are_validated():
     assert c.post("/runs", json={"plan_id": "nope"}).status_code == 404
 
 
+def test_one_plan_starts_one_run():
+    """A retry, double click or script posting the same plan gets the first run back, not a second paid run."""
+    import threading
+    c = TestClient(app)
+    pid = store_plan(GOOD)
+    before = len(session.RUNS)
+    ids = []
+    workers = [threading.Thread(target=lambda: ids.append(c.post("/runs", json={"plan_id": pid}).json()["run_id"]))
+               for _ in range(4)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join()
+    assert len(set(ids)) == 1 and len(session.RUNS) == before + 1
+    list(events(c, ids[0]))
+    assert c.post("/runs", json={"plan_id": pid, "edits": {"cutoff": 5.0}}).json()["run_id"] == ids[0]
+
+
+def test_a_refused_start_leaves_the_plan_unclaimed():
+    c = TestClient(app)
+    pid = store_plan(GOOD)
+    assert c.post("/runs", json={"plan_id": pid, "edits": {"cutoff": 12}}).status_code == 422
+    rid = c.post("/runs", json={"plan_id": pid, "edits": {}}).json()["run_id"]
+    assert list(events(c, rid))[-1]["type"] == "run_finished"
+
+
 def test_step_through_pauses_until_next():
     c = TestClient(app)
     rid = c.post("/runs", json={"plan_id": store_plan(GOOD), "step_through": True}).json()["run_id"]
