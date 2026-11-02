@@ -203,17 +203,57 @@ def test_passcode_not_required_when_unset_locally(monkeypatch):
     assert TestClient(app).get("/health").json()["passcode_required"] is False
 
 
-# ---------- wrong passcodes and figure uploads are limited per IP (red-team F2, F7) ----------
+# ---------- wrong passcodes and figure uploads: per browser session, with a per-IP backstop (F2, F7, Round 2) ----------
 
-def test_wrong_passcodes_are_limited_on_every_endpoint(monkeypatch):
+def tab(sid: str, code: str | None = None) -> dict:
+    return {"X-Session-Id": f"session-{sid}", **({"X-Demo-Passcode": code} if code else {})}
+
+
+def test_wrong_passcodes_lock_only_that_browser(monkeypatch):
     monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
     monkeypatch.delenv("APP_MODE", raising=False)
     c = TestClient(app)
-    for i in range(10):
-        assert c.post("/auth/check", headers={"X-Demo-Passcode": f"guess{i}"}).status_code == 401
-    r = c.post("/plan", json={"question": "q"}, headers={"X-Demo-Passcode": "guess-on-another-endpoint"})
-    assert r.status_code == 429 and "wrong passcodes" in r.json()["detail"]
-    assert c.post("/auth/check", headers={"X-Demo-Passcode": "s3cret"}).status_code == 429  # even the right one, for now
+    for i in range(5):
+        assert c.post("/auth/check", headers=tab("aaaa1111", f"guess{i}")).status_code == 401
+    r = c.post("/plan", json={"question": "q"}, headers=tab("aaaa1111", "guess-on-another-endpoint"))
+    assert r.status_code == 429 and "wrong passcodes" in r.json()["detail"] and int(r.headers["retry-after"]) <= 601
+    assert c.post("/auth/check", headers=tab("aaaa1111", "s3cret")).status_code == 429  # this tab waits 10 min
+    assert c.post("/auth/check", headers=tab("bbbb2222", "s3cret")).status_code == 200  # the judge next to them doesn't
+
+
+def test_wrong_passcodes_from_one_network_are_capped(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
+    monkeypatch.delenv("APP_MODE", raising=False)
+    c = TestClient(app)
+    for i in range(50):  # a script inventing a new session id per guess
+        assert c.post("/auth/check", headers=tab(f"{i:08d}", f"guess{i}")).status_code == 401
+    assert c.post("/auth/check", headers=tab("fresh000", "s3cret")).status_code == 429
+
+
+def test_session_lock_lifts_after_ten_minutes():
+    now = [0.0]
+    lim = ratelimit.RateLimiter(clock=lambda: now[0])
+    for _ in range(5):
+        lim.check("passcode_fail", "1.1.1.1", "s1")
+    assert lim.blocked("passcode_fail", "1.1.1.1", "s1") == 601
+    assert lim.blocked("passcode_fail", "1.1.1.1", "s2") is None
+    now[0] = 600.0
+    assert lim.blocked("passcode_fail", "1.1.1.1", "s1") is None
+
+
+def test_five_judges_behind_one_network(monkeypatch):
+    """Round 2: each mistypes the passcode twice, then plans three questions; nobody is locked out."""
+    from app.agent import session
+    monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
+    monkeypatch.delenv("APP_MODE", raising=False)
+    monkeypatch.setattr(session, "propose_plan", lambda *a, **k: {"plan_id": "stub"})
+    c = TestClient(app)
+    for j in range(5):
+        for typo in ("s3crte", "secret"):
+            assert c.post("/auth/check", headers=tab(f"judge00{j}", typo)).status_code == 401
+        assert c.post("/auth/check", headers=tab(f"judge00{j}", "s3cret")).status_code == 200
+        for _ in range(3):
+            assert c.post("/plan", json={"question": "q"}, headers=tab(f"judge00{j}", "s3cret")).status_code == 200
 
 
 def test_no_passcode_yet_is_not_a_guess(monkeypatch):
@@ -229,6 +269,10 @@ def test_figure_uploads_have_their_own_lower_limit(monkeypatch):
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     monkeypatch.setattr(session, "propose_figure_plan", lambda *a, **k: {"plan_id": "stub"})
     c = TestClient(app)
-    codes = [c.post("/figure/plan", json={"files": []}).status_code for _ in range(6)]
-    assert codes == [200] * 5 + [429]
-    assert c.post("/plan", json={"question": "q"}).status_code != 429  # questions keep their own budget
+    codes = [c.post("/figure/plan", json={"files": []}, headers=tab("cccc3333")).status_code for _ in range(4)]
+    assert codes == [200] * 3 + [429]
+    assert c.post("/figure/plan", json={"files": []}, headers=tab("dddd4444")).status_code == 200  # another tab
+    assert c.post("/plan", json={"question": "q"}, headers=tab("cccc3333")).status_code != 429  # questions: own budget
+    for i in range(11):  # 3 + 1 so far; the network's 15 run out whatever the session id
+        c.post("/figure/plan", json={"files": []}, headers=tab(f"{i:08d}"))
+    assert c.post("/figure/plan", json={"files": []}, headers=tab("eeee5555")).status_code == 429

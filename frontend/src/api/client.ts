@@ -345,7 +345,8 @@ export class UnsupportedFigure extends Error {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(new URL(path, BASE), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Demo-Passcode': getPasscode() },
+    // The session id keys rate limits per tab, so judges sharing one network keep separate limits.
+    headers: { 'Content-Type': 'application/json', 'X-Demo-Passcode': getPasscode(), 'X-Session-Id': sessionId() },
     body: JSON.stringify(body),
   })
   if (r.status === 401) throw new PasscodeRequired('Demo passcode required')

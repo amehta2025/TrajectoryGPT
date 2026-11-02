@@ -25,6 +25,7 @@ from app.science.loader import TRAJ_LOCK, group_selection, load_universe, pbc_mo
 from app.science.native_contacts import native_contacts
 from app.science.structure import frames_float32, playback_stride, structure_pdb, viewer_atoms
 
+SESSION_HEADER = "X-Session-Id"  # the tab's random id; keys rate limits per browser session
 # Deployed: only the frontend domain(s) in ALLOWED_ORIGINS (comma-separated). Unset: local dev server.
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()] or [
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -36,7 +37,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", PASSCODE_HEADER],
+    allow_headers=["Content-Type", PASSCODE_HEADER, SESSION_HEADER],
     expose_headers=["X-Frames", "X-N-Atoms"],
 )
 
@@ -228,31 +229,38 @@ def _ip(request: Request) -> str:
     return client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for"))
 
 
+def _session(request: Request) -> str | None:
+    """The tab's random session id (X-Session-Id), used only to key rate limits; None if absent or malformed."""
+    sid = request.headers.get(SESSION_HEADER)
+    return sid if sid and SESSION_ID.fullmatch(sid) else None
+
+
 def require_passcode(request: Request, x_demo_passcode: str | None = Header(None)):
     """Live AI work needs the passcode; replay mode calls no model, so recorded runs are open to everyone.
-    Wrong passcodes are limited per IP (10 an hour, on every endpoint), so guessing is slow (red-team F2)."""
+    Wrong passcodes are limited per browser session (5 per 10 min) and per IP (50 an hour), so guessing is
+    slow (red-team F2) but one judge's typos don't lock out others on the same network (Round 2)."""
     if replay.mode()[0] == "replay":
         return
-    ip = _ip(request)
-    wait = LIMITER.blocked("passcode_fail", ip)
+    ip, sid = _ip(request), _session(request)
+    wait = LIMITER.blocked("passcode_fail", ip, sid)
     if wait:
         raise HTTPException(429, f"Too many wrong passcodes. Try again in about {max(1, round(wait / 60))} min.",
                             headers={"Retry-After": str(wait)})
     if not passcode_ok(x_demo_passcode):
         if x_demo_passcode:  # an empty header is "not entered yet", not a guess
             try:
-                LIMITER.check("passcode_fail", ip)
+                LIMITER.check("passcode_fail", ip, sid)
             except RateLimited:
                 pass
         raise HTTPException(401, "Demo passcode required for AI investigations.")
 
 
 def rate_limit(kind: str):
-    """Per-IP hourly limit (app/safety/ratelimit.py), keyed on the real client IP."""
+    """Per-session and per-IP limits (app/safety/ratelimit.py), keyed on the real client IP."""
     def dep(request: Request):
         ip = _ip(request)
         try:
-            LIMITER.check(kind, ip)
+            LIMITER.check(kind, ip, _session(request))
         except RateLimited as e:
             raise HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after_s)}) from None
     return dep
