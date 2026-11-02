@@ -35,16 +35,26 @@ function Structure({ meta }: { meta: Metadata }) {
   )
 }
 
+const WAKING_AFTER_MS = 2000
+
 export default function App() {
   const { dataset } = useSelection()
   const inv = useInvestigation()
   const [datasets, setDatasets] = useState<DatasetInfo[]>([])
   const [meta, setMeta] = useState<Metadata | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [waking, setWaking] = useState(false)
 
   useEffect(() => {
     reset() // never show a previous result or error on load (also after a hot reload in development)
-    api.datasets().then(setDatasets, (e) => setError(`Backend unreachable: ${(e as Error).message}`))
+    // The backend scales to zero when idle; a cold start took about 6 s on Modal (measured 2026-11-02).
+    const slow = window.setTimeout(() => setWaking(true), WAKING_AFTER_MS)
+    api.datasets()
+      .then(setDatasets, (e) => setError(`Backend unreachable: ${(e as Error).message}`))
+      .finally(() => {
+        window.clearTimeout(slow)
+        setWaking(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -71,6 +81,9 @@ export default function App() {
           {asking && <button className="new-q" onClick={reset}>New question</button>}
         </div>
       </header>
+      {waking && !error && (
+        <div className="waking banner" role="status">Starting the server. After a quiet spell this takes a few seconds.</div>
+      )}
       {error && <div className="error banner">{error}</div>}
       {inv.error && !asking && !inv.needPasscode && <div className="error banner">{inv.error}</div>}
 
