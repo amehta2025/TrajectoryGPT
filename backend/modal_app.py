@@ -10,6 +10,7 @@ Warm:    cd backend && modal run modal_app.py::warm   (downloads the dataset, fi
 Export:  cd backend && modal run modal_app.py::verify_export --run-id <id>
          (runs reproduce_<id>.py in a clean Modal Sandbox; the run is read locally or from the Volume)
 CORS:    set ALLOWED_ORIGINS (comma-separated, e.g. the Vercel URL) in your shell before deploying.
+Replay:  set APP_MODE=replay before deploying to turn the LLM off (kill switch, SPEC §12); unset = live.
 Secrets: trajectorygpt-meta (META_API_KEY) and trajectorygpt-passcode (DEMO_PASSCODE) must exist in Modal.
          The deploy always uses the Standard model (users upload figures; Contributor mode trains on inputs).
 """
@@ -44,7 +45,7 @@ API_ENV = {
     "META_API_BASE_URL": "https://api.meta.ai/v1",
     "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "3"),
     "REQUIRE_PASSCODE": "1",  # fail closed if the passcode secret is empty
-    "APP_MODE": "live",
+    "APP_MODE": os.environ.get("APP_MODE", "live"),  # kill switch: APP_MODE=replay modal deploy modal_app.py
     "INVESTIGATIONS_DIR": "/cache/investigations",  # runs persist on the Volume (replay curation, restarts)
     "SANDBOX_ENABLED": "1",  # the report's "check in a clean sandbox" button (app/provenance/sandbox.py)
 }
