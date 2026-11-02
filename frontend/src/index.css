@@ -410,3 +410,4 @@ button.science-toggle {
 .voice-hint kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 4px; }
 .start-art .voice-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; }
 .viewer-card .card-head .voice-hint { margin-left: 10px; margin-right: auto; }
+.heatmap-hint { margin: 6px 0 0; }

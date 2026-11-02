@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Data, Shape } from 'plotly.js'
 import { api, type Contacts, type Metadata } from '../api/client'
 import { setSelection, useSelection } from '../state/selection'
+import { ask, useInvestigation } from '../state/investigation'
 import { parseResidueKey, residueLabel } from '../state/residueKey'
 import { DOMAIN_COLORS, EXCLUDED_GREY } from '../theme'
 import { Plot, axisStyle, baseLayout } from './Plot'
@@ -32,6 +33,7 @@ function activeSpan(c: Contacts, axis: 0 | 1, extra: number[]): [number, number]
 
 export function Heatmap({ meta }: { meta: Metadata }) {
   const { dataset, groupA, groupB, pair, cutoff } = useSelection()
+  const { phase } = useInvestigation()
   const [data, setData] = useState<Contacts | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -143,6 +145,18 @@ export function Heatmap({ meta }: { meta: Metadata }) {
           />
         )}
       </div>
+      {pair && !pair.excluded && phase === 'finished' && <FollowUpHint label={`${residueLabel(pair.keyA)}–${residueLabel(pair.keyB)}`} dataset={dataset} />}
     </section>
+  )
+}
+
+/** After a cell click: suggest a follow-up about that pair. It goes through plan approval like any question. */
+function FollowUpHint({ label, dataset }: { label: string; dataset: string }) {
+  const question = `Does the change in the ${label} contact persist?`
+  return (
+    <p className="heatmap-hint small">
+      <span className="muted">{label} selected · Ask:</span>{' '}
+      <button className="link" onClick={() => void ask(question, dataset, true)}>{question}</button>
+    </p>
   )
 }
