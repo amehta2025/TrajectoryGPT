@@ -14,7 +14,8 @@ import time
 from collections import defaultdict, deque
 
 WINDOW_S = 3600.0
-DEFAULT_LIMITS = {"plan": 10, "run": 10, "sandbox": 3, "voice": 30, "replay": 60}  # per IP per hour
+# per IP per hour. "figure": figure uploads (the costliest plan). "passcode_fail": wrong passcodes (red-team F2).
+DEFAULT_LIMITS = {"plan": 10, "figure": 5, "run": 10, "sandbox": 3, "voice": 30, "replay": 60, "passcode_fail": 10}
 
 
 class RateLimited(Exception):
@@ -48,6 +49,15 @@ class RateLimiter:
         self.clock = clock
         self.hits: dict[tuple[str, str], deque] = defaultdict(deque)
         self.lock = threading.Lock()
+
+    def blocked(self, kind: str, ip: str) -> int | None:
+        """Seconds to wait if this IP is at the limit for this kind, without counting a request; else None."""
+        now, limit = self.clock(), limit_for(kind)
+        with self.lock:
+            q = self.hits.get((kind, ip))
+            while q and now - q[0] >= WINDOW_S:
+                q.popleft()
+            return int(WINDOW_S - (now - q[0])) + 1 if q and len(q) >= limit else None
 
     def check(self, kind: str, ip: str) -> None:
         """Count one request; raise RateLimited when this IP is over the hourly limit for this kind."""

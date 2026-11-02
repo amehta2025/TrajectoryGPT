@@ -181,8 +181,10 @@ export async function submitPasscode(code: string): Promise<boolean> {
   setPasscode(code.trim())
   try {
     await api.checkPasscode()
-  } catch {
-    set({ needPasscode: true, error: 'That passcode was not accepted.' })
+  } catch (e) {
+    // After 10 wrong passcodes in an hour the server says how long to wait (red-team F2).
+    const msg = (e as Error).message
+    set({ needPasscode: true, error: /wrong passcodes/.test(msg) ? msg : 'That passcode was not accepted.' })
     return false
   }
   set({ needPasscode: false, error: null })

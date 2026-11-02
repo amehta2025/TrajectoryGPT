@@ -224,18 +224,33 @@ def native_contacts_endpoint(dataset: str, selection: str = "name CA", radius: f
 # Starting AI work needs the demo passcode and budget left today (SPEC §12). Reading a run (GET, by its
 # random id) and the science endpoints above stay public.
 
-def require_passcode(x_demo_passcode: str | None = Header(None)):
-    """Live AI work needs the passcode; replay mode calls no model, so recorded runs are open to everyone."""
+def _ip(request: Request) -> str:
+    return client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for"))
+
+
+def require_passcode(request: Request, x_demo_passcode: str | None = Header(None)):
+    """Live AI work needs the passcode; replay mode calls no model, so recorded runs are open to everyone.
+    Wrong passcodes are limited per IP (10 an hour, on every endpoint), so guessing is slow (red-team F2)."""
     if replay.mode()[0] == "replay":
         return
+    ip = _ip(request)
+    wait = LIMITER.blocked("passcode_fail", ip)
+    if wait:
+        raise HTTPException(429, f"Too many wrong passcodes. Try again in about {max(1, round(wait / 60))} min.",
+                            headers={"Retry-After": str(wait)})
     if not passcode_ok(x_demo_passcode):
+        if x_demo_passcode:  # an empty header is "not entered yet", not a guess
+            try:
+                LIMITER.check("passcode_fail", ip)
+            except RateLimited:
+                pass
         raise HTTPException(401, "Demo passcode required for AI investigations.")
 
 
 def rate_limit(kind: str):
     """Per-IP hourly limit (app/safety/ratelimit.py), keyed on the real client IP."""
     def dep(request: Request):
-        ip = client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for"))
+        ip = _ip(request)
         try:
             LIMITER.check(kind, ip)
         except RateLimited as e:
@@ -305,7 +320,7 @@ SESSION_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 PAIR_LABEL = re.compile(r"[A-Z]{3}\d{1,4}-[A-Z]{3}\d{1,4}")
 
 
-@app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
+@app.post("/figure/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("figure"))])
 def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibrium"), note: str = Body(""),
                 provider: str | None = Body(None)):
     """Figure mode: 1-2 files (PNG/JPEG figure, PDF methods), base64, at most 10 MB each."""
@@ -374,7 +389,7 @@ def replay_plan(run_id: str):
 
 
 @app.post("/runs", dependencies=[Depends(rate_limit("run"))])
-def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
+def start_run(request: Request, plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
               confirmed_fields: list[str] = Body([]), plant_overclaim: bool = Body(False),
               x_demo_passcode: str | None = Header(None)):
     if plan_id.startswith("replay:"):  # a recorded run: no model is called and no passcode needed; edits do not apply
@@ -382,7 +397,7 @@ def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bo
             return {"run_id": replay.start_playback(plan_id, step_through)}
         except KeyError as e:
             raise HTTPException(404, str(e)) from None
-    require_passcode(x_demo_passcode)
+    require_passcode(request, x_demo_passcode)
     require_budget()
     try:
         return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields, plant_overclaim)}
@@ -482,9 +497,10 @@ def sandbox_status(run_id: str):
 
 
 @app.post("/runs/{run_id}/next")
-def run_next(run_id: str, step_through: bool | None = Body(None, embed=True), x_demo_passcode: str | None = Header(None)):
+def run_next(run_id: str, request: Request, step_through: bool | None = Body(None, embed=True),
+             x_demo_passcode: str | None = Header(None)):
     if not run_id.startswith("replay-"):  # stepping through a recorded playback needs no passcode
-        require_passcode(x_demo_passcode)
+        require_passcode(request, x_demo_passcode)
     _handle(run_id)
     session.next_turn(run_id, step_through)
     return {"ok": True}

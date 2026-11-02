@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 import openai
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
 from app.agent import prompts
 from app.agent.llm import EFFORT, LLM
@@ -24,6 +24,7 @@ from app.config import CACHE_DIR, load_config
 
 MAX_BYTES = 10 * 1024 * 1024
 MAX_FILES = 2
+MAX_PDF_PAGES = 30  # a methods section fits; a 200-page PDF would cost ~146k tokens (red-team F7)
 MAGIC = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff", "application/pdf": b"%PDF-"}
 FIGURES_DIR = CACHE_DIR / "figures"  # on the Modal Volume when deployed, so ReproduceView survives restarts
 PDF_TEXT_LIMIT = 40_000  # characters of fallback text sent to the model
@@ -86,7 +87,29 @@ def decode_upload(f: dict) -> tuple[str, str, bytes]:
         raise UploadRejected(f"{name}: larger than 10 MB")
     if not raw.startswith(MAGIC[mime]):
         raise UploadRejected(f"{name}: the content is not a {mime.split('/')[1].upper()} file")
+    if mime == "application/pdf":
+        raw = _usable_pdf(name, raw)
     return name, mime, raw
+
+
+def _usable_pdf(name: str, raw: bytes) -> bytes:
+    """Refuse password-protected or unreadable PDFs before any model call; keep the first MAX_PDF_PAGES pages."""
+    try:
+        reader = PdfReader(io.BytesIO(raw))
+        if reader.is_encrypted:
+            raise UploadRejected(f"{name}: this PDF is password-protected. Remove the password and try again.")
+        if len(reader.pages) <= MAX_PDF_PAGES:
+            return raw
+        writer = PdfWriter()
+        for page in reader.pages[:MAX_PDF_PAGES]:
+            writer.add_page(page)
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
+    except UploadRejected:
+        raise
+    except Exception:  # pypdf raises several error types for damaged files
+        raise UploadRejected(f"{name}: this PDF could not be read. Try exporting it again.") from None
 
 
 def pdf_text(raw: bytes) -> str:

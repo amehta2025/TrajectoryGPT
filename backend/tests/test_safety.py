@@ -201,3 +201,34 @@ def test_passcode_not_required_when_unset_locally(monkeypatch):
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     monkeypatch.delenv("REQUIRE_PASSCODE", raising=False)
     assert TestClient(app).get("/health").json()["passcode_required"] is False
+
+
+# ---------- wrong passcodes and figure uploads are limited per IP (red-team F2, F7) ----------
+
+def test_wrong_passcodes_are_limited_on_every_endpoint(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
+    monkeypatch.delenv("APP_MODE", raising=False)
+    c = TestClient(app)
+    for i in range(10):
+        assert c.post("/auth/check", headers={"X-Demo-Passcode": f"guess{i}"}).status_code == 401
+    r = c.post("/plan", json={"question": "q"}, headers={"X-Demo-Passcode": "guess-on-another-endpoint"})
+    assert r.status_code == 429 and "wrong passcodes" in r.json()["detail"]
+    assert c.post("/auth/check", headers={"X-Demo-Passcode": "s3cret"}).status_code == 429  # even the right one, for now
+
+
+def test_no_passcode_yet_is_not_a_guess(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
+    c = TestClient(app)
+    for _ in range(15):
+        assert c.post("/plan", json={"question": "q"}).status_code == 401  # empty header: the prompt, not a guess
+    assert c.post("/auth/check", headers={"X-Demo-Passcode": "s3cret"}).status_code == 200
+
+
+def test_figure_uploads_have_their_own_lower_limit(monkeypatch):
+    from app.agent import session
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    monkeypatch.setattr(session, "propose_figure_plan", lambda *a, **k: {"plan_id": "stub"})
+    c = TestClient(app)
+    codes = [c.post("/figure/plan", json={"files": []}).status_code for _ in range(6)]
+    assert codes == [200] * 5 + [429]
+    assert c.post("/plan", json={"question": "q"}).status_code != 429  # questions keep their own budget

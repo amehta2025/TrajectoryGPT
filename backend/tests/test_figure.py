@@ -209,3 +209,42 @@ def test_schema_asks_whether_it_is_a_figure_and_counts_bar_charts_as_contact_map
     from app.agent import prompts
     assert "is_figure" in figure.spec_schema()["schema"]["required"]
     assert "bar chart" in prompts.FIGURE_SYSTEM
+
+
+# ---------- PDFs: password-protected or damaged files are refused; long ones are trimmed (red-team C6, F7) ----------
+
+def _pdf(pages=1, password=None) -> bytes:
+    import io
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    for _ in range(pages):
+        w.add_blank_page(width=200, height=200)
+    if password:
+        w.encrypt(password)
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+def _upload(raw: bytes) -> dict:
+    import base64
+    return {"filename": "methods.pdf", "mime": "application/pdf", "data": base64.b64encode(raw).decode()}
+
+
+def test_password_protected_pdf_is_refused_before_any_model_call():
+    with pytest.raises(figure.UploadRejected, match="password-protected"):
+        figure.decode_upload(_upload(_pdf(password="secret")))
+
+
+def test_damaged_pdf_is_refused():
+    with pytest.raises(figure.UploadRejected, match="could not be read"):
+        figure.decode_upload(_upload(b"%PDF-1.7 this is not really a pdf"))
+
+
+def test_long_pdf_keeps_only_the_first_pages():
+    import io
+    from pypdf import PdfReader
+    _, _, raw = figure.decode_upload(_upload(_pdf(pages=45)))
+    assert len(PdfReader(io.BytesIO(raw)).pages) == figure.MAX_PDF_PAGES
+    _, _, short = figure.decode_upload(_upload(_pdf(pages=3)))
+    assert len(PdfReader(io.BytesIO(short)).pages) == 3
