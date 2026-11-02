@@ -25,6 +25,7 @@ export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | nu
     case 'cutoff_sensitivity': return 'Re-check each change at several distance thresholds'
     case 'contact_difference_map': return `Map which ${pair} contacts change`
     case 'residue_flexibility': return 'Measure how much each part of the protein moves'
+    case 'domain_opening': return 'Track how open the domain is over time'
     case 'reproduction_check': return 'Compare with the original published result'
     case 'submit_report': return 'Write the report'
     default: return 'Run an analysis'

@@ -36,13 +36,14 @@ def make_run(monkeypatch) -> dict:
     for mod in (tools, cs, report):
         monkeypatch.setattr(mod, "dataset_config", lambda ds: fake[ds])
     steps = [{"tool": t, "rationale": ""} for t in ("calculate_contacts", "compare_intervals", "cutoff_sensitivity",
-                                                     "native_contacts", "submit_report")]
+                                                     "native_contacts", "domain_opening", "submit_report")]
     plan = ApprovedPlan(DS, "NMP", "LID", 4.5, [0, 49], [49, 98], steps=steps)
     script = [("calculate_contacts", {"window": "all"}),
               ("compare_intervals", {}),
               ("cutoff_sensitivity", {}),
               ("native_contacts", {"selection": "name CA", "radius": 8.0}),
               ("distance_over_time", {"pair": PAIR, "window": "all"}),
+              ("domain_opening", {"domain": "LID", "window": "all"}),
               ("record_finding", {"text": "They touch in {{r1.any_contact_freq}} of frames; {{r2.n_tested}} pairs tested.",
                                   "plain": "They touch in {{r1.any_contact_freq|pct}} of frames.",
                                   "evidence_ids": ["r1"], "claim": "descriptive"}),
@@ -59,7 +60,7 @@ def test_script_is_generated_from_the_template(monkeypatch):
     assert "@@" not in src and export.script_name(run["run_id"]) == f"reproduce_{run['run_id']}.py"
     payload = export.run_payload(run)
     assert [c["tool"] for c in payload["calls"]] == ["calculate_contacts", "compare_intervals", "cutoff_sensitivity",
-                                                     "native_contacts", "distance_over_time"]
+                                                     "native_contacts", "distance_over_time", "domain_opening"]
     assert payload["cited"] == ["r1.any_contact_freq", "r2.n_tested"]
     assert payload["dataset_hashes"] and payload["seed"] == 0
 

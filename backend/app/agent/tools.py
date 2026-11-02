@@ -25,6 +25,7 @@ from app.science import stats
 from app.science.contacts import (CONTACT_DEFINITION, calculate_contacts, contact_difference_map, dataset_hashes,
                                   validate_cutoff, validate_window)
 from app.science.distances import distance_over_time
+from app.science.domain_opening import REFERENCE as OPENING_REFERENCE, domain_opening
 from app.science.flexibility import residue_flexibility
 from app.science.loader import TRAJ_LOCK, load_universe
 from app.science.native_contacts import native_contacts, reproduction_check
@@ -260,6 +261,30 @@ def _residue_flexibility(plan, args):
     return data, summary, values, {}
 
 
+def _domain_opening(plan, args):
+    """COM distance of an approved mobile group to CORE per frame; descriptive (no statistical test)."""
+    mobile = [g for g in (plan.group_a, plan.group_b) if g != OPENING_REFERENCE]
+    domain = args.get("domain") or (mobile[0] if mobile else None)
+    if domain not in mobile:
+        raise Refused(f"domain must be one of the approved groups other than {OPENING_REFERENCE}: {mobile}")
+    start, stop = _window(plan, args.get("window") or "all")
+    with TRAJ_LOCK:
+        r = domain_opening(plan.dataset, domain, start, stop, plan.stride)
+    d, frames = r["distance"], r["frames"]
+    i_min, i_max = int(np.argmin(d)), int(np.argmax(d))
+    name = f"{domain}-{OPENING_REFERENCE}"
+    values = {f"{name}.min_distance": _v(d.min(), "distance"), f"{name}.median_distance": _v(np.median(d), "distance"),
+              f"{name}.max_distance": _v(d.max(), "distance"), f"{name}.first_distance": _v(d[0], "distance"),
+              f"{name}.last_distance": _v(d[-1], "distance"),
+              f"{name}.frame_of_min": _v(int(frames[i_min]), "frame"), f"{name}.frame_of_max": _v(int(frames[i_max]), "frame")}
+    summary = {"domain": domain, "reference": OPENING_REFERENCE, "window": [start, stop], "n_frames": r["n_frames"],
+               "first_A": _r(d[0], 2), "last_A": _r(d[-1], 2), "min_A": _r(d.min(), 2), "median_A": _r(np.median(d), 2),
+               "max_A": _r(d.max(), 2), "frame_of_min": int(frames[i_min]), "frame_of_max": int(frames[i_max]),
+               "note": r["note"] + " Descriptive only: not statistically tested."}
+    data = {**r, "window": {"start": start, "stop": stop, "stride": plan.stride}}
+    return data, summary, values, {}
+
+
 def _distance_over_time(plan, args):
     ka, kb = resolve_pair(plan, args.get("pair"))
     start, stop = _window(plan, args.get("window") or "all")
@@ -415,6 +440,7 @@ SCHEMAS = [
     _tool("cutoff_sensitivity", "Rerun the comparison at every approved robustness cutoff. A pair is robust only if supported at every cutoff with the same sign; otherwise cutoff-sensitive.", {"pairs": {"type": "array", "items": PAIR, "description": "Pairs to judge; default: every pair supported at any cutoff."}}),
     _tool("contact_difference_map", "Contact-frequency change per residue pair, window B minus window A, for the approved groups and cutoff. Raw differences; pairs are marked supported only if compare_intervals already ran on the same windows. Not statistically tested on a stats-invalid dataset.", {}),
     _tool("residue_flexibility", "Per-residue C-alpha RMSF over an approved window, after superposing CORE C-alphas. On a biased path this is a path RMSF, not equilibrium flexibility.", {"window": WINDOW}),
+    _tool("domain_opening", "How open a mobile domain (LID or NMP) is in each frame: the centre-of-mass distance between it and CORE, in Å. Descriptive, not statistically tested. The domain must be one of the approved groups.", {"domain": {"type": "string", "description": "LID or NMP; must be an approved group. Default: the approved group that is not CORE."}, "window": WINDOW}),
     _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS), "description": "Atoms used: 'name CA' (default, as in the User Guide) or 'heavy atoms'."}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
     _tool("reproduction_check", "Exact-reproduction check: run the published MDAnalysis User Guide code (contacts.q1q2) and compare it with our native_contacts (reference frames first and last); reports the largest difference and whether it is within tolerance.", {"selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS)}, "radius": {"type": "number"}}),
     _tool("update_checklist", "Mark a plan item done, in progress or skipped (a skip needs a reason in note).", {"item": {"type": "integer", "description": "1-based plan item"}, "status": {"type": "string", "enum": ["in_progress", "done", "skipped"]}, "note": {"type": "string"}}, ["item", "status"]),
@@ -455,6 +481,7 @@ SCIENCE: dict[str, Callable] = {
     "contact_statistics": _contact_statistics, "cutoff_sensitivity": _cutoff_sensitivity,
     "native_contacts": _native_contacts, "contact_difference_map": _contact_difference_map,
     "residue_flexibility": _residue_flexibility, "reproduction_check": _reproduction_check,
+    "domain_opening": _domain_opening,
 }
 STATS_TOOLS = {"compare_intervals", "contact_statistics", "cutoff_sensitivity"}
 NEEDS_STATE = {"contact_difference_map"}  # reads earlier results in the run (compare_intervals) to mark supported pairs

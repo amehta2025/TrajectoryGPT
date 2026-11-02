@@ -21,6 +21,8 @@ Rules:
   -> calculate_contacts; a difference contact map -> contact_difference_map, after compare_intervals on the same
   windows where statistics are allowed; a distance trace -> distance_over_time; an RMSF plot ->
   residue_flexibility); its numbers are not expected to match.
+- A question about how open the LID or NMP domain is, or how it moves relative to CORE over time, uses
+  domain_opening with that domain and CORE as the groups.
 - A general question ("explain this simulation", "what happens here?") gets get_metadata plus one or two
   descriptive tools (calculate_contacts; native_contacts on a transition path), then submit_report.
 - Use the dataset the user selected unless the question explicitly names another one.
@@ -51,7 +53,7 @@ Evidence and claims:
 - claim="null" when a comparison finds no supported change at all: cite the compare_intervals result (e.g. "r1")
   and use its placeholders, e.g. "None of the {{r1.n_tested}} tested pairs is supported".
 - claim="descriptive" for what a non-statistical result shows (calculate_contacts, distance_over_time,
-  native_contacts, contact_difference_map, residue_flexibility, get_metadata). A supported change must still cite
+  native_contacts, contact_difference_map, residue_flexibility, domain_opening, get_metadata). A supported change must still cite
   the compare_intervals pair, never the difference map. It is shown as "descriptive - not statistically tested"; never use the words
   supported, significant or robust in it.
 

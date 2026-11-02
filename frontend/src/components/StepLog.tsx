@@ -14,7 +14,7 @@ const SHORT: Record<string, string> = {
   get_metadata: 'Check the data', list_groups: 'Domains', calculate_contacts: 'Measure contacts', distance_over_time: 'Track a distance',
   compare_intervals: 'Compare', contact_statistics: 'Look closer', native_contacts: 'Reference contacts',
   cutoff_sensitivity: 'Double-check', reproduction_check: 'Compare with the original', submit_report: 'Write the report',
-  contact_difference_map: 'Map changes', residue_flexibility: 'Measure movement',
+  contact_difference_map: 'Map changes', residue_flexibility: 'Measure movement', domain_opening: 'Track opening',
 }
 
 /** The plan's steps as a row that lights up while the run is going. */

@@ -80,6 +80,11 @@ def plot_result(res: dict, time_label: str):
         ax.set_xlabel(time_label)
         ax.set_ylabel("fraction of native contacts")
         ax.legend()
+    elif tool == "domain_opening" and d.get("distance"):
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.plot(d["time_ns"] if d.get("time_ns") is not None else d["frames"], d["distance"], lw=0.8)
+        ax.set_xlabel(time_label)
+        ax.set_ylabel(f"{d['domain']}–{d['reference']} COM distance (Å)")
     elif tool == "residue_flexibility" and d.get("rmsf"):
         fig, ax = plt.subplots(figsize=(6, 3))
         ax.plot(d["resids"], d["rmsf"], lw=0.8)

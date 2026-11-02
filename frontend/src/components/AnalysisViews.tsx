@@ -2,8 +2,9 @@
 // diverging orange/blue for weaker/stronger, pairs not supported by compare_intervals faded; "not
 // statistically tested" on a dataset without statistics) and per-residue flexibility (C-alpha RMSF).
 // Clicking a difference-map cell selects that pair, so the 3D view, distance plot and cards follow.
+// Domain opening (LID or NMP to CORE centre-of-mass distance) marks the viewer's frame; a click jumps there.
 import { useMemo } from 'react'
-import type { Data } from 'plotly.js'
+import type { Data, Shape } from 'plotly.js'
 import type { RunView } from '../api/client'
 import { parseResidueKey, residueLabel } from '../state/residueKey'
 import { setSelection, useSelection } from '../state/selection'
@@ -16,6 +17,10 @@ export type DiffData = {
   cutoff: number; tested: boolean; stats_valid: boolean; supported_pairs: [string, string][] | null
 }
 export type FlexData = { keys: string[]; resids: number[]; rmsf: number[]; note: string; n_frames: number }
+export type OpeningData = {
+  domain: string; reference: string; frames: number[]; time_ns: number[] | null; distance: number[]; note: string
+  n_frames: number; units: { dt_ns: number | null }
+}
 
 export function lastData<T>(run: RunView | null, tool: string): T | null {
   if (!run) return null
@@ -110,11 +115,43 @@ export function FlexibilityPlot({ d, height = 240 }: { d: FlexData; height?: num
   )
 }
 
+export function DomainOpeningPlot({ d, height = 240 }: { d: OpeningData; height?: number }) {
+  const { frame } = useSelection()
+  const dt = d.units.dt_ns
+  const traces = useMemo<Data[]>(() => [{
+    type: 'scattergl', mode: 'lines', x: d.time_ns ?? d.frames, y: d.distance, customdata: d.frames,
+    line: { color: DOMAIN_COLORS[d.domain] ?? '#9cc3e6', width: 1.2 },
+    hovertemplate: `frame %{customdata}${dt === null ? '' : ' · %{x:.1f} ns'}<br>%{y:.2f} Å<extra>click to jump</extra>`,
+  }] as Data[], [d, dt])
+  const xf = dt === null ? frame : frame * dt
+  const shapes: Partial<Shape>[] = [{ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: xf, x1: xf, line: { color: '#ffffff', width: 1 } }]
+  return (
+    <div className="plot-wrap" style={{ height }}>
+      <Plot
+        data={traces}
+        layout={{
+          ...baseLayout, margin: { l: 50, r: 10, t: 6, b: 40 }, hovermode: 'x', shapes,
+          xaxis: { ...axisStyle, title: { text: dt === null ? 'path step (biased path; no physical time)' : 'time (ns)' } },
+          yaxis: { ...axisStyle, title: { text: `${d.domain}–${d.reference} distance (Å)` } },
+        }}
+        config={{ displaylogo: false, responsive: true }}
+        useResizeHandler
+        style={{ width: '100%', height: '100%' }}
+        onClick={(ev) => {
+          const f = ev.points[0]?.customdata
+          if (typeof f === 'number') setSelection({ frame: f })
+        }}
+      />
+    </div>
+  )
+}
+
 /** Evidence cards for whichever §10b results this run has. */
 export function AnalysisCards({ run }: { run: RunView | null }) {
   const diff = lastData<DiffData>(run, 'contact_difference_map')
   const flex = lastData<FlexData>(run, 'residue_flexibility')
-  if (!diff && !flex) return null
+  const opening = lastData<OpeningData>(run, 'domain_opening')
+  if (!diff && !flex && !opening) return null
   return (
     <>
       {diff && (
@@ -128,6 +165,16 @@ export function AnalysisCards({ run }: { run: RunView | null }) {
             <span className="swatch" style={{ background: CHANGE_COLORS.gained, marginLeft: 10 }} />stronger · click a cell to show the pair
           </p>
           <DifferenceMap d={diff} />
+        </section>
+      )}
+      {opening && (
+        <section className="card">
+          <header className="card-head"><h2>How open is {opening.domain}?</h2><span className="muted small">{opening.n_frames} frames</span></header>
+          <p className="card-sub">
+            Distance between the centres of {opening.domain} and {opening.reference}: higher means more open · white line: viewer frame ·
+            click to jump · {opening.note}
+          </p>
+          <DomainOpeningPlot d={opening} />
         </section>
       )}
       {flex && (
