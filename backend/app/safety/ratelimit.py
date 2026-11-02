@@ -14,7 +14,7 @@ import time
 from collections import defaultdict, deque
 
 WINDOW_S = 3600.0
-DEFAULT_LIMITS = {"plan": 10, "run": 10, "sandbox": 3, "voice": 30}  # per IP per hour
+DEFAULT_LIMITS = {"plan": 10, "run": 10, "sandbox": 3, "voice": 30, "replay": 60}  # per IP per hour
 
 
 class RateLimited(Exception):

@@ -175,3 +175,29 @@ def test_open_weight_model_is_priced_as_an_estimate(monkeypatch):
     assert m.provider == "baseten" and m.model == "meta-models/muse-spark-open-1026"
     assert m.model in llm.ESTIMATED_PRICES
     assert llm.estimate_cost(m.model, 1_000_000, 0, 0) == pytest.approx(1.25)  # counted in the daily budget
+
+
+# ---------- no-passcode view: recorded runs are open, live AI is not (red-team H) ----------
+
+def test_recorded_runs_play_without_the_passcode_in_live_mode(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSCODE", "s3cret")
+    monkeypatch.delenv("APP_MODE", raising=False)
+    from app.safety import replay as rp
+    c = TestClient(app)
+    h = c.get("/health").json()
+    assert h["mode"] == "live" and h["passcode_required"] is True
+    rid = next(iter(rp.recorded()))
+    p = c.post(f"/replays/{rid}/plan")
+    assert p.status_code == 200 and p.json()["plan_id"] == f"replay:{rid}" and p.json()["recorded"] is True
+    assert c.post("/replays/nope/plan").status_code == 404
+    started = c.post("/runs", json={"plan_id": p.json()["plan_id"]})
+    assert started.status_code == 200 and started.json()["run_id"].startswith("replay-")
+    assert c.post("/runs", json={"plan_id": "live-plan"}).status_code == 401  # a live plan still needs it
+    assert c.post("/plan", json={"question": "q"}).status_code == 401
+    assert c.post("/runs", json={"plan_id": "x"}, headers={"X-Demo-Passcode": "s3cret"}).status_code == 404
+
+
+def test_passcode_not_required_when_unset_locally(monkeypatch):
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    monkeypatch.delenv("REQUIRE_PASSCODE", raising=False)
+    assert TestClient(app).get("/health").json()["passcode_required"] is False

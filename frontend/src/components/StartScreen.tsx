@@ -3,8 +3,8 @@
 // entry point. The dataset picker is a small detail. Users never upload trajectories (README: Known
 // limitations), and the copy never implies they can.
 import { useEffect, useState } from 'react'
-import { api, type DatasetInfo, type Metadata, type Recorded } from '../api/client'
-import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation } from '../state/investigation'
+import { api, getPasscode, type DatasetInfo, type Metadata, type Recorded } from '../api/client'
+import { ask, askFigure, clearNotices, MAX_UPLOAD_BYTES, submitPasscode, useInvestigation, watchRecorded } from '../state/investigation'
 import { setSelection } from '../state/selection'
 import { datasetName } from './DatasetBadge'
 import { ModelToggle } from './ModelToggle'
@@ -52,27 +52,28 @@ export function PasscodePrompt() {
   )
 }
 
-/** Replay mode (AI off): say so, and offer the recorded real investigations. Charts and 3D stay live. */
-function ReplayBanner({ busy, onQuestion, onFigure }: {
-  busy: boolean; onQuestion: (q: string, ds: string) => void; onFigure: (f: File, ds: string, label: string) => void
-}) {
-  const [info, setInfo] = useState<{ mode: string; recorded: Recorded[]; reason: string | null } | null>(null)
+/** Recorded real investigations, replayed step by step without a model: offered when the AI is off (replay
+ *  mode) and, in live mode, to anyone without the demo passcode. Charts and 3D stay live. */
+function RecordedRuns({ busy }: { busy: boolean }) {
+  useInvestigation() // re-render after the passcode is entered (the offer then goes away)
+  const [info, setInfo] = useState<{ mode: string; recorded: Recorded[]; reason: string | null; locked: boolean } | null>(null)
   useEffect(() => {
-    Promise.all([api.replays(), api.health()]).then(([r, h]) => setInfo({ ...r, reason: h.mode_reason }), () => {})
+    Promise.all([api.replays(), api.health()])
+      .then(([r, h]) => setInfo({ ...r, reason: h.mode_reason, locked: !!h.passcode_required }), () => {})
   }, [])
-  if (!info || info.mode !== 'replay') return null
-  const openFigure = async (r: Recorded) => {
-    const blob = await (await fetch(api.figureUrl(r.figure_id!))).blob()
-    onFigure(new File([blob], 'figure.png', { type: blob.type || 'image/png' }), r.dataset, r.label)
-  }
+  if (!info || !info.recorded.length) return null
+  const replayMode = info.mode === 'replay'
+  if (!replayMode && !(info.locked && !getPasscode())) return null
   return (
     <div className="replay-banner">
-      <p><strong>The AI is off right now</strong>{info.reason ? ` (${info.reason})` : ''}. You can watch recorded real
-        investigations, replayed step by step; the charts and the 3D viewer are live.</p>
+      {replayMode
+        ? <p><strong>The AI is off right now</strong>{info.reason ? ` (${info.reason})` : ''}. You can watch recorded real
+            investigations, replayed step by step; the charts and the 3D viewer are live.</p>
+        : <p><strong>No passcode? Watch a recorded run.</strong> These are real investigations recorded earlier, replayed
+            step by step with the same checks; the charts and the 3D viewer are live.</p>}
       <div className="example-row">
         {info.recorded.map((r) => (
-          <button key={r.run_id} className="example-chip" disabled={busy}
-            onClick={() => (r.figure ? void openFigure(r) : onQuestion(r.question, r.dataset))}>{r.label}</button>
+          <button key={r.run_id} className="example-chip" disabled={busy} onClick={() => void watchRecorded(r.run_id, r.label)}>{r.label}</button>
         ))}
       </div>
     </div>
@@ -123,7 +124,8 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
   return (
     <section className="start">
       <div className="start-main">
-        <ReplayBanner busy={busy} onQuestion={startQuestion} onFigure={(f, ds, label) => startFigure([f], ds, '', label)} />
+        {needPasscode && <PasscodePrompt />}
+        <RecordedRuns busy={busy} />
         <h1 className="start-title">Ask what a protein is doing</h1>
         <p className="start-lede">
           Drop in a figure from any paper, or ask a question. TrajectoryGPT runs the analysis on real simulations of
@@ -199,8 +201,6 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
             ))}
           </div>
         </div>
-
-        {needPasscode && <PasscodePrompt />}
 
         <div className="ds-picker">
           <label className="muted small" htmlFor="ds">Data</label>

@@ -81,7 +81,9 @@ def health():
             "dev_overclaim_toggle": verifier.planting_allowed(), "sandbox": os.environ.get("SANDBOX_ENABLED") == "1",
             "providers": available_providers(), "default_provider": os.environ.get("MODEL_PROVIDER", "meta"),
             "open_model": os.environ.get("BASETEN_MODEL", "meta-models/muse-spark-open-1026"),
-            "voice": "meta" in available_providers() and replay.mode()[0] == "live"}
+            "voice": "meta" in available_providers() and replay.mode()[0] == "live",
+            # The start screen asks for the passcode before planning, and offers recorded runs without it.
+            "passcode_required": replay.mode()[0] == "live" and not passcode_ok(None)}
 
 
 @app.get("/datasets")
@@ -362,14 +364,25 @@ def get_figure(figure_id: str):
     return Response(content=raw, media_type=mime)
 
 
-@app.post("/runs", dependencies=[Depends(require_passcode), Depends(rate_limit("run"))])
+@app.post("/replays/{run_id}/plan", dependencies=[Depends(rate_limit("replay"))])
+def replay_plan(run_id: str):
+    """A recorded run's plan, in any mode and without the passcode: no model is called ("Watch a recorded run")."""
+    r = replay.recorded().get(run_id)
+    if r is None:
+        raise HTTPException(404, "unknown recorded run")
+    return replay.proposal(r)
+
+
+@app.post("/runs", dependencies=[Depends(rate_limit("run"))])
 def start_run(plan_id: str = Body(...), edits: dict = Body({}), step_through: bool = Body(False),
-              confirmed_fields: list[str] = Body([]), plant_overclaim: bool = Body(False)):
-    if plan_id.startswith("replay:"):  # a recorded run: no model is called, edits do not apply
+              confirmed_fields: list[str] = Body([]), plant_overclaim: bool = Body(False),
+              x_demo_passcode: str | None = Header(None)):
+    if plan_id.startswith("replay:"):  # a recorded run: no model is called and no passcode needed; edits do not apply
         try:
             return {"run_id": replay.start_playback(plan_id, step_through)}
         except KeyError as e:
             raise HTTPException(404, str(e)) from None
+    require_passcode(x_demo_passcode)
     require_budget()
     try:
         return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields, plant_overclaim)}
@@ -468,8 +481,10 @@ def sandbox_status(run_id: str):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "none"}
 
 
-@app.post("/runs/{run_id}/next", dependencies=[Depends(require_passcode)])
-def run_next(run_id: str, step_through: bool | None = Body(None, embed=True)):
+@app.post("/runs/{run_id}/next")
+def run_next(run_id: str, step_through: bool | None = Body(None, embed=True), x_demo_passcode: str | None = Header(None)):
+    if not run_id.startswith("replay-"):  # stepping through a recorded playback needs no passcode
+        require_passcode(x_demo_passcode)
     _handle(run_id)
     session.next_turn(run_id, step_through)
     return {"ok": True}

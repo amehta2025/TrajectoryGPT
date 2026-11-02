@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, getPasscode, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -64,10 +64,38 @@ function pairLabel(keyA: string, keyB: string): string {
   return `${a.resname}${a.resid}-${b.resname}${b.resid}`
 }
 
+/** True when live AI work needs a passcode this tab has not entered yet (then ask first, before planning). */
+async function passcodeMissing(): Promise<boolean> {
+  if (getPasscode()) return false
+  try {
+    return !!(await api.health()).passcode_required
+  } catch {
+    return false // let the request itself report the problem
+  }
+}
+
+/** "Watch a recorded run": a real earlier investigation, played back without a model or the passcode. */
+export async function watchRecorded(runId: string, label: string) {
+  closeStream?.()
+  set({ ...empty, phase: 'planning', question: label, dataset: state.dataset })
+  try {
+    const proposal = await api.replayPlan(runId)
+    // A figure run's stored question is the long extraction prompt; show its short label instead.
+    const question = proposal.figure ? label : (proposal.question ?? label)
+    set({ phase: 'plan', proposal, question, dataset: proposal.plan.dataset })
+  } catch (e) {
+    set({ phase: 'idle', error: `Could not open the recorded run: ${(e as Error).message}` })
+  }
+}
+
 /** A question; a follow-up also sends the selected pair, and the backend adds this session's last run. */
 export async function ask(question: string, dataset: string, followUp = false) {
   closeStream?.()
   retry = () => ask(question, dataset, followUp)
+  if (await passcodeMissing()) {
+    set({ ...empty, phase: 'idle', question, dataset, needPasscode: true })
+    return
+  }
   const { pair } = getSelection()
   const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
   set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
@@ -100,6 +128,10 @@ export async function askFigure(files: File[], dataset: string, note: string, la
   closeStream?.()
   retry = () => askFigure(files, dataset, note, label)
   label = label || note.trim() || `Reproduce ${files.map((f) => f.name).join(' + ')}`
+  if (await passcodeMissing()) {
+    set({ ...empty, phase: 'idle', question: label, dataset, needPasscode: true })
+    return
+  }
   set({ ...empty, phase: 'planning', question: label, dataset })
   try {
     const uploads = await Promise.all(files.map(toUpload))

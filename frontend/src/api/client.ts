@@ -387,6 +387,7 @@ export type Health = {
   status: string; mode: 'live' | 'replay'; mode_reason: string | null; model: string; verifier_model: string
   spent_today_usd: number; daily_budget_usd: number; dev_overclaim_toggle: boolean; sandbox: boolean
   providers?: Provider[]; default_provider?: Provider; open_model?: string; voice?: boolean
+  passcode_required?: boolean // live mode with a passcode: ask for it before planning
 }
 /** The clean-sandbox re-run of a run's export script. */
 export type SandboxJob = {
@@ -425,6 +426,8 @@ export const api = {
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
   figurePlan: (files: UploadFile[], dataset: string, note: string, provider?: Provider) =>
     post<PlanResponse>('/figure/plan', { files, dataset, note, provider: provider ?? null }),
+  /** A recorded run's plan; works in live mode without the passcode (no model is called). */
+  replayPlan: (runId: string) => post<PlanResponse>(`/replays/${encodeURIComponent(runId)}/plan`, {}),
   /** Push-to-talk: base64 WAV (mono, 16-bit, 24 kHz) -> text for the question box. */
   transcribe: (audio: string) => post<{ text: string; seconds: number }>('/transcribe', { audio }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
