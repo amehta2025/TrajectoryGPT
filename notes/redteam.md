@@ -284,3 +284,36 @@ Prompted by a UX critique.
 
   196 of 196 values match; verified; $0.10.
 - The passcode stays (decision 2026-11-02).
+
+## Design pass 3: the mockup (2026-11-02, 10–10:30 PM CT)
+
+Built to the user's 4-screen mockup: frontend only, no science or backend changes. Commits 6ece7e1, 91ec15f, 37f51f5 and the "needs review" banner.
+
+1. **Landing:**
+   - "Turn scientific figures into reproducible insights." with a violet accent.
+   - A centred drop area, "or", then a question box with Analyze.
+   - A protein legend card on the 3D structure: LID and NMP move, Core is stable.
+   - Two example cards with arrows.
+2. **A stepper on every investigation:** Interpret figure (or Plan analysis) → Run analysis → Results.
+3. **Figure setup:**
+   - Their figure beside "What I understood": goal, protein, atoms, contact distance, reference states, each marked ✓ (read) or "inferred".
+   - The plan and its parameters fold into "Scientific settings" (the Edit button opens it). One Run analysis button.
+4. **Running:**
+   - Plain steps with what each one found, taken from stored results.
+   - States: running (spinner), done, skipped (a label, no strikethrough), and failed ("Couldn't run").
+   - The live result sits beside the steps; progress is counted in steps (no invented percentage).
+5. **Results:**
+   - A banner with the reproduction verdict, the match count from `reproduction_check`, two measured numbers and the key finding.
+   - The tabs: Figure comparison, Changing interactions (cards + 3D + charts, so clicking a card still highlights it in 3D), Protein structure (large viewer), Details & methods (statistics, the second-AI check, plan, step log, timeline).
+6. **Verification:**
+   - A flagged report shows an amber "Analysis complete: needs your review", and the success line says the flag is unresolved.
+   - Nothing in the app can correct or reject a flag after the report is accepted, so "unresolved" is the honest state.
+   - The ✓ icon appears only once the second AI has verified the report.
+   - A report that failed the automatic checks shows an amber "Analysis stopped: needs review".
+
+**Checked in the local app at 1440 px:**
+- The sample figure through all three stages (196/196, verified).
+- The LID–CORE example with the dev-only planted wrong finding: amber banner, flagged finding named.
+- All four tabs render with no console errors.
+- A recorded figure run in replay mode: setup → running → results, ✓ verified.
+- At 1280 px, no element is wider than the window.

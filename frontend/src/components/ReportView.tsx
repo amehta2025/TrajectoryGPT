@@ -66,10 +66,16 @@ export function Headline({ meta }: { meta: Metadata | null }) {
   if (!run.report) {
     const why = plainProblems(run)
     return (
-      <div className="headline">
-        <p className="headline-main">This report couldn’t be finished: the automatic checks did not accept it.</p>
+      <section className="card result-banner headline warn">
+        <header className="rb-head">
+          <span className="rb-icon" aria-hidden>!</span>
+          <div className="rb-titles">
+            <h2>Analysis stopped: needs review</h2>
+            <p className="rb-lead">The agent’s report didn’t pass the automatic checks, so no conclusion is shown. The computed results are in the tabs below.</p>
+          </div>
+        </header>
         {why.length > 0 && <ul className="plain why">{why.map((w) => <li key={w}>{w}</li>)}</ul>}
-      </div>
+      </section>
     )
   }
   const cmp = lastResult<CompareData>(run, 'compare_intervals')
