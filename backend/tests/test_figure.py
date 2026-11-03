@@ -248,3 +248,26 @@ def test_long_pdf_keeps_only_the_first_pages():
     assert len(PdfReader(io.BytesIO(raw)).pages) == figure.MAX_PDF_PAGES
     _, _, short = figure.decode_upload(_upload(_pdf(pages=3)))
     assert len(PdfReader(io.BytesIO(short)).pages) == 3
+
+
+# ---------- two requests: read the figure, then plan from what was read (UI shows the reading early) ----------
+
+def test_read_then_plan_over_http(monkeypatch):
+    import app.agent.session as session
+    monkeypatch.setattr(session, "LLM", lambda *a, **kw: SchemaLLM([SPEC, PLAN]))
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    c = TestClient(app)
+    read = c.post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]}).json()
+    assert read["figure"]["spec"]["kind"] == "native_contacts" and "plan" not in read
+    r = c.post(f"/figure/read/{read['read_id']}/plan", json={"dataset": "adk_equilibrium"}).json()
+    assert r["plan"]["dataset"] == "adk_transition" and r["figure"]["figure_id"] == read["figure"]["figure_id"]
+    assert len(r["usage"]) == 2  # the reading call and the planning call
+    assert c.post(f"/figure/read/{read['read_id']}/plan", json={}).status_code == 404  # a read is planned once
+
+
+def test_read_of_an_unsupported_figure_says_so(monkeypatch):
+    import app.agent.session as session
+    monkeypatch.setattr(session, "LLM", lambda *a, **kw: SchemaLLM([{**SPEC, "kind": "other"}]))
+    monkeypatch.delenv("DEMO_PASSCODE", raising=False)
+    r = TestClient(app).post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
+    assert r.status_code == 422 and "isn't supported yet" in r.json()["detail"]["unsupported"]

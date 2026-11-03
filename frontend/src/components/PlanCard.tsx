@@ -4,7 +4,7 @@
 // sit under a collapsed "Settings"; tool names are small secondary tags.
 import { useEffect, useState } from 'react'
 import { api, type ChecklistItem, type Metadata, type Plan } from '../api/client'
-import { approve, pendingConfirmations, useInvestigation } from '../state/investigation'
+import { approve, useInvestigation } from '../state/investigation'
 
 const CONTACT_DEFINITION = 'two residues are in contact when their closest heavy atoms are within the cutoff'
 const CONTACT_TOOLS = new Set(['calculate_contacts', 'distance_over_time', 'compare_intervals', 'contact_statistics',
@@ -21,15 +21,31 @@ export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | nu
     case 'distance_over_time': return 'Track how far apart two parts of the protein are over time'
     case 'compare_intervals': return `Compare ${pair} contacts between two parts of the run`
     case 'contact_statistics': return 'Look at one contact in detail'
-    case 'native_contacts': return 'Measure how many of the reference contacts remain'
+    case 'native_contacts': return 'Reconstruct the molecular contacts'
     case 'cutoff_sensitivity': return 'Re-check each change at several distance thresholds'
     case 'contact_difference_map': return `Map which ${pair} contacts change`
     case 'residue_flexibility': return 'Measure how much each part of the protein moves'
     case 'domain_opening': return 'Track how open the domain is over time'
-    case 'reproduction_check': return 'Compare with the original published result'
-    case 'submit_report': return 'Write the report'
+    case 'reproduction_check': return 'Validate against the publication'
+    case 'submit_report': return 'Summarize the findings'
     default: return 'Run an analysis'
   }
+}
+
+/** One line on what a step does and why, under its plain sentence. */
+const STEP_DETAIL: Record<string, string> = {
+  get_metadata: 'Size, length and time step of the simulation.',
+  calculate_contacts: 'Which residue pairs stay close, and how often.',
+  distance_over_time: 'The closest distance between two residues in every frame.',
+  compare_intervals: 'Separates real changes from random variation, correcting for testing many pairs at once.',
+  contact_statistics: 'How often it forms, how slowly it changes, and how sure we can be.',
+  native_contacts: 'Which contacts of the starting and ending shapes stay close as the protein changes shape.',
+  cutoff_sensitivity: 'A change counts as robust only if it holds at every threshold.',
+  contact_difference_map: 'Which contacts were gained and which were lost.',
+  residue_flexibility: 'How far each residue moves around its average position.',
+  domain_opening: 'The distance between the centres of a domain and the core, frame by frame.',
+  reproduction_check: 'Compares every computed value with the published code’s output.',
+  submit_report: 'What matches, what differs, and which conclusions the numbers support.',
 }
 
 /** "first half (0–502 ns)" when the windows are the halves, otherwise the frame range with its time. */
@@ -77,7 +93,6 @@ function editsOf(p: Plan, d: Draft): Partial<Plan> {
 export function PlanCard({ meta }: { meta: Metadata | null }) {
   const inv = useInvestigation()
   const { phase, proposal, run, error } = inv
-  const pending = pendingConfirmations(inv)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [stepThrough, setStepThrough] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -91,7 +106,13 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
     if (proposal) setDraft(draftOf(proposal.plan))
   }, [proposal])
 
-  if (phase === 'planning') return <section className="card plan-card"><h2>Plan</h2><p className="muted">Drafting a plan… (about 10 s)</p></section>
+  if (phase === 'planning') {
+    const status = inv.kicker === 'Recorded run'
+      ? 'Opening the recorded run…'
+      : inv.figureRead ? 'Figure read. Drafting the analysis plan…'
+      : inv.kicker !== 'You asked' ? 'Reading the figure… (usually 10–25 s)' : 'Drafting a plan… (usually 10–20 s)'
+    return <section className="card plan-card"><h2>Analysis plan</h2><p className="muted plan-status">{status}</p></section>
+  }
   if (!proposal || !draft) return null
   const p = proposal.plan
   const locked = phase !== 'plan'
@@ -109,7 +130,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
   return (
     <section className="card plan-card">
       <header className="card-head">
-        <h2 title={p.summary}>Plan</h2>
+        <h2 title={p.summary}>Analysis plan</h2>
         {checklist && <span className="pill">{done} of {checklist.length} done</span>}
       </header>
       {usesContacts && (
@@ -133,21 +154,21 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
               return (
                 <li key={i} className={dropped ? 'dropped' : ''} title={s.rationale}>
                   <span className="step-icon">{i + 1}</span>
-                  <span className="step-text">{stepText(s.tool, p)}</span>
+                  <span className="step-text">{stepText(s.tool, p)}{STEP_DETAIL[s.tool] && <span className="step-detail">{STEP_DETAIL[s.tool]}</span>}</span>
                   {!fixed && s.tool !== 'submit_report' && (
-                    <button className="link small step-drop" onClick={() => {
+                    <button className="link small step-drop" title="The agent won’t run this step, and the report will say it was skipped" onClick={() => {
                       const drop = new Set(draft.drop)
                       if (dropped) drop.delete(i)
                       else drop.add(i)
                       setDraft({ ...draft, drop })
-                    }}>{dropped ? 'Keep' : 'Skip'}</button>
+                    }}>{dropped ? 'Keep step' : 'Skip step'}</button>
                   )}
                 </li>
               )
             })}
       </ol>
       <details className="settings">
-        <summary>Settings</summary>
+        <summary>{proposal.figure ? 'Edit scientific assumptions' : 'Advanced settings'}</summary>
         <p className="muted small plan-def">
           {usesContacts && <>Contact: {CONTACT_DEFINITION}; cutoff {p.cutoff} Å. </>}
           {p.window_b
@@ -174,12 +195,11 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
             </label>
           )}
           {proposal.recorded && <span className="small muted">Recorded plan: its settings are fixed.</span>}
-          {pending.length > 0 && <span className="small pending-note">Tick {pending.length === 1 ? 'the unsure setting' : `the ${pending.length} unsure settings`} read from the figure first</span>}
-          <button className="primary" disabled={starting || pending.length > 0} onClick={async () => {
+          <button className="primary" disabled={starting} onClick={async () => {
             setStarting(true)
             await approve(editsOf(p, draft), stepThrough, plant)
             setStarting(false)
-          }}>{starting ? 'Starting…' : 'Run plan'}</button>
+          }}>{starting ? 'Starting…' : proposal.figure && !proposal.recorded ? 'Confirm & run →' : 'Run analysis →'}</button>
         </div>
       )}
       {error && <div className="error">{error}</div>}

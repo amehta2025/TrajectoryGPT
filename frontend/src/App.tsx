@@ -105,13 +105,13 @@ export default function App() {
             {inv.proposal?.provider === 'baseten' && (
               <span className="open-badge" title={inv.proposal.model}>Open-weight model · Muse Spark Open on Baseten</span>
             )}
-            <span className="muted small">You asked</span>
+            <span className="muted small kicker">{inv.kicker}</span>
             <h1 className="inv-question">{inv.question}</h1>
             <Headline meta={meta} />
             <AgentTrace meta={meta} />
           </div>
           {!started && (
-            <div className={inv.proposal?.figure ? 'plan-only with-figure' : 'plan-only'}>
+            <div className={inv.proposal?.figure || inv.figureRead ? 'plan-only with-figure' : 'plan-only'}>
               <ReproduceView />
               <PlanCard meta={meta} />
             </div>
@@ -148,10 +148,11 @@ export default function App() {
 
       <footer className="foot muted small">
         {meta && (
-          <>
+          <details>
+            <summary>Data &amp; references</summary>
             <p><span className="foot-label">Data</span>{meta.citation} ({meta.license})</p>
             <p><span className="foot-label">Domains</span>{meta.groups_source}</p>
-          </>
+          </details>
         )}
       </footer>
     </div>

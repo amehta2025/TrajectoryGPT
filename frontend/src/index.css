@@ -420,3 +420,71 @@ button.science-toggle {
 .declined { margin: 8px 0 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); }
 .declined p { margin: 0 0 8px; line-height: 1.45; }
 .plan-note { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--panel-2); font-size: 13px; line-height: 1.45; }
+
+/* ---------- design pass 2 (2026-11-02): one box, two example cards, one primary action ---------- */
+.start-title { font-size: 38px; }
+.start-lede { font-size: 17px; }
+.composer {
+  display: flex; flex-direction: column; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--panel);
+  transition: border-color 0.15s, background 0.15s; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+.composer.dragging { border-color: var(--accent); background: #121822; }
+.dz-row { display: flex; align-items: center; gap: 14px; padding: 22px 20px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.dz-row:hover .dz-icon { color: var(--accent); border-color: var(--accent); }
+.dz-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--border-strong); color: #b9c0cc; font-size: 18px; }
+.dz-text { display: flex; flex-direction: column; gap: 3px; font-size: 16px; }
+.dz-text b { font-weight: 600; }
+.dz-text u { text-decoration-color: #6f788b; text-underline-offset: 3px; }
+.composer .ask { padding: 12px; gap: 8px; align-items: center; }
+.composer .ask-input { border-color: transparent; background: transparent; font-size: 16px; padding: 10px 8px; }
+.composer .ask-input:focus { border-color: var(--border-strong); background: var(--bg); }
+.composer .ask button.primary { padding: 10px 20px; font-size: 15px; border-radius: 8px; background: #3f5fb0; border-color: #5574c6; }
+.composer .ask button.primary:hover:not(:disabled) { background: #4a6cc4; }
+.try { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.try-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.example-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .example-cards { grid-template-columns: 1fr; } }
+button.example-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 16px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--border-strong); line-height: 1.45;
+}
+button.example-card:hover:not(:disabled) { border-color: #5574c6; background: #121826; }
+.ec-icon { font-size: 18px; line-height: 1; }
+.ec-icon.fig { color: #a7b8f0; }
+.ec-icon.q { color: #e6c27a; }
+.ec-title { font-size: 16px; font-weight: 600; color: #eef1f5; }
+.ec-sub { font-size: 14px; color: #b9c0cc; }
+.more-examples { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; align-items: baseline; }
+.more-examples button.link { font-size: 14px; }
+.start-foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
+.real-data { color: var(--ok); }
+.advanced summary { cursor: pointer; color: var(--muted); list-style: none; text-align: right; }
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced[open] summary { color: var(--text); }
+.advanced .ds-picker { margin-top: 8px; justify-content: flex-end; align-items: center; }
+.recorded-link summary { cursor: pointer; color: var(--accent); font-size: 14px; list-style: none; }
+.recorded-link summary::-webkit-details-marker { display: none; }
+.recorded-link p { margin: 6px 0 8px; }
+.recorded-offer { border: 1px solid var(--border-strong); background: var(--panel); border-radius: 12px; padding: 14px 16px; font-size: 15px; }
+.recorded-offer p { margin: 0 0 10px; line-height: 1.5; }
+.kicker { text-transform: none; }
+.spec-intro { margin: 10px 0 8px; font-size: 14px; color: #c3cad6; line-height: 1.5; }
+.spec-row { grid-template-columns: 150px minmax(0, 1fr) 90px; font-size: 14px; }
+.spec-row.conf-medium .spec-meta, .spec-row.conf-low .spec-meta { color: #e6c27a; }
+.spec-more { margin-top: 4px; }
+.drafting { margin: 10px 0 0; }
+.plan-status { font-size: 14px; }
+.step-detail { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.plan-actions button.primary { padding: 8px 20px; font-size: 15px; }
+
+/* Readable sizes: small text 13 px, body 15 px (was 12 / 14). */
+:root { font-size: 15px; }
+.small { font-size: 13px; }
+h2 { font-size: 14px; }
+.headline-note, .headline-method, .verify-line { font-size: 14px; }
+.ccard-text, .fold summary, .fold ul, .repro-summary, .spec-head { font-size: 14px; }
+.pill, .badge, .tag { font-size: 12px; }
+button.trace-toggle { font-size: 13px; }
+.foot { font-size: 12px; }
+.foot summary { cursor: pointer; }
+.card.reproduce { flex-direction: column; align-items: stretch; flex-wrap: nowrap; margin-top: 0; gap: 0; font-size: 15px; }

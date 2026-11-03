@@ -57,7 +57,12 @@ API_ENV = {
 
 # One container: plans and running investigations live in its memory, and the live step log (SSE)
 # must reach the same container, so it serves many requests concurrently instead of scaling out.
-@app.function(**{**FUNCTION_KW, "env": API_ENV}, secrets=SECRETS, max_containers=1)
+# WARM=1 keeps the one container running, so nobody waits for a cold start (about 6 s). For judging
+# (Nov 5-8): WARM=1 ALLOWED_ORIGINS=... modal deploy modal_app.py; redeploy without WARM to stop paying for it.
+WARM = os.environ.get("WARM") == "1"
+
+
+@app.function(**{**FUNCTION_KW, "env": API_ENV}, secrets=SECRETS, max_containers=1, min_containers=1 if WARM else 0)
 @modal.concurrent(max_inputs=32)
 @modal.asgi_app(label="trajectorygpt-api")
 def api():

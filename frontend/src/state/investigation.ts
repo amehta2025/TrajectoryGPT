@@ -16,7 +16,8 @@ export type Investigation = {
   paused: boolean
   error: string | null
   needPasscode: boolean // set by a 401; the start screen asks for the passcode, then retries
-  confirmed: string[] // low-confidence figure settings the user has checked (the backend requires all of them)
+  kicker: string // the small label over the heading: "You asked", "Sample figure", "Your figure", "Recorded run"
+  figureRead: Figure | null // what the AI read from the figure, shown while the plan is drafted
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
   declined: (Declined & { question: string; followUp: boolean }) | null // turned away before planning, or a residue to pick
@@ -24,7 +25,7 @@ export type Investigation = {
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
-  confirmed: [], unsupported: null, science: false, declined: null,
+  kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null,
 }
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
@@ -77,7 +78,7 @@ async function passcodeMissing(): Promise<boolean> {
 /** "Watch a recorded run": a real earlier investigation, played back without a model or the passcode. */
 export async function watchRecorded(runId: string, label: string) {
   closeStream?.()
-  set({ ...empty, phase: 'planning', question: label, dataset: state.dataset })
+  set({ ...empty, phase: 'planning', question: label, dataset: state.dataset, kicker: 'Recorded run' })
   try {
     const proposal = await api.replayPlan(runId)
     // A figure run's stored question is the long extraction prompt; show its short label instead.
@@ -124,19 +125,27 @@ export async function toUpload(file: File): Promise<UploadFile> {
   return { filename: file.name, mime: file.type, data: btoa(bin) }
 }
 
-/** Figure mode: figure image and/or methods PDF -> extracted spec -> plan. */
-export async function askFigure(files: File[], dataset: string, note: string, label?: string) {
+/** Figure mode: figure image and/or methods PDF -> what the AI read (shown at once) -> plan.
+ *  label: the heading (a sample's title, else the note or file name); never put in the user's mouth as "You asked". */
+export async function askFigure(files: File[], dataset: string, note: string, opts: { label?: string; kicker?: string } = {}) {
   closeStream?.()
-  retry = () => askFigure(files, dataset, note, label)
-  label = label || note.trim() || `Reproduce ${files.map((f) => f.name).join(' + ')}`
+  retry = () => askFigure(files, dataset, note, opts)
+  const question = opts.label || note.trim() || files.map((f) => f.name).join(' + ')
+  const kicker = opts.kicker ?? 'Your figure'
   if (await passcodeMissing()) {
-    set({ ...empty, phase: 'idle', question: label, dataset, needPasscode: true })
+    set({ ...empty, phase: 'idle', question, dataset, kicker, needPasscode: true })
     return
   }
-  set({ ...empty, phase: 'planning', question: label, dataset })
+  set({ ...empty, phase: 'planning', question, dataset, kicker })
   try {
     const uploads = await Promise.all(files.map(toUpload))
-    const proposal = await api.figurePlan(uploads, dataset, note, provider)
+    const read = await api.figureRead(uploads, note, provider)
+    if (read.proposal) {
+      set({ phase: 'plan', proposal: read.proposal }) // replay mode: the recorded run's plan
+      return
+    }
+    set({ figureRead: read.figure ?? null })
+    const proposal = await api.figureReadPlan(read.read_id!, dataset)
     set({ phase: 'plan', proposal })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
@@ -161,7 +170,10 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean, plantO
   if (!proposal) return
   const p = { ...proposal.plan, ...edits }
   try {
-    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough, state.confirmed, plantOverclaim)
+    // Figure plans: "Confirm & run" is the user's one review of every setting read from the figure, including
+    // the ones the AI was unsure of; the backend refuses the run unless each of those is confirmed.
+    const confirmed = (proposal.figure?.spec.fields ?? []).filter((f) => f.confidence === 'low').map((f) => f.name)
+    const { run_id } = await api.startRun(proposal.plan_id, edits, stepThrough, confirmed, plantOverclaim)
     setSelection({
       dataset: p.dataset, groupA: p.group_a, groupB: p.group_b, cutoff: p.cutoff,
       windows: p.window_b ? [p.window_a, p.window_b] : null,
@@ -208,17 +220,6 @@ export function toggleScience() {
 export function askForPasscode() {
   retry = null
   set({ needPasscode: true })
-}
-
-/** Tick or untick one low-confidence figure setting. */
-export function toggleConfirmed(name: string) {
-  set({ confirmed: state.confirmed.includes(name) ? state.confirmed.filter((n) => n !== name) : [...state.confirmed, name] })
-}
-
-/** Low-confidence settings of the proposed figure plan that are not confirmed yet. */
-export function pendingConfirmations(s: Investigation): string[] {
-  const f = s.proposal?.figure
-  return f ? f.spec.fields.filter((x) => x.confidence === 'low' && !s.confirmed.includes(x.name)).map((x) => x.name) : []
 }
 
 /** Start from a clean slate: no previous question, result, figure or error (page load and New question). */

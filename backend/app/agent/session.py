@@ -163,9 +163,40 @@ def propose_figure_plan(files: list[dict], dataset: str, note: str = "", llm: LL
     """Figure mode: uploads -> extracted spec -> plan, stored like a question's plan."""
     from app.agent.figure import plan_from_figure
     llm = llm or new_llm(provider)
-    out = plan_from_figure(llm, files, dataset, note)
+    return _store_figure_plan(llm, plan_from_figure(llm, files, dataset, note), [])
+
+
+READS: dict[str, dict] = {}  # figures read but not planned yet (POST /figure/read, then /figure/plan with read_id)
+
+
+def read_figure(files: list[dict], note: str = "", llm: LLM | None = None, provider: str | None = None) -> dict:
+    """Figure mode, first half: what the model read from the figure, shown while the plan is drafted."""
+    from app.agent.figure import read_figure as read
+    llm = llm or new_llm(provider)
+    figure, usages = read(llm, files, note)
+    rid = uuid.uuid4().hex[:12]
+    usage = [u.as_dict() for u in usages]
+    with _lock:
+        READS[rid] = {"figure": figure, "usage": usage, "llm": llm}
+        while len(READS) > MAX_SESSIONS:
+            READS.pop(next(iter(READS)))
+    return {"read_id": rid, "figure": figure, "usage": usage, "model": llm.model, "provider": llm.provider}
+
+
+def plan_figure_read(read_id: str, dataset: str) -> dict:
+    """Figure mode, second half: the plan for a figure read by read_figure(), stored like any plan."""
+    from app.agent.figure import plan_from_spec
+    with _lock:
+        read = READS.pop(read_id, None)
+    if read is None:
+        raise KeyError(f"unknown figure read {read_id}")
+    llm = read["llm"]
+    return _store_figure_plan(llm, plan_from_spec(llm, read["figure"], dataset), read["usage"])
+
+
+def _store_figure_plan(llm: LLM, out: dict, read_usage: list[dict]) -> dict:
     pid = uuid.uuid4().hex[:12]
-    usage = [u.as_dict() for u in out["usages"]]
+    usage = read_usage + [u.as_dict() for u in out["usages"]]
     with _lock:
         PLANS[pid] = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
                       "usage": usage, "llm": llm, "figure": out["figure"]}

@@ -1,11 +1,12 @@
 // Figure mode: their figure on the left, ours on the right, the figure type, the result (an exact numeric
-// match against the published code, or the "method applied" label for a transfer), and what was read
-// from the figure. Every low-confidence setting must be ticked before the plan can run; the backend
-// refuses the run otherwise.
+// match against the published code, or the "method applied" label for a transfer), and what the AI read
+// from the figure. It appears as soon as the figure is read, while the plan is still being drafted.
+// Settings the AI inferred are marked; one "Confirm & run" on the plan accepts them all (the backend
+// refuses a run until every low-confidence setting is confirmed).
 import { useMemo } from 'react'
 import type { Data } from 'plotly.js'
 import { api, type Figure, type FigureSpec, type RunView } from '../api/client'
-import { toggleConfirmed, useInvestigation } from '../state/investigation'
+import { useInvestigation } from '../state/investigation'
 import { DifferenceMap, FlexibilityPlot, lastData, type DiffData, type FlexData } from './AnalysisViews'
 import { Plot, axisStyle, baseLayout } from './Plot'
 
@@ -69,49 +70,54 @@ function Ours({ run }: { run: RunView | null }) {
   return <div className="muted small placeholder">{run ? 'Computing…' : 'Appears once the plan runs.'}</div>
 }
 
-const CONF_TEXT = { high: 'read clearly', medium: 'probably right', low: 'unsure: please check' }
+const CONF_TEXT = { high: 'read clearly', medium: 'probably right', low: 'unsure' }
+// Plain names for the settings the figure reader fills in (the technical value stays as read).
+const FIELD_LABEL: Record<string, string> = {
+  analysis: 'Analysis', protein: 'Protein', 'data source': 'Data', 'atom selection': 'Atoms compared',
+  'cutoff or radius': 'Contact distance', 'reference frames or structures': 'Reference shapes',
+  'contact definition': 'Contact rule', 'x axis': 'Horizontal axis', 'y axis': 'Vertical axis',
+}
+const MAIN_FIELDS = new Set(['analysis', 'protein', 'data source', 'cutoff or radius', 'reference frames or structures'])
 
-/** What was read from the figure; low-confidence settings get a tick box until a run starts. */
-function SpecList({ figure, editable, science }: { figure: Figure; editable: boolean; science: boolean }) {
-  const { confirmed } = useInvestigation()
+/** What the AI read from the figure: the main settings, with the rest one click away. Inferred ones are marked. */
+function SpecList({ figure, science }: { figure: Figure; science: boolean }) {
+  const row = (f: Figure['spec']['fields'][number]) => (
+    <li key={f.name} className={`spec-row conf-${f.confidence}`}>
+      <span className="spec-name">{FIELD_LABEL[f.name] ?? f.name}</span>
+      <span className="spec-value">{f.value}</span>
+      <span className="spec-meta" title={`confidence: ${f.confidence} · read from: ${f.source}`}>
+        {science ? `${CONF_TEXT[f.confidence]} · ${f.source}` : f.confidence === 'high' ? '' : 'inferred'}
+      </span>
+    </li>
+  )
+  const fields = figure.spec.fields
+  const main = fields.filter((f) => MAIN_FIELDS.has(f.name) || f.confidence === 'low')
+  const rest = fields.filter((f) => !main.includes(f))
   return (
-    <ul className="spec-list">
-      {figure.spec.fields.map((f) => {
-        const low = f.confidence === 'low'
-        const ok = confirmed.includes(f.name)
-        return (
-          <li key={f.name} className={`spec-row conf-${f.confidence} ${low && !ok ? 'needs-check' : ''}`}>
-            <span className="spec-name">{f.name}</span>
-            <span className="spec-value">{f.value}</span>
-            <span className="spec-meta" title={`confidence: ${f.confidence} · read from: ${f.source}`}>
-              {science ? `${CONF_TEXT[f.confidence]} · ${f.source}` : low ? 'please check' : ''}
-            </span>
-            {low
-              ? (
-                <label className="spec-check">
-                  <input type="checkbox" checked={ok} disabled={!editable} onChange={() => toggleConfirmed(f.name)} /> Looks right
-                </label>
-              )
-              : <span />}
-          </li>
-        )
-      })}
-    </ul>
+    <>
+      <ul className="spec-list">{main.map(row)}</ul>
+      {rest.length > 0 && (
+        <details className="fold spec-more">
+          <summary>All settings read from the figure ({fields.length})</summary>
+          <ul className="spec-list">{rest.map(row)}</ul>
+        </details>
+      )}
+    </>
   )
 }
 
 export function ReproduceView() {
-  const { proposal, run, phase, science } = useInvestigation()
-  const figure = run?.figure ?? proposal?.figure
+  const { proposal, run, phase, science, figureRead } = useInvestigation()
+  const figure = run?.figure ?? proposal?.figure ?? figureRead
   if (!figure) return null
   const repro = lastData<Repro>(run ?? null, 'reproduction_check')
   const exact = figure.spec.mode === 'exact'
-  const nLow = figure.spec.fields.filter((f) => f.confidence === 'low').length
+  const reviewing = phase === 'planning' || phase === 'plan'
 
   return (
     <section className="card reproduce">
       <header className="card-head">
-        <h2>{exact ? 'Reproducing a figure' : 'Applying a figure’s method'}</h2>
+        <h2>{reviewing ? 'Figure interpreted' : exact ? 'Reproducing a published figure' : 'Applying a figure’s method to our data'}</h2>
         {science && (
           <span className="repro-tags">
             <span className="tag">{KIND_LABEL[figure.spec.kind]}</span>
@@ -122,31 +128,30 @@ export function ReproduceView() {
       {science && <p className="repro-summary">{figure.spec.summary}{figure.spec.pdf_fallback ? ' (methods PDF read as text)' : ''}</p>}
       <div className="repro-grid">
         <figure>
-          <figcaption className="muted small">Theirs · {figure.filename}</figcaption>
+          <figcaption className="muted small">Published figure · {figure.filename}</figcaption>
           <img src={api.figureUrl(figure.figure_id)} alt={`Uploaded figure: ${figure.spec.summary}`} />
         </figure>
         <figure>
-          <figcaption className="muted small">Ours</figcaption>
+          <figcaption className="muted small">Computed by the agent</figcaption>
           <Ours run={run ?? null} />
         </figure>
       </div>
       {exact && repro && (
         <div className={repro.match ? 'match ok' : 'match no'}>
-          {repro.match ? '✓ Our result matches the original exactly.' : '✗ Our result does not match the original.'}
-          {science && (
-            <span className="muted small"> Largest difference {repro.max_abs_diff.toExponential(1)} over {repro.n_values} values
-              (tolerance {repro.tolerance.toExponential(0)}). Reference: {repro.reference_method}</span>
-          )}
+          {repro.match
+            ? <>✓ Reproduced: {repro.n_values} of {repro.n_values} values match the published code’s output.</>
+            : <>✗ Not reproduced: some of the {repro.n_values} values differ from the published code’s output.</>}
+          <span className="muted small"> Largest difference {repro.max_abs_diff.toExponential(1)} (allowed {repro.tolerance.toExponential(0)}).
+            {science && <> Reference: {repro.reference_method}</>}</span>
         </div>
       )}
       {!exact && <div className="match transfer">Method applied to your data — numbers are not expected to match.</div>}
-      {(phase === 'plan' || science) && (
+      {(reviewing || science) && (
         <>
-          <h3 className="spec-head">
-            What we read from the figure
-            {nLow > 0 && phase === 'plan' && <span className="muted small"> · tick the {nLow === 1 ? 'one we’re unsure of' : `${nLow} we’re unsure of`} before running</span>}
-          </h3>
-          <SpecList figure={figure} editable={phase === 'plan'} science={science} />
+          {reviewing && <p className="spec-intro">The AI read these settings from the figure. Review them before running{
+            figure.spec.fields.some((f) => f.confidence !== 'high') ? '; the ones marked “inferred” are its best guess.' : '.'}</p>}
+          <SpecList figure={figure} science={science} />
+          {phase === 'planning' && <p className="muted small drafting">Drafting the analysis plan…</p>}
         </>
       )}
       {science && (

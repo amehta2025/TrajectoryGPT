@@ -203,21 +203,35 @@ def load_figure(figure_id: str, directory: Path | None = None) -> tuple[bytes, s
         raise KeyError(figure_id) from None
 
 
-def plan_from_figure(llm: LLM, raw_files: list[dict], selected_dataset: str, note: str = "") -> dict:
-    """Validate uploads, extract the spec, store the figure, and plan. Returns what /figure/plan sends."""
+def read_figure(llm: LLM, raw_files: list[dict], note: str = "") -> tuple[dict, list]:
+    """Validate uploads, extract the spec and store the figure: (figure with its spec, usages). The UI shows
+    what was read while the plan is drafted (two requests, so the reading isn't hidden behind the plan)."""
     if not 1 <= len(raw_files) <= MAX_FILES:
         raise UploadRejected(f"attach 1-{MAX_FILES} files (a figure image and/or a methods PDF)")
     files = [decode_upload(f) for f in raw_files]
     spec, usages = extract_spec(llm, files, note)
+    figure = {**save_figure(files), "spec": spec}
     if not spec.get("is_figure", True):
-        raise NotAFigure(spec, {**save_figure(files), "spec": spec})
+        raise NotAFigure(spec, figure)
     if spec["kind"] not in SUPPORTED_KINDS:
-        raise UnsupportedFigure(spec, {**save_figure(files), "spec": spec})
+        raise UnsupportedFigure(spec, figure)
+    return figure, usages
+
+
+def plan_from_spec(llm: LLM, figure: dict, selected_dataset: str) -> dict:
+    """The analysis plan for a figure already read. Returns what /figure/plan sends."""
+    spec = figure["spec"]
     dataset = spec["dataset"] if spec["mode"] == "exact" else selected_dataset
     fields = "; ".join(f"{f['name']}: {f['value']} ({f['confidence']}, {f['source']})" for f in spec["fields"])
     question = (f"{spec['question']}\n\nThis comes from an uploaded figure ({spec['kind']}, "
                 f"{'exact reproduction on ' + dataset if spec['mode'] == 'exact' else 'method transfer'}). "
                 f"Extracted spec: {fields}")
-    plan, plan_usages = make_plan(llm, question, dataset)
-    figure = {**save_figure(files), "spec": spec}
-    return {"plan": plan, "figure": figure, "question": question, "usages": usages + plan_usages}
+    plan, usages = make_plan(llm, question, dataset, effort=EFFORT["figure_plan"])
+    return {"plan": plan, "figure": figure, "question": question, "usages": usages}
+
+
+def plan_from_figure(llm: LLM, raw_files: list[dict], selected_dataset: str, note: str = "") -> dict:
+    """Read and plan in one go (the CLI and the one-request /figure/plan)."""
+    figure, usages = read_figure(llm, raw_files, note)
+    out = plan_from_spec(llm, figure, selected_dataset)
+    return {**out, "usages": usages + out["usages"]}

@@ -355,6 +355,42 @@ def figure_plan(files: list[dict] = Body(...), dataset: str = Body("adk_equilibr
         raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
 
 
+@app.post("/figure/read", dependencies=[Depends(require_passcode), Depends(rate_limit("figure"))])
+def figure_read(files: list[dict] = Body(...), note: str = Body(""), provider: str | None = Body(None)):
+    """Figure mode in two requests, so the UI shows what was read while the plan is drafted: this one reads
+    the figure (spec), then POST /figure/read/{read_id}/plan. In replay mode a recorded figure's plan comes
+    back at once as "proposal"."""
+    from app.agent.figure import NOTE_LIMIT, UnsupportedFigure, UploadRejected, decode_upload
+    if replay.mode()[0] == "replay":
+        try:
+            r = replay.match_figure([decode_upload(f) for f in files[:2]])
+        except UploadRejected as e:
+            raise HTTPException(400, str(e)) from None
+        if r is None:
+            raise _replay_miss()
+        return {"proposal": replay.proposal(r)}
+    _check_provider(provider)
+    require_budget()
+    try:
+        return session.read_figure(files, note[:NOTE_LIMIT], provider=provider)
+    except UploadRejected as e:
+        raise HTTPException(400, str(e)) from None
+    except UnsupportedFigure as e:
+        raise HTTPException(422, {"unsupported": str(e), "reason": e.reason, "spec": e.spec, "figure": e.figure}) from None
+
+
+@app.post("/figure/read/{read_id}/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
+def figure_read_plan(read_id: str, dataset: str = Body("adk_equilibrium", embed=True)):
+    _check_dataset(dataset)
+    require_budget()
+    try:
+        return session.plan_figure_read(read_id, dataset)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from None
+    except PlanInvalid as e:
+        raise HTTPException(422, {"errors": e.errors, "plan": e.plan}) from None
+
+
 @app.post("/transcribe", dependencies=[Depends(require_passcode), Depends(rate_limit("voice"))])
 def transcribe(audio: str = Body(..., embed=True)):
     """Push-to-talk (SPEC §9d): base64 WAV (mono, 16-bit, 16/24 kHz) -> text for the question box."""

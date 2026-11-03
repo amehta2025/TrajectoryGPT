@@ -136,7 +136,8 @@ def to_approved(p: dict) -> ApprovedPlan:
     )
 
 
-def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None) -> tuple[dict, list]:
+def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None,
+              effort: str | None = None) -> tuple[dict, list]:
     """Returns (plan dict, usages). One retry with the validation errors. The plan carries code-written data
     notes for what the question asks that the data cannot give (agent/limits.py)."""
     from app.agent.limits import data_notes
@@ -145,7 +146,7 @@ def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None
                {"role": "user", "content": prompts.planner_user(question, dataset, dataset_facts(), context, notes)}]
     usages = []
     for attempt in range(2):
-        r = llm.run_turn(history, schema=plan_schema(), effort=EFFORT["plan"])
+        r = llm.run_turn(history, schema=plan_schema(), effort=effort or EFFORT["plan"])
         usages.append(r.usage)
         plan = r.parsed
         errs = validate_plan(plan) if isinstance(plan, dict) else ["the plan is not a JSON object"]

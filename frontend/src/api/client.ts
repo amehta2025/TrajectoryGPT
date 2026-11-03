@@ -434,6 +434,11 @@ export const api = {
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
   figurePlan: (files: UploadFile[], dataset: string, note: string, provider?: Provider) =>
     post<PlanResponse>('/figure/plan', { files, dataset, note, provider: provider ?? null }),
+  /** Figure mode, first request: what the AI read from the figure (or, in replay mode, a recorded plan). */
+  figureRead: (files: UploadFile[], note: string, provider?: Provider) =>
+    post<{ read_id?: string; figure?: Figure; proposal?: PlanResponse }>('/figure/read', { files, note, provider: provider ?? null }),
+  /** Figure mode, second request: the analysis plan for that reading. */
+  figureReadPlan: (readId: string, dataset: string) => post<PlanResponse>(`/figure/read/${encodeURIComponent(readId)}/plan`, { dataset }),
   /** A recorded run's plan; works in live mode without the passcode (no model is called). */
   replayPlan: (runId: string) => post<PlanResponse>(`/replays/${encodeURIComponent(runId)}/plan`, {}),
   /** Push-to-talk: base64 WAV (mono, 16-bit, 24 kHz) -> text for the question box. */

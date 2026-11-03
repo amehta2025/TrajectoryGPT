@@ -9,7 +9,7 @@ vi.mock('../api/client', async (orig) => {
     ...real,
     api: {
       ...real.api,
-      figurePlan: vi.fn(async () => { throw new real.UnsupportedFigure("This figure type isn't supported yet.", figure.spec as never, figure as never) }),
+      figureRead: vi.fn(async () => { throw new real.UnsupportedFigure("This figure type isn't supported yet.", figure.spec as never, figure as never) }),
       plan: vi.fn(async () => { throw new Error('planner must not be called') }),
       health: vi.fn(async () => ({ passcode_required: health.locked })),
     },
