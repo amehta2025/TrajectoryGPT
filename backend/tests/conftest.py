@@ -13,3 +13,11 @@ def _fresh_rate_limits(monkeypatch):
     monkeypatch.setattr(ratelimit, "LIMITER", ratelimit.RateLimiter())
     import app.main
     monkeypatch.setattr(app.main, "LIMITER", ratelimit.LIMITER)
+
+
+@pytest.fixture(autouse=True)
+def _tmp_plan_store(tmp_path, monkeypatch):
+    """Plans and their run claims are saved to disk (app/agent/session.py); keep each test's in its own folder."""
+    from app.agent import session
+    monkeypatch.setattr(session, "PLANS_DIR", tmp_path / "plans")
+    monkeypatch.setattr(session, "CLAIMS", session.FileClaims())

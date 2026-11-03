@@ -55,21 +55,19 @@ function LiveSteps({ run, paused }: { run: NonNullable<ReturnType<typeof useInve
     </ol>
   )
 }
-const cost = (c: number | null) => (c === null ? '' : ` · $${c.toFixed(4)}`)
-
 function line(e: RunEvent): { text: string; cls: string } | null {
   switch (e.type) {
     case 'run_started':
       return { text: 'Run started', cls: 'muted' }
     case 'turn':
       return {
-        text: `T${e.turn} ${e.tool ?? '(no tool call)'} — ${e.status}${e.provenance_id ? ` → ${e.provenance_id}` : ''} · model ${e.model_s.toFixed(1)}s (${e.effort}) · tool ${e.tool_s.toFixed(1)}s${cost(e.cost_usd)}`,
+        text: `T${e.turn} ${e.tool ?? '(no tool call)'} — ${e.status}${e.provenance_id ? ` → ${e.provenance_id}` : ''} · model ${e.model_s.toFixed(1)}s (${e.effort}) · tool ${e.tool_s.toFixed(1)}s`,
         cls: e.status === 'ok' || e.status === 'submitted' ? '' : 'warn',
       }
     case 'paused':
       return { text: 'Paused (step-through)', cls: 'muted' }
     case 'run_finished':
-      return { text: `Finished: ${e.status} in ${e.wall_s.toFixed(1)}s${cost(e.cost_usd)}${e.error ? ` — ${e.error}` : ''}`, cls: e.status === 'awaiting_verification' ? 'ok' : 'warn' }
+      return { text: `Finished: ${e.status} in ${e.wall_s.toFixed(1)}s${e.error ? ` — ${e.error}` : ''}`, cls: e.status === 'awaiting_verification' ? 'ok' : 'warn' }
     default:
       return null
   }
@@ -128,7 +126,7 @@ export function AgentTrace({ meta, open: startOpen = false }: { meta: Metadata |
           {finished
             ? parts.map((p, i) => <span key={i} className="trace-part">{i > 0 && <span className="arrow">→</span>}{p}</span>)
             : <LiveSteps run={run} paused={paused} />}
-          {finished && <span className="trace-meta">· {run.wall_s.toFixed(0)} s{run.cost_usd !== null ? ` · $${run.cost_usd.toFixed(3)}` : ''}</span>}
+          {finished && <span className="trace-meta">· {run.wall_s.toFixed(0)} s</span>}
         </button>
         {paused && <button className="primary small" onClick={() => void nextTurn()}>Next step</button>}
       </div>

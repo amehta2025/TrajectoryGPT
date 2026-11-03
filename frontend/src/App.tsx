@@ -6,7 +6,6 @@ import { DatasetBadge } from './components/DatasetBadge'
 import { PasscodePrompt, StartScreen } from './components/StartScreen'
 import { PlanCard } from './components/PlanCard'
 import { Headline } from './components/ReportView'
-import { CostMeter } from './components/CostMeter'
 import { hisText } from './state/residueKey'
 import { VoiceLayer } from './components/VoiceInput'
 import { FigureSetup, ResultTabs, RunningView, Stepper } from './components/Workflow'
@@ -52,7 +51,6 @@ export default function App() {
           <span className="brand-mark" aria-hidden>⟋⟋</span>TrajectoryGPT <span className="muted brand-sub">AI for molecular research</span>
         </button>
         <div className="topbar-right">
-          <CostMeter />
           {asking && <DatasetBadge meta={meta} dataset={dataset} />}
           {asking && <button className="new-q" onClick={reset}>New question</button>}
         </div>
@@ -70,6 +68,7 @@ export default function App() {
           <Stepper />
           <div className="inv-head">
             {inv.needPasscode && <PasscodePrompt />}
+            {inv.notice && <p className="notice-line small" role="status">{inv.notice}</p>}
             {inv.proposal?.follow_up && (
               <span className="muted small follow-of">Following up on “{inv.proposal.follow_up.question}”
                 {inv.proposal.follow_up.focus_pair && <> · about {hisText(inv.proposal.follow_up.focus_pair)}</>}</span>

@@ -257,8 +257,7 @@ function VerifierDetail({ run }: { run: RunView }) {
       {run.planted && <p className="small">Planted for the demo (development toggle): finding {run.planted}.</p>}
       <p className="muted small">
         {v.usage?.model ?? 'muse-wonder-1.0'} · effort {v.usage?.effort ?? 'high'} · read the report, the cited values and{' '}
-        {v.figures?.length ?? 0} plot{v.figures?.length === 1 ? '' : 's'} ({v.figures?.join(', ')}) · {v.wall_s ?? '?'} s ·{' '}
-        {v.usage?.cost_usd != null ? `$${v.usage.cost_usd.toFixed(4)}` : 'cost n/a'} (logged separately)
+        {v.figures?.length ?? 0} plot{v.figures?.length === 1 ? '' : 's'} ({v.figures?.join(', ')}) · {v.wall_s ?? '?'} s
       </p>
     </div>
   )

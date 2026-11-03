@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, getPasscode, PasscodeRequired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, getPasscode, PasscodeRequired, PlanExpired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -21,12 +21,15 @@ export type Investigation = {
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
   declined: (Declined & { question: string; followUp: boolean }) | null // turned away before planning, or a residue to pick
+  notice: string | null // a status line while planning, e.g. "This plan expired. Re-planning…"
 }
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
-  kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null,
+  kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null, notice: null,
 }
+const EXPIRED_NOTICE = 'This plan expired. Re-planning…'
+let replanning = false // set while a plan the server lost is planned again
 let state: Investigation = empty
 let closeStream: (() => void) | null = null
 let retry: (() => Promise<void>) | null = null // the last question or figure, re-sent after the passcode
@@ -86,11 +89,12 @@ export async function ask(question: string, dataset: string, followUp = false, s
   }
   const { pair } = getSelection()
   const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
-  set({ ...empty, phase: 'planning', question, dataset, kicker, science: followUp ? state.science : false })
+  set({ ...empty, phase: 'planning', question, dataset, kicker, science: followUp ? state.science : false,
+    notice: replanning ? EXPIRED_NOTICE : null })
   try {
     const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider, skipScope })
-    if (proposal.declined) set({ phase: 'idle', declined: { ...proposal.declined, question, followUp } })
-    else set({ phase: 'plan', proposal })
+    if (proposal.declined) set({ phase: 'idle', notice: null, declined: { ...proposal.declined, question, followUp } })
+    else set({ phase: 'plan', proposal, notice: null })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
@@ -122,17 +126,17 @@ export async function askFigure(files: File[], dataset: string, note: string, op
     set({ ...empty, phase: 'idle', question, dataset, kicker, needPasscode: true })
     return
   }
-  set({ ...empty, phase: 'planning', question, dataset, kicker })
+  set({ ...empty, phase: 'planning', question, dataset, kicker, notice: replanning ? EXPIRED_NOTICE : null })
   try {
     const uploads = await Promise.all(files.map(toUpload))
     const read = await api.figureRead(uploads, note, provider)
     if (read.proposal) {
-      set({ phase: 'plan', proposal: read.proposal }) // replay mode: the recorded run's plan
+      set({ phase: 'plan', proposal: read.proposal, notice: null }) // replay mode: the recorded run's plan
       return
     }
     set({ figureRead: read.figure ?? null })
     const proposal = await api.figureReadPlan(read.read_id!, dataset)
-    set({ phase: 'plan', proposal })
+    set({ phase: 'plan', proposal, notice: null })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof UnsupportedFigure) set({ phase: 'idle', unsupported: { message: e.message, figure: e.figure } })
@@ -171,6 +175,18 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean, plantO
       if (e.type === 'run_finished') set({ phase: 'finished' })
     })
   } catch (e) {
+    if (e instanceof PlanExpired) {
+      // The server lost the plan (it should not, now that plans are saved; this is the fallback). Plan the same
+      // question or figure again; the user reviews the new plan and presses Run, as before.
+      if (!retry) return set({ error: 'This plan expired. Ask the question again.' })
+      replanning = true
+      try {
+        await retry()
+      } finally {
+        replanning = false
+      }
+      return
+    }
     set(e instanceof PasscodeRequired ? { needPasscode: true, error: 'Demo passcode required.' } : { error: `Could not start: ${(e as Error).message}` })
   }
 }

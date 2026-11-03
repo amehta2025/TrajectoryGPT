@@ -6,12 +6,16 @@ events to a list that the SSE endpoint streams (late subscribers replay from the
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from app.agent.llm import LLM, CostTracker
+from app.config import CACHE_DIR
 from app.agent import orchestrator, scope, verifier
 from app.agent.orchestrator import Run, new_run, run_investigation
 from app.agent.planner import PlanInvalid, make_plan, to_approved
@@ -68,7 +72,90 @@ class RunHandle:
                 return
 
 
-PLANS: dict[str, dict] = {}
+PLANS: dict[str, dict] = {}  # this container's copy; every plan is also saved under PLANS_DIR
+# On Modal PLANS_DIR is on the Volume, so a plan survives a scale-down, a redeploy or a second container
+# (the live bug: "unknown plan" when Run was clicked after the container that made the plan had gone).
+PLANS_DIR = CACHE_DIR / "plans"
+PLAN_ID = re.compile(r"[0-9a-f]{12}")
+ON_PLAN_SAVED = None  # set on Modal to commit the Volume, so another container sees the plan at once
+RELOAD_STORE = None  # set on Modal to reload the Volume before reading a plan this container hasn't seen
+
+
+class PlanExpired(KeyError):
+    """The plan is in neither this container's memory nor the store; the UI re-plans."""
+
+
+class FileClaims:
+    """One plan starts one run, recorded as <plan_id>.claim beside the plan. Creating the file is atomic
+    (O_EXCL) on one filesystem; Modal swaps in a claim store shared by every container (modal_app.py)."""
+
+    def _path(self, plan_id: str) -> Path:
+        return PLANS_DIR / f"{plan_id}.claim"
+
+    def get(self, plan_id: str) -> str | None:
+        try:
+            return self._path(plan_id).read_text(encoding="utf-8").strip() or None
+        except FileNotFoundError:
+            return None
+
+    def claim(self, plan_id: str, run_id: str) -> str:
+        """Claim the plan for run_id; returns the run that holds the claim (run_id, or an earlier one)."""
+        PLANS_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(self._path(plan_id), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return self.get(plan_id) or run_id
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(run_id)
+        return run_id
+
+
+CLAIMS = FileClaims()
+_PLAN_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _save_plan(pid: str, entry: dict) -> None:
+    """Write the plan (without its model client) to the store; the provider name is enough to rebuild it."""
+    PLANS_DIR.mkdir(parents=True, exist_ok=True)
+    d = {k: v for k, v in entry.items() if k not in ("llm", "run_id")} | {"provider": entry["llm"].provider}
+    tmp = PLANS_DIR / f"{pid}.json.tmp"
+    tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, PLANS_DIR / f"{pid}.json")
+    if ON_PLAN_SAVED:
+        try:
+            ON_PLAN_SAVED()
+        except Exception:  # the plan is on disk; Modal also commits in the background
+            pass
+
+
+def get_plan(plan_id: str) -> dict:
+    """A stored plan: from memory, else from the store (reloading it once, for a plan made elsewhere)."""
+    with _lock:
+        stored = PLANS.get(plan_id)
+    if stored is not None:
+        return stored
+    if not PLAN_ID.fullmatch(plan_id or ""):
+        raise PlanExpired(f"unknown plan {plan_id}")
+    path = PLANS_DIR / f"{plan_id}.json"
+    if not path.exists() and RELOAD_STORE:
+        try:
+            RELOAD_STORE()
+        except Exception:  # Modal refuses a reload while files are open; the plan is then simply missing
+            pass
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        raise PlanExpired(f"unknown plan {plan_id}") from None
+    d["llm"] = new_llm(d.pop("provider", None))
+    with _lock:
+        return PLANS.setdefault(plan_id, d)
+
+
+def _plan_lock(plan_id: str) -> threading.Lock:
+    with _lock:
+        return _PLAN_LOCKS.setdefault(plan_id, threading.Lock())
+
+
 # Per browser session (SPEC §9 step 8): last run, its approved params, the selected pair. In memory: one container.
 SESSIONS: dict[str, dict] = {}
 MAX_SESSIONS = 2000
@@ -150,9 +237,11 @@ def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id
     plan, usages = make_plan(llm, question, dataset, context)
     usages = gate_usages + usages
     pid = uuid.uuid4().hex[:12]
+    entry = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
+             "llm": llm, "session_id": session_id}
+    _save_plan(pid, entry)
     with _lock:
-        PLANS[pid] = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
-                      "llm": llm, "session_id": session_id}
+        PLANS[pid] = entry
     follow = {k: context[k] for k in ("run_id", "question", "focus_pair")} if context else None
     return {"plan_id": pid, "plan": plan, "usage": PLANS[pid]["usage"], "model": llm.model, "provider": llm.provider,
             "follow_up": follow}
@@ -197,9 +286,11 @@ def plan_figure_read(read_id: str, dataset: str) -> dict:
 def _store_figure_plan(llm: LLM, out: dict, read_usage: list[dict]) -> dict:
     pid = uuid.uuid4().hex[:12]
     usage = read_usage + [u.as_dict() for u in out["usages"]]
+    entry = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
+             "usage": usage, "llm": llm, "figure": out["figure"]}
+    _save_plan(pid, entry)
     with _lock:
-        PLANS[pid] = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
-                      "usage": usage, "llm": llm, "figure": out["figure"]}
+        PLANS[pid] = entry
     return {"plan_id": pid, "plan": out["plan"], "usage": usage, "model": llm.model, "provider": llm.provider,
             "figure": out["figure"], "question": out["question"]}
 
@@ -213,17 +304,16 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
 
     One plan starts one run: a repeated or concurrent call (a retry, a double click, a script) gets the run
     the first call started, with its edits, and is never billed twice (red-team: double run from one plan).
+    The claim lives in CLAIMS, so this holds across a restart and across containers too.
     """
     from app.agent.figure import low_confidence
-    with _lock:
-        stored = PLANS.get(plan_id)
-        if stored is not None:
-            plan_lock = stored.setdefault("lock", threading.Lock())
-    if stored is None:
-        raise KeyError(f"unknown plan {plan_id}")
-    with plan_lock:
+    stored = get_plan(plan_id)  # PlanExpired if it is nowhere
+    with _plan_lock(plan_id):
         if stored.get("run_id"):
             return stored["run_id"]
+        if claimed := CLAIMS.get(plan_id):  # started earlier, by this container before a restart or by another one
+            stored["run_id"] = claimed
+            return claimed
         if stored.get("figure"):
             missing = [n for n in low_confidence(stored["figure"]["spec"]) if n not in (confirmed_fields or [])]
             if missing:
@@ -237,10 +327,13 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
         run.plan_usage = stored["usage"]
         run.figure = stored.get("figure")
         run.proposal = stored["plan"]
+        winner = CLAIMS.claim(plan_id, run.run_id)
+        stored["run_id"] = winner
+        if winner != run.run_id:  # another container started this plan a moment ago
+            return winner
         handle = RunHandle(run, step_through=step_through)
         with _lock:
             RUNS[run.run_id] = handle
-        stored["run_id"] = run.run_id
     remember(stored.get("session_id"), last_run_id=run.run_id)
     llm: LLM = stored["llm"]
 

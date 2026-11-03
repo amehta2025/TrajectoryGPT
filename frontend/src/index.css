@@ -255,8 +255,8 @@ table.stats tr.greyed td { color: var(--muted); }
 ul.plain { margin: 0; padding-left: 18px; line-height: 1.5; }
 .passcode { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); background: var(--panel); border-radius: 10px; }
 .passcode-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
-.passcode-row { display: flex; gap: 10px; }
-.passcode-row input { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.passcode-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.passcode-row input { flex: 1 1 160px; min-width: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
 .passcode-row button { padding: 10px 18px; border-radius: 8px; }
 .error-text { color: #ffb4a3; flex-basis: 100%; }
 
@@ -607,3 +607,4 @@ button.example-card.selected { border-color: var(--violet); background: var(--vi
 .protein-tab { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .protein-tab { grid-template-columns: 1fr; } }
 .viewer-card.tall .viewer-canvas { height: clamp(460px, calc(100vh - 260px), 820px); }
+.notice-line { margin: 0 0 6px; padding: 6px 10px; border-left: 2px solid var(--accent); background: var(--panel); color: var(--text, inherit); }

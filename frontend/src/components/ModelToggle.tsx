@@ -36,7 +36,7 @@ export function ModelToggle({ disabled }: { disabled?: boolean }) {
           </button>
         ))}
       </span>
-      {chosen === 'baseten' && <span className="muted small">open weights · cost shown is an estimate</span>}
+      {chosen === 'baseten' && <span className="muted small">open weights</span>}
     </>
   )
 }

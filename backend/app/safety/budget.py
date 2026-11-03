@@ -14,7 +14,7 @@ from pathlib import Path
 from app.config import CACHE_DIR
 
 USAGE_DIR = CACHE_DIR / "usage"
-DEFAULT_DAILY_USD = 3.0
+DEFAULT_DAILY_USD = 10.0
 _lock = threading.Lock()
 
 

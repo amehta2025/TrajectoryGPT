@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 IGNORE = ["**/__pycache__/**", "**/*.pyc"]
 
 volume = modal.Volume.from_name("trajectorygpt-cache", create_if_missing=True)
+plan_claims = modal.Dict.from_name("trajectorygpt-plan-claims", create_if_missing=True)  # plan_id -> run_id
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install_from_requirements(str(HERE / "requirements.txt"))
@@ -47,7 +48,7 @@ API_ENV = {
     "META_API_BASE_URL": "https://api.meta.ai/v1",
     "BASETEN_BASE_URL": "https://inference.baseten.co/v1",
     "BASETEN_MODEL": "meta-models/muse-spark-open-1026",  # open-weight toggle; Meta stays the default
-    "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "3"),
+    "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "10"),
     "REQUIRE_PASSCODE": "1",  # fail closed if the passcode secret is empty
     "APP_MODE": os.environ.get("APP_MODE", "live"),  # kill switch: APP_MODE=replay modal deploy modal_app.py
     "INVESTIGATIONS_DIR": "/cache/investigations",  # runs persist on the Volume (replay curation, restarts)
@@ -69,6 +70,22 @@ def api():
     from app.agent import session
     from app.main import app as fastapi_app
     session.ON_RUN_FINISHED = volume.commit  # make a finished run durable right away
+    session.ON_PLAN_SAVED = volume.commit  # a plan outlives this container (scale-down, redeploy)
+    session.RELOAD_STORE = volume.reload  # read a plan another container saved
+
+    class SharedClaims(session.FileClaims):
+        """One plan, one run across containers: modal.Dict's put(skip_if_exists=True) is atomic for every
+        container, which files on the Volume are not. The claim is also written to the Volume as a record."""
+
+        def get(self, plan_id):
+            return plan_claims.get(plan_id) or super().get(plan_id)
+
+        def claim(self, plan_id, run_id):
+            winner = run_id if plan_claims.put(plan_id, run_id, skip_if_exists=True) else plan_claims.get(plan_id, run_id)
+            super().claim(plan_id, winner)
+            return winner
+
+    session.CLAIMS = SharedClaims()
     return fastapi_app
 
 

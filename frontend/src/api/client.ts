@@ -331,6 +331,9 @@ export function setPasscode(code: string) {
 /** Thrown on HTTP 401 so the UI can ask for the passcode and retry. */
 export class PasscodeRequired extends Error {}
 
+/** POST /runs: the server no longer has this plan (404 with plan_expired); the UI plans again. */
+export class PlanExpired extends Error {}
+
 /** Figure mode read the figure but it is not a supported type; no plan was made. */
 export class UnsupportedFigure extends Error {
   spec: FigureSpec
@@ -365,6 +368,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     } catch {
       /* not JSON */
     }
+    if ((detail as { plan_expired?: boolean } | null)?.plan_expired) throw new PlanExpired('This plan expired.')
     const unsupported = detail as { unsupported?: string; spec?: FigureSpec; figure?: Figure } | null
     if (unsupported?.unsupported && unsupported.spec && unsupported.figure) {
       throw new UnsupportedFigure(unsupported.unsupported, unsupported.spec, unsupported.figure)

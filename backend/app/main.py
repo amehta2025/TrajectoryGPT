@@ -446,6 +446,8 @@ def start_run(request: Request, plan_id: str = Body(...), edits: dict = Body({})
     require_budget()
     try:
         return {"run_id": session.start_run(plan_id, edits, step_through, confirmed_fields, plant_overclaim)}
+    except session.PlanExpired:  # the UI says "This plan expired. Re-planning…" and plans again
+        raise HTTPException(404, {"plan_expired": True, "message": "This plan expired."}) from None
     except KeyError as e:
         raise HTTPException(404, str(e)) from None
     except PlanInvalid as e:

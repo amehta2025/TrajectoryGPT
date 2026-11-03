@@ -102,3 +102,51 @@ def test_finished_run_is_read_back_from_disk_after_restart():
     assert evs == [{**evs[0], "type": "run_finished", "status": "awaiting_verification"}]
     assert c.get("/runs/nope").status_code == 404
     assert c.get("/runs").json()[0]["run_id"] == rid
+
+
+def propose(monkeypatch) -> str:
+    """A plan made the way /plan makes it (planner stubbed), so it is saved to the plan store."""
+    llm = ScriptedLLM([])
+    llm.provider, llm.model = "meta", "fake"
+    monkeypatch.setattr(session, "make_plan", lambda *a, **k: (PLAN, []))
+    return session.propose_plan("q", "adk_transition", llm=llm, skip_scope=True)["plan_id"]
+
+
+def restart_container(monkeypatch, script=GOOD):
+    """What a scale-down, redeploy or second container sees: nothing in memory, only the store on disk."""
+    session.PLANS.clear()
+    session._PLAN_LOCKS.clear()
+    monkeypatch.setattr(session, "new_llm", lambda provider=None: ScriptedLLM(script))
+
+
+def test_a_plan_runs_after_the_container_restarts(monkeypatch):
+    """The live bug: Run after the container that made the plan had gone gave 404 'unknown plan'."""
+    c = TestClient(app)
+    pid = propose(monkeypatch)
+    saved = json.loads((session.PLANS_DIR / f"{pid}.json").read_text(encoding="utf-8"))
+    assert saved["plan"] == PLAN and saved["provider"] == "meta" and "llm" not in saved
+    restart_container(monkeypatch)
+    r = c.post("/runs", json={"plan_id": pid, "edits": {}})
+    assert r.status_code == 200
+    evs = list(events(c, r.json()["run_id"]))
+    assert evs[-1]["type"] == "run_finished" and evs[-1]["status"] == "awaiting_verification"
+
+
+def test_one_plan_one_run_across_containers(monkeypatch):
+    """A second container (or the same one after a restart) gets the first run back, never a second paid run."""
+    c = TestClient(app)
+    pid = propose(monkeypatch)
+    restart_container(monkeypatch)
+    rid = c.post("/runs", json={"plan_id": pid}).json()["run_id"]
+    list(events(c, rid))
+    restart_container(monkeypatch, script=[])  # an empty script fails loudly if a second run were started
+    before = len(session.RUNS)
+    assert c.post("/runs", json={"plan_id": pid, "edits": {"cutoff": 5.0}}).json()["run_id"] == rid
+    assert len(session.RUNS) == before
+
+
+def test_a_lost_plan_says_expired_so_the_ui_replans():
+    c = TestClient(app)
+    r = c.post("/runs", json={"plan_id": "07a5eac55b8d"})
+    assert r.status_code == 404 and r.json()["detail"] == {"plan_expired": True, "message": "This plan expired."}
+    assert c.post("/runs", json={"plan_id": "../../etc/passwd"}).json()["detail"]["plan_expired"]  # never read as a path
