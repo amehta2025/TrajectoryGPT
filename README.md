@@ -93,7 +93,7 @@ Both agent providers share the same validated tools and scientific computations.
 
 ## Access controls and recorded investigations
 
-Live AI operations are protected by a demo passcode, per-session and per-IP rate limits, and a configurable daily usage budget. Keys are stored server-side in Modal Secrets. The backend can switch into **replay mode** explicitly (`APP_MODE=replay`) or when its tracked daily AI budget is exhausted.
+Live AI operations are protected by per-session and per-IP rate limits and a configurable daily usage budget, plus an optional demo passcode (off on the public deployment; `PASSCODE=1` at deploy turns it on). Keys are stored server-side in Modal Secrets. The backend can switch into **replay mode** explicitly (`APP_MODE=replay`) or when its tracked daily AI budget is exhausted.
 
 The repository contains **five curated investigation records** in [`backend/replay/`](backend/replay/). These are **interactive replays, not videos**: saved plans, tool results, reports, and verification outcomes are presented through the same interface, while already-computed charts and molecular structures remain inspectable. The replay path is designed not to make new model calls. Access to a replay is not a claim that a new live investigation was run.
 

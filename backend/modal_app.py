@@ -11,8 +11,8 @@ Export:  cd backend && modal run modal_app.py::verify_export --run-id <id>
          (runs reproduce_<id>.py in a clean Modal Sandbox; the run is read locally or from the Volume)
 CORS:    set ALLOWED_ORIGINS (comma-separated, e.g. the Vercel URL) in your shell before deploying.
 Replay:  set APP_MODE=replay before deploying to turn the LLM off (kill switch, SPEC §12); unset = live.
-Secrets: trajectorygpt-meta (META_API_KEY), trajectorygpt-passcode (DEMO_PASSCODE) and trajectorygpt-baseten
-         (BASETEN_API_KEY) must exist in Modal.
+Secrets: trajectorygpt-meta (META_API_KEY) and trajectorygpt-baseten (BASETEN_API_KEY) must exist in Modal;
+         trajectorygpt-passcode (DEMO_PASSCODE) too when deploying with PASSCODE=1 (the passcode is off by default).
          The deploy always uses the Standard model (users upload figures; Contributor mode trains on inputs).
 """
 import os
@@ -32,8 +32,12 @@ image = (
     .add_local_dir(HERE.parent / "config", "/config")
     .add_local_dir(HERE / "replay", "/backend/replay")  # recorded runs for replay mode (app/safety/replay.py)
 )
-SECRETS = [modal.Secret.from_name("trajectorygpt-meta"), modal.Secret.from_name("trajectorygpt-passcode"),
-           modal.Secret.from_name("trajectorygpt-baseten")]  # BASETEN_API_KEY: the open-weight model toggle
+# The demo passcode is off (open for judging, 2026-11-03); the $10 daily budget and per-IP rate limits still
+# apply. Turn it back on with PASSCODE=1 modal deploy modal_app.py (uses the trajectorygpt-passcode secret).
+PASSCODE = os.environ.get("PASSCODE") == "1"
+SECRETS = [modal.Secret.from_name("trajectorygpt-meta"), modal.Secret.from_name("trajectorygpt-baseten")]  # BASETEN_API_KEY: open-weight toggle
+if PASSCODE:
+    SECRETS.append(modal.Secret.from_name("trajectorygpt-passcode"))
 app = modal.App("trajectorygpt", image=image)
 FUNCTION_KW = dict(
     volumes={"/cache": volume},
@@ -49,7 +53,7 @@ API_ENV = {
     "BASETEN_BASE_URL": "https://inference.baseten.co/v1",
     "BASETEN_MODEL": "meta-models/muse-spark-open-1026",  # open-weight toggle; Meta stays the default
     "DAILY_LLM_BUDGET_USD": os.environ.get("DAILY_LLM_BUDGET_USD", "10"),
-    "REQUIRE_PASSCODE": "1",  # fail closed if the passcode secret is empty
+    "REQUIRE_PASSCODE": "1" if PASSCODE else "0",  # with PASSCODE=1: fail closed if the passcode secret is empty
     "APP_MODE": os.environ.get("APP_MODE", "live"),  # kill switch: APP_MODE=replay modal deploy modal_app.py
     "INVESTIGATIONS_DIR": "/cache/investigations",  # runs persist on the Volume (replay curation, restarts)
     "SANDBOX_ENABLED": "1",  # the report's "check in a clean sandbox" button (app/provenance/sandbox.py)
