@@ -30,9 +30,10 @@ const QUESTION_SAMPLE: QuestionExample = {
 // An example the user has loaded into the box but not run yet. Editing the box turns it back into their own input.
 type Loaded = { kind: 'figure'; ex: FigureExample; file: File; note: string } | { kind: 'question'; ex: QuestionExample }
 
-/** Shown after a 401: AI investigations need the demo passcode; charts and 3D stay open. */
+/** Shown after a 401: AI investigations need the demo passcode; charts and 3D stay open. A pending question
+ *  still starts right after unlocking (submitPasscode), so the box doesn't need to say so. */
 export function PasscodePrompt() {
-  const { error, question } = useInvestigation()
+  const { error } = useInvestigation()
   const [code, setCode] = useState('')
   const [checking, setChecking] = useState(false)
   return (
@@ -42,12 +43,16 @@ export function PasscodePrompt() {
       await submitPasscode(code)
       setChecking(false)
     }}>
-      <div className="passcode-text">
-        <b>Enter the demo passcode to run AI investigations.</b>
-        <span className="muted small">{question ? <>“{question}” will start right after.</> : 'Charts and the 3D view stay open without it.'}</span>
+      <label className="passcode-title" htmlFor="passcode">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+          <rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+        </svg>
+        Demo access
+      </label>
+      <div className="passcode-row">
+        <input id="passcode" type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Enter passcode" autoFocus />
+        <button type="submit" className="primary" disabled={!code.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
       </div>
-      <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Passcode" aria-label="Demo passcode" autoFocus />
-      <button type="submit" className="primary" disabled={!code.trim() || checking}>{checking ? 'Checking…' : 'Unlock'}</button>
       {error && <span className="error-text small">{error}</span>}
     </form>
   )
