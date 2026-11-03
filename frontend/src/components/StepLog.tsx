@@ -22,7 +22,7 @@ type Data = Record<string, unknown> & { n_native?: number[]; n_values?: number; 
   n_robust?: number; keys_a?: string[]; keys_b?: string[]; supported_pairs?: unknown[] | null }
 
 /** What a finished step found, in a few words, from its stored result (never the model's own text). */
-function stepResult(run: Run, tool: string): string | null {
+export function stepResult(run: Run, tool: string): string | null {
   const hits = Object.values(run.results).filter((r) => r.tool === tool && r.status === 'ok' && r.data_for_ui)
   const d = hits.at(-1)?.data_for_ui as Data | undefined
   if (!d) return null
@@ -113,9 +113,9 @@ function summary(run: NonNullable<ReturnType<typeof useInvestigation>['run']>, f
   return parts
 }
 
-export function AgentTrace({ meta }: { meta: Metadata | null }) {
+export function AgentTrace({ meta, open: startOpen = false }: { meta: Metadata | null; open?: boolean }) {
   const { run, phase, paused } = useInvestigation()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(startOpen)
   if (!run || (phase !== 'running' && phase !== 'finished')) return null
   const finished = phase === 'finished'
   const parts = summary(run, finished)

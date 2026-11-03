@@ -33,7 +33,7 @@ export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | nu
 }
 
 /** One line on what a step does and why, under its plain sentence. */
-const STEP_DETAIL: Record<string, string> = {
+export const STEP_DETAIL: Record<string, string> = {
   get_metadata: 'Size, length and time step of the simulation.',
   calculate_contacts: 'Which residue pairs stay close, and how often.',
   distance_over_time: 'The closest distance between two residues in every frame.',
@@ -90,7 +90,9 @@ function editsOf(p: Plan, d: Draft): Partial<Plan> {
   }
 }
 
-export function PlanCard({ meta }: { meta: Metadata | null }) {
+/** compact (figure setup): steps and parameters fold into "Scientific settings"; only the Run button shows.
+ *  settingsOpen lets the page's Edit button open that fold. */
+export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta: Metadata | null; compact?: boolean; settingsOpen?: boolean }) {
   const inv = useInvestigation()
   const { phase, proposal, run, error } = inv
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -127,8 +129,8 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
     <input value={draft[k]} disabled={fixed} style={{ width: w }} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
   )
 
-  return (
-    <section className="card plan-card">
+  const body = (
+    <>
       <header className="card-head">
         <h2 title={p.summary}>Analysis plan</h2>
         {checklist && <span className="pill">{done} of {checklist.length} done</span>}
@@ -186,6 +188,13 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
           <label title="Pairs with |Δresid| ≤ N are skipped">Sequence exclusion {field('seq', 40)}</label>
         </div>
       </details>
+    </>
+  )
+  return (
+    <section className={`card plan-card ${compact ? 'compact' : ''}`}>
+      {compact
+        ? <details className="sci-settings" open={settingsOpen || undefined}><summary>Scientific settings: the plan and its parameters</summary>{body}</details>
+        : body}
       {!locked && (
         <div className="plan-actions">
           <label className="small muted" title="The agent stops after each step until you click Next"><input type="checkbox" checked={stepThrough} onChange={(e) => setStepThrough(e.target.checked)} /> Pause after each step</label>
@@ -199,7 +208,7 @@ export function PlanCard({ meta }: { meta: Metadata | null }) {
             setStarting(true)
             await approve(editsOf(p, draft), stepThrough, plant)
             setStarting(false)
-          }}>{starting ? 'Starting…' : proposal.figure && !proposal.recorded ? 'Confirm & run →' : 'Run analysis →'}</button>
+          }}>{starting ? 'Starting…' : 'Run analysis →'}</button>
         </div>
       )}
       {error && <div className="error">{error}</div>}

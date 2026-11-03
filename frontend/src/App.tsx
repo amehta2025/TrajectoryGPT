@@ -3,39 +3,13 @@ import { api, type DatasetInfo, type Metadata } from './api/client'
 import { useSelection } from './state/selection'
 import { reset, useInvestigation } from './state/investigation'
 import { DatasetBadge } from './components/DatasetBadge'
-import { Heatmap } from './components/Heatmap'
-import { CompareChart } from './components/CompareChart'
-import { DistancePlot } from './components/DistancePlot'
-import { Viewer } from './components/Viewer'
 import { PasscodePrompt, StartScreen } from './components/StartScreen'
 import { PlanCard } from './components/PlanCard'
-import { AgentTrace } from './components/StepLog'
-import { Headline, ReportView, ScienceReport, ScienceToggle } from './components/ReportView'
+import { Headline } from './components/ReportView'
 import { CostMeter } from './components/CostMeter'
-import { ReproduceView } from './components/ReproduceView'
-import { AnalysisCards } from './components/AnalysisViews'
-import { DOMAIN_COLORS } from './theme'
 import { hisText } from './state/residueKey'
-import { VoiceHint, VoiceLayer } from './components/VoiceInput'
-
-function Structure({ meta }: { meta: Metadata }) {
-  return (
-    <section className="card viewer-card">
-      <header className="card-head">
-        <h2>Structure</h2>
-        <VoiceHint />
-        <div className="legend">
-          {Object.entries(meta.groups).map(([g, { ranges }]) => (
-            <span key={g} title={ranges.map(([a, b]) => `${a}–${b}`).join(', ')}>
-              <i style={{ background: DOMAIN_COLORS[g] }} /> {g}
-            </span>
-          ))}
-        </div>
-      </header>
-      <Viewer meta={meta} />
-    </section>
-  )
-}
+import { VoiceLayer } from './components/VoiceInput'
+import { FigureSetup, ResultTabs, RunningView, Stepper } from './components/Workflow'
 
 const WAKING_AFTER_MS = 2000
 
@@ -93,6 +67,7 @@ export default function App() {
       {!asking && <StartScreen datasets={datasets} dataset={dataset} meta={meta} />}
       {asking && (
         <main className="inv">
+          <Stepper />
           <div className="inv-head">
             {inv.needPasscode && <PasscodePrompt />}
             {inv.proposal?.follow_up && (
@@ -107,41 +82,15 @@ export default function App() {
             )}
             <span className="muted small kicker">{inv.kicker}</span>
             <h1 className="inv-question">{inv.question}</h1>
-            <Headline meta={meta} />
-            <AgentTrace meta={meta} />
           </div>
-          {!started && (
-            <div className={inv.proposal?.figure || inv.figureRead ? 'plan-only with-figure' : 'plan-only'}>
-              <ReproduceView />
-              <PlanCard meta={meta} />
-            </div>
-          )}
-          {started && (
+          {!started && (inv.proposal?.figure || inv.figureRead
+            ? <FigureSetup meta={meta} />
+            : <div className="plan-only"><PlanCard meta={meta} /></div>)}
+          {inv.phase === 'running' && <RunningView meta={meta} />}
+          {inv.phase === 'finished' && (
             <>
-              <span id="evidence" />
-              {inv.run?.figure && <ReproduceView />}
-              <div className="inv-body">
-                {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading…</div>}
-                <div className="inv-col">
-                  {!inv.run?.figure && <ReproduceView />}
-                  <ReportView meta={meta} />
-                  {inv.phase === 'running' && <PlanCard meta={meta} />}
-                </div>
-              </div>
-              <ScienceToggle />
-              {inv.science && meta && (
-                <div className="science">
-                  <ScienceReport meta={meta} />
-                  <div className="evidence-more">
-                    <CompareChart meta={meta} />
-                    <div className="inv-col">
-                      <AnalysisCards run={inv.run} />
-                      <DistancePlot meta={meta} />
-                      <Heatmap meta={meta} />
-                    </div>
-                  </div>
-                </div>
-              )}
+              <Headline meta={meta} />
+              {meta ? <ResultTabs meta={meta} /> : <div className="muted loading">Loading…</div>}
             </>
           )}
         </main>

@@ -31,18 +31,18 @@ function NativeContactsFigure({ d }: { d: Repro }) {
     const q1 = d.ours.map((q) => q[0])
     const q2 = d.ours.map((q) => q[1])
     return [
-      { type: 'scatter', mode: 'lines', x: d.frames, y: q1, name: 'Closed-state contacts (Q1)', line: { color: '#dde2ea', width: 1.5 } },
-      { type: 'scatter', mode: 'lines', x: d.frames, y: q2, name: 'Open-state contacts (Q2)', line: { color: '#9cc3e6', width: 1.5, dash: 'dot' } },
+      { type: 'scatter', mode: 'lines', x: d.frames, y: q1, name: 'Closed (Q1)', line: { color: '#5aa5f0', width: 1.5 } },
+      { type: 'scatter', mode: 'lines', x: d.frames, y: q2, name: 'Open (Q2)', line: { color: '#f0a04f', width: 1.5 } },
       { type: 'scatter', mode: 'lines', x: q1, y: q2, xaxis: 'x2', yaxis: 'y2', showlegend: false,
-        line: { color: '#dde2ea', width: 1.2 }, hovertemplate: 'Closed-state %{x:.3f}<br>Open-state %{y:.3f}<extra></extra>' },
+        line: { color: '#5aa5f0', width: 1.2 }, hovertemplate: 'Closed-state %{x:.3f}<br>Open-state %{y:.3f}<extra></extra>' },
     ] as Data[]
   }, [d])
   return (
     <Plot
       data={traces}
       layout={{
-        ...baseLayout, height: 260, margin: { l: 50, r: 10, t: 10, b: 40 }, showlegend: true,
-        legend: { x: 0.02, y: 0.05, bgcolor: 'rgba(0,0,0,0)' },
+        ...baseLayout, height: 270, margin: { l: 50, r: 10, t: 26, b: 40 }, showlegend: true,
+        legend: { orientation: 'h', x: 0, y: 1.12, bgcolor: 'rgba(0,0,0,0)' },
         grid: { rows: 1, columns: 2, pattern: 'independent' },
         xaxis: { ...axisStyle, title: { text: 'Step along the path (frame)' } },
         yaxis: { ...axisStyle, title: { text: 'Fraction of reference contacts kept' } },
@@ -57,7 +57,7 @@ function NativeContactsFigure({ d }: { d: Repro }) {
 }
 
 /** Our version of the figure, from whichever result the run produced. */
-function Ours({ run }: { run: RunView | null }) {
+export function Ours({ run }: { run: RunView | null }) {
   const repro = lastData<Repro>(run, 'reproduction_check')
   const diff = lastData<DiffData>(run, 'contact_difference_map')
   const flex = lastData<FlexData>(run, 'residue_flexibility')
@@ -128,11 +128,11 @@ export function ReproduceView() {
       {science && <p className="repro-summary">{figure.spec.summary}{figure.spec.pdf_fallback ? ' (methods PDF read as text)' : ''}</p>}
       <div className="repro-grid">
         <figure>
-          <figcaption className="muted small">Published figure · {figure.filename}</figcaption>
+          <figcaption className="muted small" title={figure.filename}>Published (from paper)</figcaption>
           <img src={api.figureUrl(figure.figure_id)} alt={`Uploaded figure: ${figure.spec.summary}`} />
         </figure>
         <figure>
-          <figcaption className="muted small">Computed by the agent</figcaption>
+          <figcaption className="muted small">Our result (reproduced)</figcaption>
           <Ours run={run ?? null} />
         </figure>
       </div>

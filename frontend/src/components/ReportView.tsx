@@ -117,16 +117,32 @@ export function Headline({ meta }: { meta: Metadata | null }) {
   const written = run.report.headline
   const interp = run.report.interpretation
   const v = run.verification?.status
+  const flagged = v === 'flagged' // a material issue the second AI raised; nothing in the app resolves it
+  const repro = lastResult<{ n_values: number; match: boolean }>(run, 'reproduction_check')
+  const unresolved = 'A second AI flagged a finding, and it is unresolved: review it below before relying on this report.'
+  const lead = repro
+    ? repro.match
+      ? flagged ? `The numbers match the published result. ${unresolved}` : 'We reproduced the published result and it matches the original.'
+      : 'We could not reproduce the published result: the values differ from the original.'
+    : flagged ? unresolved : null
   return (
-    <section className="card summary-card headline">
-      <header className="summary-head">
-        <h2>Analysis complete</h2>
-        {v === 'verified' && <span className="pill ok">✓ Checked by a second AI</span>}
-        {v === 'flagged' && <span className="pill no">⚠ Flagged by a second AI</span>}
+    <section className={`card result-banner headline ${flagged || (repro && !repro.match) ? 'warn' : v === 'verified' ? 'ok' : ''}`}>
+      <header className="rb-head">
+        <span className="rb-icon" aria-hidden>{flagged || (repro && !repro.match) ? '!' : '✓'}</span>
+        <div className="rb-titles">
+          <h2>{flagged ? 'Analysis complete: needs your review' : 'Analysis complete'}</h2>
+          {lead && <p className="rb-lead">{lead}</p>}
+        </div>
+        {repro && <span className={`pill ${repro.match ? 'ok' : 'no'}`} title="Every computed value compared with the published code's output">
+          {repro.match ? `✓ Match: ${repro.n_values}/${repro.n_values} values` : '✕ Values differ'}</span>}
       </header>
-      <Tiles run={run} meta={meta} />
-      <h3 className="summary-label">What we found</h3>
-      <p className="headline-main">{written ? <Filled segments={written.segments} /> : main}</p>
+      <div className="rb-grid">
+        <Tiles run={run} meta={meta} />
+        <div className="rb-finding">
+          <h3>Key finding</h3>
+          <p className="headline-main">{written ? <Filled segments={written.segments} /> : main}</p>
+        </div>
+      </div>
       {(run.plan?.notes ?? []).map((n) => <p key={n} className="plan-note">Note: {n}</p>)}
       {interp && (
         <p className="headline-interp"><span className="interp-label">Interpretation, not computed:</span> {interp.text}</p>
@@ -135,21 +151,16 @@ export function Headline({ meta }: { meta: Metadata | null }) {
         ? 'These results describe one biased simulation path between two shapes, not an equilibrium ensemble, so nothing here is statistically tested.'
         : 'Based on one simulation: findings describe this run, not the protein in general.'}</p>
       <VerifierLine run={run} cardOf={cardNumbers(run, meta)} />
-      <button className="link explore" onClick={() => document.getElementById('evidence')?.scrollIntoView({ behavior: 'smooth' })}>
-        Explore the evidence ↓
-      </button>
     </section>
   )
 }
 
 /** Two or three headline numbers, all taken from stored tool results. */
 function Tiles({ run, meta }: { run: RunView; meta: Metadata | null }) {
-  const repro = lastResult<{ n_values: number; match: boolean }>(run, 'reproduction_check')
   const nc = lastResult<{ n_native: number[]; frames: number[]; ref_frames: number[] }>(run, 'native_contacts')
   const cmp = lastResult<CompareData>(run, 'compare_intervals')
   const sens = lastResult<SensitivityData>(run, 'cutoff_sensitivity')
   const tiles: [string, string][] = []
-  if (repro) tiles.push([repro.match ? `${repro.n_values}/${repro.n_values}` : 'No match', 'Values matched the published result'])
   if (nc?.n_native?.length) tiles.push([nc.n_native[0].toLocaleString(), nc.ref_frames?.[0] === 0 ? 'Contacts in the starting shape' : 'Contacts in the reference shape'])
   if (nc?.frames?.length) tiles.push([nc.frames.length.toLocaleString(), meta?.dt_ns === null ? 'Steps along the path' : 'Simulation frames'])
   if (cmp) {
@@ -160,7 +171,7 @@ function Tiles({ run, meta }: { run: RunView; meta: Metadata | null }) {
   if (!tiles.length) return null
   return (
     <div className="tiles">
-      {tiles.slice(0, 3).map(([n, label]) => <div key={label} className="tile"><span className="tile-n">{n}</span><span className="tile-label">{label}</span></div>)}
+      {tiles.slice(0, cmp ? 3 : 2).map(([n, label]) => <div key={label} className="tile"><span className="tile-n">{n}</span><span className="tile-label">{label}</span></div>)}
     </div>
   )
 }
@@ -447,7 +458,13 @@ export function ReportView({ meta }: { meta: Metadata | null }) {
 
   if (!run || phase !== 'finished' || !meta || !built) return null
   if (!built.cards.length && !located.length) {
-    return <p className="muted report-empty">None of these findings points to a specific place in the protein. They are under “Show the science”.</p>
+    return (
+      <section className="report">
+        <p className="muted report-empty">None of these findings points to one place in the protein; they are under “Details &amp; methods”.</p>
+        <NextQuestions run={run} meta={meta} />
+        <Reproduce run={run} science={science} />
+      </section>
+    )
   }
   return (
     <section className="report">
