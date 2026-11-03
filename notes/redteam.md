@@ -244,3 +244,43 @@ Total: $0.233. Each plan was started twice, and both calls returned the same run
 - The Volume has no usage log or saved run after Oct 31. This is consistent with no live AI work on the deployed site since then, since all testing ran locally.
 - But the usage log is committed to the Volume only when a run finishes. So the cost of plans that never ran is lost on a redeploy or container restart, and the daily budget can undercount by that amount.
 - Low risk: plans cost about $0.01 each, and the per-session and per-IP limits still apply.
+
+## Design pass 2 (2026-11-02 evening, before the freeze)
+
+Prompted by a UX critique.
+
+**Two concrete complaints:**
+- The sample figure button sent "Reproduce this figure." and the page showed it as "You asked". The example question card did the same.
+- The figure flow felt slow: two AI calls back to back behind one "Reading…" line, plus cold starts on Modal (`/health` took 5.5 s after an idle spell).
+
+**What changed** (commits 44da75e, 932d635; deployed to Vercel and Modal):
+- **Headings:** samples and example questions show their card title under "Sample figure · source" or "Example question". "You asked" appears only for typed questions.
+- **Landing page:**
+  - One headline and one box (drop a figure or ask, then **Analyze**), plus two example cards.
+  - Dataset and model sit under "Advanced settings". Recorded runs are a quiet "Watch a recorded demo" link. Citations are under "Data & references".
+- **Figure mode in two requests:** `/figure/read`, then `/figure/read/{id}/plan`. The "Figure interpreted" card shows what the AI read while the plan is drafted.
+- **Faster figure plans:** they run at low effort. On both samples, 2 runs each, low effort gave the same plans as medium in 11–26 s instead of 26–39 s.
+- **One Confirm & run:** it replaces the per-setting checkboxes, and inferred settings are marked. The backend still refuses a run until every low-confidence setting is confirmed; checked again on the production model, without confirmation the run was refused.
+- **Results summary first:** an "Analysis complete" card with up to three numbers from stored tool results, the finding, one caveat, the second-AI check and "Explore the evidence".
+- **Step results:** each finished step shows its result from code ("2,202 reference contacts", "4 of 29 changed"). The AI's own checklist notes are not shown, since the AI may not write numbers.
+- **Plain words:** closed-state / open-state contacts instead of Q1/Q2, plain step sentences, each with a one-line "why". Text sizes are now 13 / 15 px.
+- **Warm server switch:** `WARM=1` at deploy keeps one container running. Turn it on for judging (Nov 5–8):
+
+  ```bash
+  cd backend && WARM=1 ALLOWED_ORIGINS=https://trajectorygpt.vercel.app modal deploy modal_app.py
+  ```
+
+**Checked:**
+- Tests: 313 backend fast, 25 frontend.
+- Local UI at 1440 and 1280 px: the start screen, the sample figure (read → interpreted → plan → Confirm & run → 196 of 196 verified), and the LID–CORE example card (4 of 29 changed, 2 robust, verified).
+- Production model on the sample figure:
+
+  | Stage | Time |
+  |---|---|
+  | Reading shown | 23 s |
+  | Plan ready | +12 s |
+  | Run | +32 s |
+  | Check | +16 s (background) |
+
+  196 of 196 values match; verified; $0.10.
+- The passcode stays (decision 2026-11-02).
