@@ -118,6 +118,7 @@ export default function App() {
           )}
           {started && (
             <>
+              <span id="evidence" />
               {inv.run?.figure && <ReproduceView />}
               <div className="inv-body">
                 {meta ? <Structure meta={meta} /> : <div className="muted loading">Loading…</div>}

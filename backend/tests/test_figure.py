@@ -271,3 +271,15 @@ def test_read_of_an_unsupported_figure_says_so(monkeypatch):
     monkeypatch.delenv("DEMO_PASSCODE", raising=False)
     r = TestClient(app).post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG)}]})
     assert r.status_code == 422 and "isn't supported yet" in r.json()["detail"]["unsupported"]
+
+
+def test_read_in_replay_mode_returns_the_recorded_plan_or_a_clear_miss(monkeypatch):
+    from app.safety import replay
+    monkeypatch.setenv("APP_MODE", "replay")
+    c = TestClient(app)
+    raw = (REPO_ROOT / "frontend" / "public" / "figures" / "userguide_q1q2_replot.png").read_bytes()
+    r = c.post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(raw)}]})
+    if replay.match_figure([("f.png", "image/png", raw)]) is not None:
+        assert r.status_code == 200 and r.json()["proposal"]["plan_id"].startswith("replay:")
+    miss = c.post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG + b"other")}]})
+    assert miss.status_code == 409 and miss.json()["detail"]["replay"] is True

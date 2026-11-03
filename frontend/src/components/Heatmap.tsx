@@ -93,7 +93,7 @@ export function Heatmap({ meta }: { meta: Metadata }) {
   return (
     <section className="card">
       <header className="card-head">
-        <h2>Contact frequency</h2>
+        <h2>Which parts of the protein touch most often?</h2>
         <div className="controls">
           <label>
             Group A
@@ -110,6 +110,7 @@ export function Heatmap({ meta }: { meta: Metadata }) {
           </label>
         </div>
       </header>
+      <p className="heatmap-takeaway">Brighter cells are residue pairs that stay close in more of the simulation. Click one to see it in 3D.</p>
       <p className="card-sub">
         {meta.contact_definition}, cutoff {data?.cutoff ?? cutoff} Å · {data ? `${data.n_frames} frames · ${nPairs} pairs` : '…'} ·{' '}
         <span className="swatch" style={{ background: EXCLUDED_GREY }} /> excluded (|Δresid| ≤ {data?.sequence_exclusion ?? meta.sequence_exclusion_default})

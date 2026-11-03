@@ -31,10 +31,10 @@ function NativeContactsFigure({ d }: { d: Repro }) {
     const q1 = d.ours.map((q) => q[0])
     const q2 = d.ours.map((q) => q[1])
     return [
-      { type: 'scatter', mode: 'lines', x: d.frames, y: q1, name: 'Q1', line: { color: '#dde2ea', width: 1.5 } },
-      { type: 'scatter', mode: 'lines', x: d.frames, y: q2, name: 'Q2', line: { color: '#9cc3e6', width: 1.5, dash: 'dot' } },
+      { type: 'scatter', mode: 'lines', x: d.frames, y: q1, name: 'Closed-state contacts (Q1)', line: { color: '#dde2ea', width: 1.5 } },
+      { type: 'scatter', mode: 'lines', x: d.frames, y: q2, name: 'Open-state contacts (Q2)', line: { color: '#9cc3e6', width: 1.5, dash: 'dot' } },
       { type: 'scatter', mode: 'lines', x: q1, y: q2, xaxis: 'x2', yaxis: 'y2', showlegend: false,
-        line: { color: '#dde2ea', width: 1.2 }, hovertemplate: 'Q1 %{x:.3f}<br>Q2 %{y:.3f}<extra></extra>' },
+        line: { color: '#dde2ea', width: 1.2 }, hovertemplate: 'Closed-state %{x:.3f}<br>Open-state %{y:.3f}<extra></extra>' },
     ] as Data[]
   }, [d])
   return (
@@ -44,10 +44,10 @@ function NativeContactsFigure({ d }: { d: Repro }) {
         ...baseLayout, height: 260, margin: { l: 50, r: 10, t: 10, b: 40 }, showlegend: true,
         legend: { x: 0.02, y: 0.05, bgcolor: 'rgba(0,0,0,0)' },
         grid: { rows: 1, columns: 2, pattern: 'independent' },
-        xaxis: { ...axisStyle, title: { text: 'Frame' } },
-        yaxis: { ...axisStyle, title: { text: 'Fraction of native contacts' } },
-        xaxis2: { ...axisStyle, title: { text: 'Q1' } },
-        yaxis2: { ...axisStyle, title: { text: 'Q2' } },
+        xaxis: { ...axisStyle, title: { text: 'Step along the path (frame)' } },
+        yaxis: { ...axisStyle, title: { text: 'Fraction of reference contacts kept' } },
+        xaxis2: { ...axisStyle, title: { text: 'Closed-state (Q1)' } },
+        yaxis2: { ...axisStyle, title: { text: 'Open-state (Q2)' } },
       }}
       config={{ displaylogo: false, responsive: true }}
       style={{ width: '100%' }}

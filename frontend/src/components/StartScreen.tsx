@@ -113,10 +113,10 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
     if (!bad) setFiles(picked)
   }
 
-  const startQuestion = (q: string, ds = dataset) => {
+  const startQuestion = (q: string, ds = dataset, kicker = 'You asked') => {
     if (busy || !q.trim()) return
     if (ds !== dataset) setSelection({ dataset: ds })
-    void ask(q.trim(), ds)
+    void ask(q.trim(), ds, false, false, kicker)
     setQuestion('')
   }
 
@@ -199,7 +199,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
             {!!declined.examples.length && (
               <div className="example-row">
                 {declined.examples.map((q) => (
-                  <button key={q} className="example-chip" disabled={busy} onClick={() => startQuestion(q, 'adk_equilibrium')}>{q}</button>
+                  <button key={q} className="example-chip" disabled={busy} onClick={() => startQuestion(q, 'adk_equilibrium', 'Example question')}>{q}</button>
                 ))}
               </div>
             )}
@@ -218,7 +218,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               <span className="ec-title">{FIGURE_SAMPLE.title}</span>
               <span className="ec-sub">{FIGURE_SAMPLE.sub}</span>
             </button>
-            <button className="example-card" disabled={busy} onClick={() => startQuestion(QUESTION_SAMPLE.question, QUESTION_SAMPLE.dataset)} title={QUESTION_SAMPLE.question}>
+            <button className="example-card" disabled={busy} onClick={() => startQuestion(QUESTION_SAMPLE.question, QUESTION_SAMPLE.dataset, 'Example question')} title={QUESTION_SAMPLE.question}>
               <span className="ec-icon q" aria-hidden>⟲</span>
               <span className="ec-title">{QUESTION_SAMPLE.title}</span>
               <span className="ec-sub">{QUESTION_SAMPLE.sub}</span>
@@ -230,7 +230,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               <button key={ex.title} className="link" disabled={busy} title={ex.source} onClick={() => void runFigureExample(ex)}>{ex.title}</button>
             ))}
             {MORE_QUESTIONS.map((ex) => (
-              <button key={ex.title} className="link" disabled={busy} title={ex.question} onClick={() => startQuestion(ex.question, ex.dataset)}>{ex.title}</button>
+              <button key={ex.title} className="link" disabled={busy} title={ex.question} onClick={() => startQuestion(ex.question, ex.dataset, 'Example question')}>{ex.title}</button>
             ))}
           </p>
         </div>

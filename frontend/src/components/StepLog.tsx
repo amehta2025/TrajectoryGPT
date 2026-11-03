@@ -12,9 +12,28 @@ import { Timeline } from './Timeline'
 const BOOKKEEPING = new Set(['update_checklist', 'record_finding', 'submit_report'])
 const SHORT: Record<string, string> = {
   get_metadata: 'Check the data', list_groups: 'Domains', calculate_contacts: 'Measure contacts', distance_over_time: 'Track a distance',
-  compare_intervals: 'Compare', contact_statistics: 'Look closer', native_contacts: 'Reference contacts',
-  cutoff_sensitivity: 'Double-check', reproduction_check: 'Compare with the original', submit_report: 'Write the report',
+  compare_intervals: 'Compare', contact_statistics: 'Look closer', native_contacts: 'Reconstruct contacts',
+  cutoff_sensitivity: 'Double-check', reproduction_check: 'Validate against the publication', submit_report: 'Summarize findings',
   contact_difference_map: 'Map changes', residue_flexibility: 'Measure movement', domain_opening: 'Track opening',
+}
+
+type Run = NonNullable<ReturnType<typeof useInvestigation>['run']>
+type Data = Record<string, unknown> & { n_native?: number[]; n_values?: number; match?: boolean; n_supported?: number; n_tested?: number
+  n_robust?: number; keys_a?: string[]; keys_b?: string[]; supported_pairs?: unknown[] | null }
+
+/** What a finished step found, in a few words, from its stored result (never the model's own text). */
+function stepResult(run: Run, tool: string): string | null {
+  const hits = Object.values(run.results).filter((r) => r.tool === tool && r.status === 'ok' && r.data_for_ui)
+  const d = hits.at(-1)?.data_for_ui as Data | undefined
+  if (!d) return null
+  switch (tool) {
+    case 'native_contacts': return d.n_native ? `${d.n_native[0].toLocaleString()} reference contacts` : null
+    case 'reproduction_check': return d.n_values ? (d.match ? `${d.n_values}/${d.n_values} values match` : 'values differ') : null
+    case 'compare_intervals': return d.n_tested !== undefined ? `${d.n_supported} of ${d.n_tested} changed` : null
+    case 'cutoff_sensitivity': return d.n_robust !== undefined ? `${d.n_robust} robust` : null
+    case 'contact_difference_map': return d.keys_a && d.keys_b ? `${(d.keys_a.length * d.keys_b.length).toLocaleString()} pairs mapped` : null
+    default: return null
+  }
 }
 
 /** The plan's steps as a row that lights up while the run is going. */
@@ -28,6 +47,7 @@ function LiveSteps({ run, paused }: { run: NonNullable<ReturnType<typeof useInve
         return (
           <li key={c.item} className={`lstep ${state}`} title={`${c.text}${c.note ? ` — ${c.note}` : ''}`}>
             <span className="ldot" />{SHORT[c.tool] ?? 'Analysis'}
+            {c.status === 'done' && stepResult(run, c.tool) && <span className="lresult">· {stepResult(run, c.tool)}</span>}
           </li>
         )
       })}
@@ -80,6 +100,8 @@ function summary(run: NonNullable<ReturnType<typeof useInvestigation>['run']>, f
   const findingsRefused = turns.filter((t) => t.tool === 'record_finding' && t.status === 'refused').length
   const reportRefused = turns.filter((t) => t.tool === 'submit_report' && t.status === 'refused').length
   const parts = [`Planned ${run.checklist.length} steps`, `ran ${analyses} ${analyses === 1 ? 'analysis' : 'analyses'}`]
+  const found = run.checklist.map((c) => stepResult(run, c.tool)).filter(Boolean) as string[]
+  if (found.length) parts.push(found.join(', '))
   if (findingsOk || findingsRefused) parts.push(`checked ${findingsOk} ${findingsOk === 1 ? 'finding' : 'findings'}`)
   void reportRefused // refusals stay in the step log; the summary line stays plain
   if (finished) {

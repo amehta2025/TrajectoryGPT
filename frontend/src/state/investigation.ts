@@ -91,16 +91,16 @@ export async function watchRecorded(runId: string, label: string) {
 
 /** A question; a follow-up also sends the selected pair, and the backend adds this session's last run.
  *  skipScope: "Ask anyway" after the scope check turned the question away. */
-export async function ask(question: string, dataset: string, followUp = false, skipScope = false) {
+export async function ask(question: string, dataset: string, followUp = false, skipScope = false, kicker = 'You asked') {
   closeStream?.()
-  retry = () => ask(question, dataset, followUp, skipScope)
+  retry = () => ask(question, dataset, followUp, skipScope, kicker)
   if (await passcodeMissing()) {
-    set({ ...empty, phase: 'idle', question, dataset, needPasscode: true })
+    set({ ...empty, phase: 'idle', question, dataset, kicker, needPasscode: true })
     return
   }
   const { pair } = getSelection()
   const selectedPair = followUp && pair ? pairLabel(pair.keyA, pair.keyB) : null
-  set({ ...empty, phase: 'planning', question, dataset, science: followUp ? state.science : false })
+  set({ ...empty, phase: 'planning', question, dataset, kicker, science: followUp ? state.science : false })
   try {
     const proposal = await api.plan(question, dataset, { followUp, selectedPair, provider, skipScope })
     if (proposal.declined) set({ phase: 'idle', declined: { ...proposal.declined, question, followUp } })
