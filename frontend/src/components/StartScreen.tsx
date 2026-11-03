@@ -12,18 +12,19 @@ import { MicButton, VoiceHint } from './VoiceInput'
 import { onTranscript } from '../state/voice'
 import { SpinningStructure } from './Viewer'
 import { UnsupportedNotice } from './ReproduceView'
+import { DOMAIN_COLORS } from '../theme'
 
 type FigureExample = { title: string; sub: string; kicker: string; dataset: string; figure: string; note: string; caption?: string; source: string }
 type QuestionExample = { title: string; sub: string; dataset: string; question: string }
 
 // What a sample sends to the AI (note) is an instruction; the page shows the card title, never "You asked".
 const FIGURE_SAMPLE: FigureExample = {
-  title: 'Reproduce a published figure', sub: 'The agent reads a figure from the MDAnalysis guide, reruns its analysis and checks every value.',
+  title: 'Reproduce a published figure', sub: 'See if our agent can recreate a result from the MDAnalysis guide.',
   kicker: 'Sample figure · MDAnalysis User Guide', dataset: 'adk_transition', figure: '/figures/userguide_q1q2_replot.png',
   note: 'Reproduce this figure.', source: 'MDAnalysis User Guide Q1 vs Q2 figure, regenerated from its published code (see assets/figures/ATTRIBUTION.md).',
 }
 const QUESTION_SAMPLE: QuestionExample = {
-  title: 'Explore protein movement', sub: 'Which interactions between the lid and the core change during the simulation?',
+  title: 'Find changing interactions', sub: 'See which parts of the protein move and interact more or less.',
   dataset: 'adk_equilibrium', question: 'Which LID–CORE contacts change between the first and second half of the run?',
 }
 const MORE_FIGURES: FigureExample[] = [{
@@ -144,10 +145,10 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
     <section className="start">
       <div className="start-main">
         {needPasscode && <PasscodePrompt />}
-        <h1 className="start-title">From scientific figures to reproducible results</h1>
+        <h1 className="start-title">Turn scientific figures into <span className="hl">reproducible insights.</span></h1>
         <p className="start-lede">
-          Drop in a figure or ask a question. An AI agent analyses real simulations of the enzyme adenylate kinase,
-          checks its own results, and explains what it finds.
+          Upload a figure from a paper or ask a question. An AI agent analyzes molecular simulations, recreates the
+          results, and explains what it finds.
         </p>
         <RecordedRuns busy={busy} />
 
@@ -162,7 +163,7 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
             <span className="dz-icon" aria-hidden>⤒</span>
             {files.length === 0
-              ? <span className="dz-text"><span><b>Drop a scientific figure here</b> or <u>choose a file</u></span><span className="muted small">PNG, JPEG or PDF</span></span>
+              ? <span className="dz-text"><span>Drop a figure here or <u>choose a file</u></span><span className="muted small">PNG, JPEG, or PDF</span></span>
               : <span className="attached">
                   {files.map((f) => (
                     <span key={f.name} className="pill">
@@ -173,10 +174,12 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
                   <span className="muted small">Add the methods PDF too, if you have it</span>
                 </span>}
           </label>
+          <div className="or-line"><span>or</span></div>
           <form className="ask" onSubmit={(e) => { e.preventDefault(); analyze() }}>
+            <span className="ask-icon" aria-hidden>◌</span>
             <input
               className="ask-input" value={question} onChange={(e) => { clearNotices(); setQuestion(e.target.value) }} disabled={busy}
-              placeholder={files.length ? 'Optional: what should the agent take from this figure?' : 'Or ask what changed during the simulation…'}
+              placeholder={files.length ? 'Optional: what should the agent take from this figure?' : 'Ask a question, e.g., “Which interactions change during the simulation?”'}
               aria-label={files.length ? 'Note about the figure' : 'Question'}
             />
             <MicButton />
@@ -214,14 +217,14 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           <h2 className="try-title">Try an example</h2>
           <div className="example-cards">
             <button className="example-card" disabled={busy} onClick={() => void runFigureExample(FIGURE_SAMPLE)} title={FIGURE_SAMPLE.source}>
-              <span className="ec-icon fig" aria-hidden>◩</span>
-              <span className="ec-title">{FIGURE_SAMPLE.title}</span>
-              <span className="ec-sub">{FIGURE_SAMPLE.sub}</span>
+              <span className="ec-icon fig" aria-hidden>⟋</span>
+              <span className="ec-body"><span className="ec-title">{FIGURE_SAMPLE.title}</span><span className="ec-sub">{FIGURE_SAMPLE.sub}</span></span>
+              <span className="ec-go" aria-hidden>›</span>
             </button>
             <button className="example-card" disabled={busy} onClick={() => startQuestion(QUESTION_SAMPLE.question, QUESTION_SAMPLE.dataset, 'Example question')} title={QUESTION_SAMPLE.question}>
-              <span className="ec-icon q" aria-hidden>⟲</span>
-              <span className="ec-title">{QUESTION_SAMPLE.title}</span>
-              <span className="ec-sub">{QUESTION_SAMPLE.sub}</span>
+              <span className="ec-icon q" aria-hidden>⚯</span>
+              <span className="ec-body"><span className="ec-title">{QUESTION_SAMPLE.title}</span><span className="ec-sub">{QUESTION_SAMPLE.sub}</span></span>
+              <span className="ec-go" aria-hidden>›</span>
             </button>
           </div>
           <p className="more-examples small">
@@ -250,7 +253,18 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
           </details>
         </div>
       </div>
-      <div className="start-art">{meta && <SpinningStructure meta={meta} />}<VoiceHint /></div>
+      <div className="start-art">
+        {meta && <SpinningStructure meta={meta} />}
+        <div className="protein-legend">
+          <span className="pl-title"><span className="muted">Protein:</span> Adenylate kinase</span>
+          <span className="pl-keys">
+            {[['LID', 'moves'], ['NMP', 'moves'], ['CORE', 'stable']].map(([g, what]) => (
+              <span key={g}><i style={{ background: DOMAIN_COLORS[g] }} />{g === 'CORE' ? 'Core' : g} ({what})</span>
+            ))}
+          </span>
+        </div>
+        <VoiceHint />
+      </div>
     </section>
   )
 }

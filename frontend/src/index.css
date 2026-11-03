@@ -501,3 +501,29 @@ button.trace-toggle { font-size: 13px; }
 button.explore { align-self: flex-start; margin-top: 10px; font-size: 14px; }
 .lresult { margin-left: 4px; color: #c3cad6; }
 .heatmap-takeaway { margin: 6px 0 2px; font-size: 14px; color: #c3cad6; }
+
+/* ---------- design pass 3 (mockup, 2026-11-02): violet accent, stepper, tabs ---------- */
+:root { --violet: #7b6cf6; --violet-2: #9a8cff; --violet-bg: rgba(123, 108, 246, 0.12); --green-bg: rgba(111, 207, 151, 0.08); --amber: #e6c27a; }
+.start-title { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-size: 40px; letter-spacing: -0.01em; line-height: 1.12; }
+.start-title .hl { color: var(--violet-2); }
+.composer { border-color: #3a3f63; background: linear-gradient(180deg, #151a2b, #121624); }
+.dz-row { flex-direction: column; justify-content: center; text-align: center; gap: 8px; padding: 26px 20px 14px; border-bottom: 0; }
+.dz-icon { border: 0; width: auto; height: auto; font-size: 24px; color: #c3cad6; }
+.dz-text { align-items: center; font-size: 16px; }
+.or-line { display: flex; align-items: center; gap: 10px; padding: 0 20px; color: var(--muted); font-size: 13px; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.composer .ask { margin: 12px; padding: 4px 4px 4px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg); }
+.composer .ask-input:focus { background: transparent; border-color: transparent; }
+.ask-icon { color: var(--muted); font-size: 16px; }
+.composer .ask button.primary, button.primary.violet, .plan-actions button.primary { background: var(--violet); border-color: var(--violet); color: #fff; }
+.composer .ask button.primary:hover:not(:disabled), button.primary.violet:hover:not(:disabled), .plan-actions button.primary:hover:not(:disabled) { background: #8a7cff; }
+button.example-card { flex-direction: row; align-items: center; gap: 14px; }
+.ec-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.ec-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; background: var(--violet-bg); font-size: 18px; }
+.ec-icon.fig { color: var(--violet-2); }
+.ec-icon.q { color: var(--violet-2); }
+.ec-go { color: var(--muted); font-size: 22px; }
+.protein-legend { position: absolute; right: 8px; bottom: 34px; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: rgba(16, 20, 28, 0.85); font-size: 13px; }
+.pl-keys { display: flex; gap: 12px; color: #b9c0cc; font-size: 12px; }
+.pl-keys i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.brand-mark { color: var(--violet-2); font-weight: 700; letter-spacing: -0.2em; margin-right: 4px; }

@@ -75,7 +75,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <button className="brand link" onClick={reset} title="Back to the start screen">
-          TrajectoryGPT <span className="muted brand-sub">MD research copilot</span>
+          <span className="brand-mark" aria-hidden>⟋⟋</span>TrajectoryGPT <span className="muted brand-sub">AI for molecular research</span>
         </button>
         <div className="topbar-right">
           <CostMeter />
