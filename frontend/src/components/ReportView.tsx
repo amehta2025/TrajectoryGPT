@@ -128,7 +128,7 @@ export function Headline({ meta }: { meta: Metadata | null }) {
   return (
     <section className={`card result-banner headline ${flagged || (repro && !repro.match) ? 'warn' : v === 'verified' ? 'ok' : ''}`}>
       <header className="rb-head">
-        <span className="rb-icon" aria-hidden>{flagged || (repro && !repro.match) ? '!' : '✓'}</span>
+        <span className="rb-icon" aria-hidden>{flagged || (repro && !repro.match) ? '!' : v === 'verified' ? '✓' : '…'}</span>
         <div className="rb-titles">
           <h2>{flagged ? 'Analysis complete: needs your review' : 'Analysis complete'}</h2>
           {lead && <p className="rb-lead">{lead}</p>}
