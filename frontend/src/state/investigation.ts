@@ -75,20 +75,6 @@ async function passcodeMissing(): Promise<boolean> {
   }
 }
 
-/** "Watch a recorded run": a real earlier investigation, played back without a model or the passcode. */
-export async function watchRecorded(runId: string, label: string) {
-  closeStream?.()
-  set({ ...empty, phase: 'planning', question: label, dataset: state.dataset, kicker: 'Recorded run' })
-  try {
-    const proposal = await api.replayPlan(runId)
-    // A figure run's stored question is the long extraction prompt; show its short label instead.
-    const question = proposal.figure ? label : (proposal.question ?? label)
-    set({ phase: 'plan', proposal, question, dataset: proposal.plan.dataset })
-  } catch (e) {
-    set({ phase: 'idle', error: `Could not open the recorded run: ${(e as Error).message}` })
-  }
-}
-
 /** A question; a follow-up also sends the selected pair, and the backend adds this session's last run.
  *  skipScope: "Ask anyway" after the scope check turned the question away. */
 export async function ask(question: string, dataset: string, followUp = false, skipScope = false, kicker = 'You asked') {

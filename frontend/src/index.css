@@ -414,7 +414,6 @@ button.science-toggle {
 .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #e0524a; animation: rec-pulse 1s ease-in-out infinite; }
 @keyframes rec-pulse { 50% { opacity: 0.35; } }
 .voice-hint kbd { font-family: var(--mono); font-size: 11px; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 4px; }
-.start-art .voice-hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; }
 .viewer-card .card-head .voice-hint { margin-left: 10px; margin-right: auto; }
 .heatmap-hint { margin: 6px 0 0; }
 .declined { margin: 8px 0 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); }
@@ -454,19 +453,12 @@ button.example-card:hover:not(:disabled) { border-color: #5574c6; background: #1
 .ec-icon.q { color: #e6c27a; }
 .ec-title { font-size: 16px; font-weight: 600; color: #eef1f5; }
 .ec-sub { font-size: 14px; color: #b9c0cc; }
-.more-examples { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; align-items: baseline; }
-.more-examples button.link { font-size: 14px; }
 .start-foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
 .real-data { color: var(--ok); }
 .advanced summary { cursor: pointer; color: var(--muted); list-style: none; text-align: right; }
 .advanced summary::-webkit-details-marker { display: none; }
 .advanced[open] summary { color: var(--text); }
 .advanced .ds-picker { margin-top: 8px; justify-content: flex-end; align-items: center; }
-.recorded-link summary { cursor: pointer; color: var(--accent); font-size: 14px; list-style: none; }
-.recorded-link summary::-webkit-details-marker { display: none; }
-.recorded-link p { margin: 6px 0 8px; }
-.recorded-offer { border: 1px solid var(--border-strong); background: var(--panel); border-radius: 12px; padding: 14px 16px; font-size: 15px; }
-.recorded-offer p { margin: 0 0 10px; line-height: 1.5; }
 .kicker { text-transform: none; }
 .spec-intro { margin: 10px 0 8px; font-size: 14px; color: #c3cad6; line-height: 1.5; }
 .spec-row { grid-template-columns: 150px minmax(0, 1fr) 90px; font-size: 14px; }
@@ -523,9 +515,8 @@ button.example-card { flex-direction: row; align-items: center; gap: 14px; }
 .ec-icon.fig { color: var(--violet-2); }
 .ec-icon.q { color: var(--violet-2); }
 .ec-go { color: var(--muted); font-size: 22px; }
-.protein-legend { position: absolute; right: 8px; bottom: 34px; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: rgba(16, 20, 28, 0.85); font-size: 13px; }
-.pl-keys { display: flex; gap: 12px; color: #b9c0cc; font-size: 12px; }
-.pl-keys i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+button.example-card.selected { border-color: var(--violet); background: var(--violet-bg); }
+.loaded-note { margin: -4px 0 0; }
 .brand-mark { color: var(--violet-2); font-weight: 700; letter-spacing: -0.2em; margin-right: 4px; }
 
 /* stepper */

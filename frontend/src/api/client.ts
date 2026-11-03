@@ -439,8 +439,6 @@ export const api = {
     post<{ read_id?: string; figure?: Figure; proposal?: PlanResponse }>('/figure/read', { files, note, provider: provider ?? null }),
   /** Figure mode, second request: the analysis plan for that reading. */
   figureReadPlan: (readId: string, dataset: string) => post<PlanResponse>(`/figure/read/${encodeURIComponent(readId)}/plan`, { dataset }),
-  /** A recorded run's plan; works in live mode without the passcode (no model is called). */
-  replayPlan: (runId: string) => post<PlanResponse>(`/replays/${encodeURIComponent(runId)}/plan`, {}),
   /** Push-to-talk: base64 WAV (mono, 16-bit, 24 kHz) -> text for the question box. */
   transcribe: (audio: string) => post<{ text: string; seconds: number }>('/transcribe', { audio }),
   figureUrl: (figureId: string) => new URL(`/figures/${figureId}`, BASE).toString(),
@@ -455,7 +453,6 @@ export const api = {
     }),
   run: async (runId: string): Promise<RunView> => (await get(`/runs/${runId}`)).json(),
   /** Backend mode and switches; fetched once per page load. */
-  replays: async (): Promise<{ mode: 'live' | 'replay'; recorded: Recorded[] }> => (await get('/replays')).json(),
   health: (): Promise<Health> => (healthCache ??= get('/health').then((r) => r.json())),
   exportUrl: (runId: string) => new URL(`/runs/${runId}/export`, BASE).toString(),
   sandboxStart: (runId: string) => post<SandboxJob>(`/runs/${runId}/sandbox`, {}),
