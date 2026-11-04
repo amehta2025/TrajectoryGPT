@@ -429,3 +429,37 @@ def test_a_check_that_could_not_run_can_be_run_again(monkeypatch, tmp_path):
     with pytest.raises(session.CannotReverify):
         session.reverify(run.run_id)  # a finished check is not re-run
     session.RUNS.pop(run.run_id, None)
+
+
+# ---------- a figure's residue ranges limit what is tested (paper 01: LID 122-159 x CORE 100-121) ----------
+
+def test_residue_ranges_limit_the_pairs_counted_and_tested():
+    from app.science.contacts import calculate_contacts
+    from app.science.residues import parse_residue_key
+    full = calculate_contacts("adk_transition", "LID", "CORE", 4.0, sequence_exclusion=3)
+    cut = calculate_contacts("adk_transition", "LID", "CORE", 4.0, sequence_exclusion=3, ranges={"CORE": [100, 121]})
+    rb = [parse_residue_key(k).resid for k in cut["keys_b"]]
+    assert min(rb) == 100 and max(rb) == 121 and len(cut["keys_a"]) == len(full["keys_a"])
+    assert cut["frequency"].shape == (len(cut["keys_a"]), 22)
+    j = full["keys_b"].index(cut["keys_b"][0])  # the same pair has the same value either way
+    assert (cut["frequency"][:, 0] == full["frequency"][:, j]).all()
+
+
+def test_a_contact_map_figure_sets_its_axis_ranges_on_the_plan():
+    spec = {"kind": "contact_map", "display": {
+        "x": {"group": "LID", "residue_min": 122, "residue_max": 159}, "y": {"group": "CORE", "residue_min": 100, "residue_max": 121}}}
+    assert figure.figure_ranges(spec, {"group_a": "LID", "group_b": "CORE"}) == {"LID": [122, 159], "CORE": [100, 121]}
+    assert figure.figure_ranges({**spec, "kind": "rmsf"}, {"group_a": "LID", "group_b": "CORE"}) is None
+    from app.agent.planner import to_approved, validate_plan
+    a = to_approved({**PLAN, "residue_ranges": {"CORE": [100, 121]}})
+    assert a.residue_ranges == {"CORE": [100, 121]}
+    assert validate_plan({**PLAN, "residue_ranges": {"NMP": [30, 59]}})  # not an approved group
+    assert validate_plan({**PLAN, "residue_ranges": {"CORE": [130, 150]}})  # no CORE residues there
+
+
+def test_a_pair_outside_the_ranges_is_refused():
+    from app.agent.tools import resolve_pair
+    s = RunState(ApprovedPlan("adk_transition", "LID", "CORE", 4.0, [0, 98], residue_ranges={"CORE": [100, 121]},
+                              steps=[{"tool": "distance_over_time"}, {"tool": "submit_report"}]))
+    assert run_tool(s, "distance_over_time", '{"pair": "THR155-GLN160"}')["status"] == "refused"
+    assert resolve_pair(s.plan, "LYS136-ASP118")[1].endswith(":118:ASP")

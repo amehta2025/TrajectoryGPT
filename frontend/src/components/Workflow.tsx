@@ -46,8 +46,10 @@ const GOAL: Record<string, string> = {
 }
 
 type SpecField = Figure['spec']['fields'][number]
-type Row = { id: string; label: string; value: string; raw?: string; spec?: SpecField; editor?: (close: () => void) => React.ReactNode }
+// paper: the value came from the paper (its methods, caption or axes), shown as "from the paper"; false: a default.
+type Row = { id: string; label: string; value: string; raw?: string; spec?: SpecField; paper?: boolean; editor?: (close: () => void) => React.ReactNode }
 
+const DEFAULT_CUTOFF = 4.5 // the planner's default contact cutoff (prompts.PLANNER_SYSTEM)
 const ATOM_LABEL: Record<string, string> = { 'name CA': 'Cα atoms (backbone)', 'heavy atoms': 'heavy atoms' }
 const REF_OPTIONS: [string, number[], string][] = [['first', [0], 'the first frame'], ['last', [-1], 'the last frame'],
   ['both', [0, -1], 'the first and the last frame']]
@@ -82,15 +84,41 @@ function SelectEditor({ value, options, onSave, close }: { value: string; option
   )
 }
 
+/** Two domains and, for each, an optional residue range (only those residues are tested; blank = the whole domain). */
 function GroupEditor({ groups, plan, onSave, close }: { groups: string[]; plan: Plan; onSave: (p: Partial<Plan>) => void; close: () => void }) {
   const [a, setA] = useState(plan.group_a)
   const [b, setB] = useState(plan.group_b)
+  const r0 = plan.residue_ranges ?? {}
+  const [ra, setRa] = useState((r0[plan.group_a] ?? ['', '']).map(String))
+  const [rb, setRb] = useState((r0[plan.group_b] ?? ['', '']).map(String))
+  const range = (r: string[]): [number, number] | null | 'bad' => {
+    if (!r[0].trim() && !r[1].trim()) return null
+    const [lo, hi] = r.map(Number)
+    return Number.isInteger(lo) && Number.isInteger(hi) && lo <= hi ? [lo, hi] : 'bad'
+  }
+  const [ga, gb] = [range(ra), range(rb)]
+  const ok = a !== b && ga !== 'bad' && gb !== 'bad'
+  const box = (r: string[], set: (x: string[]) => void, i: number) => (
+    <input type="number" step={1} value={r[i]} placeholder={i ? 'last' : 'first'} aria-label={i ? 'Last residue' : 'First residue'}
+      onChange={(e) => set(r.map((x, j) => (j === i ? e.target.value : x)))} />
+  )
   return (
-    <form className="u-edit" onSubmit={(e) => { e.preventDefault(); if (a !== b) { onSave({ group_a: a, group_b: b }); close() } }}>
+    <form className="u-edit" onSubmit={(e) => {
+      e.preventDefault()
+      if (!ok) return
+      const ranges: Record<string, [number, number]> = {}
+      if (Array.isArray(ga)) ranges[a] = ga
+      if (Array.isArray(gb)) ranges[b] = gb
+      onSave({ group_a: a, group_b: b, residue_ranges: Object.keys(ranges).length ? ranges : null })
+      close()
+    }}>
       <select value={a} onChange={(e) => setA(e.target.value)} autoFocus aria-label="First domain">{groups.map((g) => <option key={g}>{g}</option>)}</select>
+      {box(ra, setRa, 0)}–{box(ra, setRa, 1)}
       <span>vs</span>
       <select value={b} onChange={(e) => setB(e.target.value)} aria-label="Second domain">{groups.map((g) => <option key={g}>{g}</option>)}</select>
-      <button type="submit" className="small primary" disabled={a === b}>Save</button>
+      {box(rb, setRb, 0)}–{box(rb, setRb, 1)}
+      <span className="u-hint">Leave a range blank for the whole domain.</span>
+      <button type="submit" className="small primary" disabled={!ok}>Save</button>
       <button type="button" className="small link" onClick={close}>Cancel</button>
     </form>
   )
@@ -198,7 +226,6 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
   const editable = !!plan && !!meta && phase === 'plan' && !proposal?.recorded
   const native = kind === 'native_contacts'
   const usesCutoff = ['contact_map', 'difference_contact_map', 'distance_trace'].includes(kind)
-  const disp = figure.spec.display
   const atoms = field('atom selection')
   const save = (row: string) => (patch: Partial<Plan>) => editPlan(patch, row)
 
@@ -208,12 +235,13 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
   ]
   if (plan && (kind === 'contact_map' || kind === 'difference_contact_map')) {
     const range = (g: string) => {
-      const ax = [disp?.x, disp?.y].find((a) => a?.group === g && a.residue_min != null && a.residue_max != null)
-      return ax ? ` ${ax.residue_min}–${ax.residue_max}` : ''
+      const r = plan.residue_ranges?.[g]
+      return r ? ` ${r[0]}–${r[1]}` : ' (whole domain)'
     }
     const groups = meta ? Object.keys(meta.groups) : [plan.group_a, plan.group_b]
     rows.push({ id: 'groups', label: 'Domains compared', value: `${plan.group_a}${range(plan.group_a)} vs ${plan.group_b}${range(plan.group_b)}`,
-      raw: 'Drawn over the residue ranges the paper’s axes span; contacts are computed for the whole domains', spec: fieldLike(/x axis|y axis/),
+      raw: 'Only these residues are counted and tested, so the statistics cover the pairs the paper showed', spec: fieldLike(/x axis|y axis/),
+      paper: !!proposal?.plan.residue_ranges,
       editor: (close) => <GroupEditor groups={groups} plan={plan} onSave={save('groups')} close={close} /> })
   }
   if (plan && meta) {
@@ -245,7 +273,15 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
   } else if (usesCutoff) {
     rows.push({ id: 'distance', label: 'Contact distance', value: plan ? `${plan.cutoff} Å` : withUnits(field('cutoff or radius')?.value ?? '—'),
       raw: 'Two residues are in contact when their closest heavy atoms are within this distance', spec: field('cutoff or radius'),
+      paper: !!proposal && proposal.plan.cutoff !== DEFAULT_CUTOFF,
       editor: (close) => <NumberEditor value={plan!.cutoff} min={2} max={10} step={0.5} unit="Å" close={close} onSave={(v) => save('distance')({ cutoff: v })} /> })
+    if (plan && meta) {
+      const dflt = meta.sequence_exclusion_default
+      rows.push({ id: 'exclusion', label: 'Skip neighbours', value: `pairs within ${plan.sequence_exclusion} residues in sequence`,
+        raw: 'Residue pairs this close in sequence touch trivially, so they are not counted', paper: proposal!.plan.sequence_exclusion !== dflt,
+        editor: (close) => <NumberEditor value={plan.sequence_exclusion} min={0} max={10} step={1} unit="residues" close={close}
+          onSave={(v) => save('exclusion')({ sequence_exclusion: v })} /> })
+    }
   }
   if (plan && meta) {
     const halves = isHalves(plan, meta.n_frames)
@@ -283,6 +319,8 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
                   {st === 'edited' && <span className="u-tag edited">edited by you</span>}
                   {st === 'confirmed' && <span className="u-tag confirmed">confirmed</span>}
                   {inferred && <span className="u-tag">inferred</span>}
+                  {!st && !inferred && r.paper === true && <span className="u-tag paper">from the paper</span>}
+                  {!st && !inferred && r.paper === false && <span className="u-tag default">default</span>}
                   {inferred && editable && <button type="button" className="small link u-ok" onClick={() => confirmRow(r.id)}>Looks right</button>}
                 </span>
               )}

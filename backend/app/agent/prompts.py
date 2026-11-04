@@ -219,6 +219,9 @@ def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
     steps = "\n".join(f"{i + 1}. {s['tool']} - {s.get('rationale', '')}" for i, s in enumerate(plan["steps"]))
     wb = f", window_b {plan['window_b']}" if plan.get("window_b") else ""
     pair = f", residue pair {plan['pair']} (chosen by the user; use exactly this pair)" if plan.get("pair") else ""
+    if plan.get("residue_ranges"):
+        pair += (", residue ranges " + ", ".join(f"{g} {a}-{b}" for g, (a, b) in plan["residue_ranges"].items())
+                 + " (only these residues are analysed and tested)")
     return (f"Question: {question}\n\nApproved plan (dataset {plan['dataset']}, groups {plan['group_a']}-{plan['group_b']}, "
             f"cutoff {plan['cutoff']} Å, window_a {plan['window_a']}{wb}, stride {plan['stride']}, "
             f"robustness cutoffs {plan['robustness_cutoffs']} Å{pair}):\n{steps}\n\n"

@@ -112,6 +112,8 @@ def validate_plan(p: dict) -> list[str]:
     errs += _native_errors(p, n)
     if p.get("pair") is not None:
         errs += _pair_errors(p)
+    if p.get("residue_ranges"):
+        errs += _range_errors(p, cfg)
     try:
         cs.validate_robustness_cutoffs(p.get("robustness_cutoffs") or [], c)
     except ValueError as e:
@@ -178,6 +180,24 @@ def _native_errors(p: dict, n_frames: int) -> list[str]:
     return errs
 
 
+def _range_errors(p: dict, cfg: dict) -> list[str]:
+    """Residue ranges: for the approved groups only, [lo, hi] integers, each overlapping its group."""
+    errs = []
+    rng = p["residue_ranges"]
+    if not isinstance(rng, dict):
+        return ["residue_ranges must map a group to [first, last] residue"]
+    for g, r in rng.items():
+        if g not in (p.get("group_a"), p.get("group_b")):
+            errs.append(f"residue range for {g}, which is not one of the approved groups")
+            continue
+        if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in r) and r[0] <= r[1]):
+            errs.append(f"the {g} range must be [first, last] residue numbers, got {r}")
+            continue
+        if not any(a <= r[1] and r[0] <= b for a, b in cfg["domains"][g]):
+            errs.append(f"the {g} range {r[0]}-{r[1]} contains no {g} residues")
+    return errs
+
+
 def _pair_errors(p: dict) -> list[str]:
     """A user-chosen residue pair: two different residues of this protein, named as the structure names them."""
     m = re.fullmatch(r"([A-Za-z]{3})(\d+)-([A-Za-z]{3})(\d+)", str(p.get("pair") or ""))
@@ -205,6 +225,7 @@ def to_approved(p: dict) -> ApprovedPlan:
         native_radius=float(p.get("native_radius", NATIVE_DEFAULTS["native_radius"])),
         ref_frames=list(p.get("ref_frames", NATIVE_DEFAULTS["ref_frames"])),
         pair=str(p["pair"]).upper() if p.get("pair") else None,
+        residue_ranges={g: [int(r[0]), int(r[1])] for g, r in p["residue_ranges"].items()} if p.get("residue_ranges") else None,
         steps=[{"tool": s["tool"], "rationale": s["rationale"]} for s in p["steps"]],
         notes=[str(n) for n in p.get("notes") or []],
     )

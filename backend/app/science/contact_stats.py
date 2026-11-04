@@ -10,7 +10,7 @@ import numpy as np
 from app.config import CACHE_DIR, dataset_config
 from app.science import stats
 from app.science.contacts import (
-    CONTACT_DEFINITION, precompute_min_distances, validate_cutoff,
+    CONTACT_DEFINITION, precompute_min_distances, residue_subset, validate_cutoff,
     validate_sequence_exclusion, validate_window, sequence_local_mask,
 )
 from app.science.distances import distance_over_time
@@ -60,10 +60,13 @@ def compare_intervals(
     seed: int = stats.SEED,
     n_resamples: int = stats.N_RESAMPLES,
     min_pooled_freq: float = MIN_POOLED_FREQ,
+    ranges: dict[str, list[int]] | None = None,
     cache_dir: Path = CACHE_DIR,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     """Per-pair contact-frequency change (window_b - window_a) with tau-based CI and BH q-values.
+
+    `ranges` limits each group to the residue ranges a figure used, so BH corrects over the pairs tested there.
 
     Tested pairs: not sequence-local and pooled frequency over both windows >= min_pooled_freq.
     tau is the larger of the 0/1 series' and the min-distance series' tau.
@@ -74,7 +77,8 @@ def compare_intervals(
     cfg = require_stats_valid(dataset)
     cutoff = validate_cutoff(cutoff)
     sequence_exclusion = validate_sequence_exclusion(sequence_exclusion)
-    md = precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress)
+    md = residue_subset(precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress),
+                        group_a, group_b, ranges)
     n_frames = md.min_dist.shape[0]
     fa = validate_window(n_frames, window_a[0], window_a[1], stride)
     fb = validate_window(n_frames, window_b[0], window_b[1], stride)
@@ -108,6 +112,7 @@ def compare_intervals(
         "dataset": dataset,
         "group_a": group_a,
         "group_b": group_b,
+        "residue_ranges": ranges or None,
         "window_a": list(window_a),
         "window_b": list(window_b),
         "stride": stride,

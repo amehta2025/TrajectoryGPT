@@ -86,8 +86,17 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
 
   // One button: with a figure attached the text is a note about it; without, it is the question.
   // A loaded example keeps its own heading ("Sample figure", "Example question"), never "You asked".
-  const analyze = () => {
+  const [choose, setChoose] = useState(false) // a question typed with a figure attached: note, or ask on its own?
+  const analyze = (choice?: 'note' | 'alone') => {
     if (busy) return
+    const looksLikeQuestion = !loaded && files.length > 0 && question.trim().endsWith('?')
+    if (looksLikeQuestion && !choice) return setChoose(true)
+    setChoose(false)
+    if (choice === 'alone') {
+      void ask(question.trim(), dataset, false, false, 'You asked')
+      clearBox()
+      return
+    }
     if (loaded?.kind === 'figure') {
       const note = question.trim() ? `${loaded.note} ${question.trim()}` : loaded.note
       void askFigure([loaded.file], dataset, note, { label: loaded.ex.title, kicker: loaded.ex.kicker })
@@ -174,7 +183,15 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
             <button type="submit" className="primary" disabled={busy || (!files.length && !question.trim())}>{busy ? 'Working…' : 'Analyze →'}</button>
           </form>
         </div>
-        {files.length > 0 && !loaded && question.trim() && (
+        {choose && (
+          <div className="note-choice" role="dialog" aria-label="Use the question with the figure?">
+            <p>You attached <b>{files.map((f) => f.name).join(' + ')}</b> and asked a question. How should I use it?</p>
+            <button type="button" className="primary small" onClick={() => analyze('alone')}>Ask without the figure</button>
+            <button type="button" className="small" onClick={() => analyze('note')}>Use it as a note on the figure</button>
+            <button type="button" className="link small" onClick={() => setChoose(false)}>Cancel</button>
+          </div>
+        )}
+        {files.length > 0 && !loaded && question.trim() && !choose && (
           <p className="note-chip small" role="status">
             Sent as a note about <b>{files.map((f) => f.name).join(' + ')}</b>.{' '}
             <button type="button" className="link" onClick={() => { setFiles([]); setFileError(null) }}>Remove the figure</button> to ask it on its own.

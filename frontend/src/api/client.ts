@@ -123,6 +123,7 @@ export type Plan = {
   native_selection?: 'name CA' | 'heavy atoms'
   native_radius?: number
   ref_frames?: number[]
+  residue_ranges?: Record<string, [number, number]> | null // a figure's residue ranges: only these are tested
   pair?: string // a residue pair the user chose (e.g. 'ASP54-LYS157'); tools use exactly it
   steps: PlanStep[]
   notes?: string[] // code-written: what the question asks that the data cannot give (e.g. a longer time range)

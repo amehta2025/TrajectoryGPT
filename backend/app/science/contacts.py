@@ -146,6 +146,31 @@ def sequence_local_mask(keys_a: list[str], keys_b: list[str], n: int) -> np.ndar
     return np.abs(ra[:, None] - rb[None, :]) <= n
 
 
+Ranges = dict[str, list[int]] | None  # {"CORE": [100, 121]}: only these residues of that group are analysed
+
+
+def residue_subset(md: MinDistances, group_a: str, group_b: str, ranges: Ranges) -> MinDistances:
+    """The min-distance matrix limited to the residue ranges a figure used (e.g. LID 122-159 x CORE 100-121), so
+    what is counted, tested and corrected for multiple comparisons is what the paper showed. A group without a
+    range keeps all its residues. The cache stays the whole-group matrix; this only selects rows and columns."""
+    if not ranges:
+        return md
+
+    def keep(keys: list[str], group: str) -> np.ndarray:
+        r = ranges.get(group)
+        if not r:
+            return np.arange(len(keys))
+        lo, hi = int(r[0]), int(r[1])
+        idx = np.array([i for i, k in enumerate(keys) if lo <= parse_residue_key(k).resid <= hi], dtype=int)
+        if not len(idx):
+            raise ValueError(f"The range {group} {lo}-{hi} contains no {group} residues")
+        return idx
+
+    ia, ib = keep(md.keys_a, group_a), keep(md.keys_b, group_b)
+    return MinDistances(md.min_dist[:, ia][:, :, ib], [md.keys_a[i] for i in ia], [md.keys_b[j] for j in ib],
+                        md.pbc, md.cache_path, md.computed)
+
+
 def calculate_contacts(
     dataset: str,
     group_a: str,
@@ -156,16 +181,19 @@ def calculate_contacts(
     stride: int = 1,
     sequence_exclusion: int | None = None,
     *,
+    ranges: Ranges = None,
     cache_dir: Path = CACHE_DIR,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
     """Contact frequency matrix freq[i, j] = fraction of window frames with min_dist <= cutoff.
 
     `excluded[i, j]` marks sequence-local pairs; downstream counts and stats must skip them.
+    `ranges` limits each group to residue ranges (residue_subset).
     """
     cutoff = validate_cutoff(cutoff)
     sequence_exclusion = validate_sequence_exclusion(sequence_exclusion)
-    md = precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress)
+    md = residue_subset(precompute_min_distances(dataset, group_a, group_b, cache_dir=cache_dir, progress=progress),
+                        group_a, group_b, ranges)
     frames = validate_window(md.min_dist.shape[0], start, stop, stride)
     window = md.min_dist[frames.start:frames.stop:frames.step]
     freq = (window <= cutoff).mean(axis=0)
@@ -180,6 +208,7 @@ def calculate_contacts(
         "keys_a": md.keys_a,
         "keys_b": md.keys_b,
         "frequency": freq,
+        "residue_ranges": ranges or None,
         "any_contact_frequency": any_contact,
         "excluded": excluded,
         "sequence_exclusion": sequence_exclusion,
@@ -202,6 +231,7 @@ def contact_difference_map(
     stride: int = 1,
     sequence_exclusion: int | None = None,
     *,
+    ranges: Ranges = None,
     cache_dir: Path = CACHE_DIR,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
@@ -216,9 +246,9 @@ def contact_difference_map(
     if fa.start < fb.stop and fb.start < fa.stop:
         raise ValueError(f"Windows {list(window_a)} and {list(window_b)} overlap; choose disjoint windows.")
     a = calculate_contacts(dataset, group_a, group_b, cutoff, window_a[0], window_a[1], stride, sequence_exclusion,
-                           cache_dir=cache_dir, progress=progress)
+                           ranges=ranges, cache_dir=cache_dir, progress=progress)
     b = calculate_contacts(dataset, group_a, group_b, cutoff, window_b[0], window_b[1], stride, sequence_exclusion,
-                           cache_dir=cache_dir)
+                           ranges=ranges, cache_dir=cache_dir)
     return {
         "dataset": dataset,
         "group_a": group_a,

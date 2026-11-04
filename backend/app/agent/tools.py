@@ -54,6 +54,9 @@ class ApprovedPlan:
     native_selection: str = "name CA"  # a key of NATIVE_SELECTIONS
     native_radius: float = 8.0         # Å
     ref_frames: list[int] = field(default_factory=lambda: [0, -1])
+    # Residue ranges a figure's axes used (e.g. {"CORE": [100, 121]}): contacts, tests and the multiple-comparison
+    # correction cover only these residues of that group, so the figure, the statistics and the report agree.
+    residue_ranges: dict[str, list[int]] | None = None
     pair: str | None = None  # a residue pair the user chose (a figure from another protein); tools use exactly it
     steps: list[dict] = field(default_factory=list)  # [{tool, rationale}]
     notes: list[str] = field(default_factory=list)  # code-written data notes (agent/limits.py), shown as caveats
@@ -143,6 +146,12 @@ def resolve_pair(plan: ApprovedPlan, label: str | None) -> tuple[str, str]:
     if plan.pair:
         return keys[0], keys[1]
     ra, rb = (parse_residue_key(k).resid for k in keys)
+    if plan.residue_ranges:  # a pair outside the approved ranges was never tested; it cannot be analysed either
+        rng = plan.residue_ranges
+        inside = lambda g, r: g not in rng or rng[g][0] <= r <= rng[g][1]
+        if not ((inside(plan.group_a, ra) and inside(plan.group_b, rb)) or (inside(plan.group_a, rb) and inside(plan.group_b, ra))):
+            raise Refused(f"{label} is outside the approved residue ranges "
+                          + ", ".join(f"{g} {a}-{b}" for g, (a, b) in rng.items()))
     if _in_group(plan.dataset, plan.group_b, ra) and _in_group(plan.dataset, plan.group_a, rb):
         keys.reverse()
         ra, rb = rb, ra
@@ -197,7 +206,7 @@ def _calculate_contacts(plan, args):
     start, stop = _window(plan, args.get("window"))
     with TRAJ_LOCK:
         r = calculate_contacts(plan.dataset, plan.group_a, plan.group_b, plan.cutoff, start, stop, plan.stride,
-                               plan.sequence_exclusion)
+                               plan.sequence_exclusion, ranges=plan.residue_ranges)
     freq = np.where(r["excluded"], np.nan, r["frequency"])
     flat = [(float(freq[i, j]), r["keys_a"][i], r["keys_b"][j]) for i, j in zip(*np.nonzero(freq > 0))]
     flat.sort(key=lambda t: -t[0])
@@ -223,7 +232,7 @@ def _contact_difference_map(plan, args, state):
         raise Refused("contact_difference_map compares two windows; this plan has one")
     with TRAJ_LOCK:
         r = contact_difference_map(plan.dataset, plan.group_a, plan.group_b, tuple(plan.window_a), tuple(plan.window_b),
-                                   plan.cutoff, plan.stride, plan.sequence_exclusion)
+                                   plan.cutoff, plan.stride, plan.sequence_exclusion, ranges=plan.residue_ranges)
     supported: dict[tuple[str, str], bool] | None = None
     stats_valid = dataset_config(plan.dataset)["stats_valid"]
     if stats_valid:
@@ -327,7 +336,7 @@ def _compare_intervals(plan, args):
         raise Refused("compare_intervals needs two approved windows; this plan has one")
     with TRAJ_LOCK:
         r = cs.compare_intervals(plan.dataset, plan.group_a, plan.group_b, tuple(plan.window_a), tuple(plan.window_b),
-                                 plan.cutoff, plan.stride, plan.sequence_exclusion)
+                                 plan.cutoff, plan.stride, plan.sequence_exclusion, ranges=plan.residue_ranges)
     values = {k: _v(r[k], "count") for k in ("n_tested", "n_filtered", "n_supported", "n_supported_firm",
                                              "n_supported_provisional")}
     pairs, top = {}, []
@@ -377,7 +386,8 @@ def _cutoff_sensitivity(plan, args):
         pairs = [resolve_pair(plan, p) for p in args["pairs"]]
     with TRAJ_LOCK:
         r = cs.cutoff_sensitivity(plan.dataset, plan.group_a, plan.group_b, tuple(plan.window_a), tuple(plan.window_b),
-                                  plan.robustness_cutoffs, pairs, plan.stride, plan.sequence_exclusion)
+                                  plan.robustness_cutoffs, pairs, plan.stride, plan.sequence_exclusion,
+                                  ranges=plan.residue_ranges)
     cuts = r["cutoffs"]
     values = {"n_robust": _v(r["n_robust"], "count"), "range": _v([cuts[0], cuts[-1]], "cutoff_range")}
     out_pairs, rows = {}, []

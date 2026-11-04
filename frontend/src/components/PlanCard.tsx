@@ -190,7 +190,8 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
       <details className="settings">
         <summary>{proposal.figure ? 'Edit scientific assumptions' : 'Advanced settings'}</summary>
         <p className="muted small plan-def">
-          {usesContacts && <>Contact: {CONTACT_DEFINITION}; cutoff {p.cutoff} Å. </>}
+          {usesContacts && <>Contact: {CONTACT_DEFINITION}; cutoff {p.cutoff} Å{!proposal.figure && (p.cutoff === 4.5 ? ' (default)' : ' (from your question)')}.
+            {' '}Pairs within {p.sequence_exclusion} residues in sequence are skipped{!proposal.figure && meta && (p.sequence_exclusion === meta.sequence_exclusion_default ? ' (default)' : '')}. </>}
           {p.window_b
             ? <>{windowText(meta, p.window_a, 'A', halves)} vs {windowText(meta, p.window_b, 'B', halves)}.</>
             : <>{windowText(meta, p.window_a, 'A', false)}.</>}

@@ -302,6 +302,25 @@ def transfer_dataset(spec: dict, selected_dataset: str) -> str:
     return closest if closest in load_config()["datasets"] else selected_dataset
 
 
+MAP_KINDS = {"contact_map", "difference_contact_map"}
+
+
+def figure_ranges(spec: dict, plan: dict) -> dict[str, list[int]] | None:
+    """The residue ranges a contact map's axes span, for the plan's groups (set by code from spec.display, not by
+    the planner). They limit what is tested, so the statistics cover the pairs the paper showed; the user can
+    change them on the plan card."""
+    if spec.get("kind") not in MAP_KINDS:
+        return None
+    out = {}
+    for ax in ((spec.get("display") or {}).get("x"), (spec.get("display") or {}).get("y")):
+        if not ax or ax.get("group") not in (plan.get("group_a"), plan.get("group_b")):
+            continue
+        lo, hi = ax.get("residue_min"), ax.get("residue_max")
+        if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo <= hi:
+            out[ax["group"]] = [int(round(lo)), int(round(hi))]
+    return out or None
+
+
 def plan_from_spec(llm: LLM, figure: dict, selected_dataset: str) -> dict:
     """The analysis plan for a figure already read. Returns what /figure/plan sends."""
     spec = figure["spec"]
@@ -315,6 +334,9 @@ def plan_from_spec(llm: LLM, figure: dict, selected_dataset: str) -> dict:
         question += (f"\n\nThe residues {', '.join(foreign)} belong to another protein; their numbers mean nothing on AdK. "
                      "The user picks the AdK residue pair before the run; plan the tools without naming a pair.")
     plan, usages = make_plan(llm, question, dataset, effort=EFFORT["figure_plan"])
+    plan_ranges = figure_ranges(spec, plan)
+    if plan_ranges:
+        plan["residue_ranges"] = plan_ranges
     if foreign:  # "Residue 45 is LEU, not ASP; the analysis uses LEU45" would contradict the user's pick
         plan["notes"] = [n for n in plan.get("notes", []) if not n.startswith(("Residue ", "There is no residue"))]
     return {"plan": plan, "figure": figure, "question": question, "usages": usages}

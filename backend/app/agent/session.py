@@ -24,7 +24,7 @@ from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
 EDITABLE = ("dataset", "cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b",
-            "native_selection", "native_radius", "ref_frames", "pair")
+            "native_selection", "native_radius", "ref_frames", "pair", "residue_ranges")
 
 
 @dataclass
