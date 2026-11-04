@@ -178,7 +178,7 @@ def curate(run: dict, label: str | None = None, directory: Path | None = None, f
         (d / "figures" / fig["figure_id"]).write_bytes(raw)
         (d / "figures" / f"{fig['figure_id']}.json").write_text(
             json.dumps({"filename": fig["filename"], "mime": fig["mime"]}), encoding="utf-8")
-        fig["sha256"] = hashlib.sha256(raw).hexdigest()
+        fig.setdefault("sha256", hashlib.sha256(raw).hexdigest())  # the upload's digest (a PDF's, if the figure was extracted)
     path = d / f"{out['run_id']}.json"
     path.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     _load_all.cache_clear()

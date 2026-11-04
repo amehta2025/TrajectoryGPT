@@ -3,12 +3,12 @@
 // viewer), so nothing the backend computes is lost; this file only arranges them. Every number shown
 // comes from stored tool results (stepResult, the report's filled placeholders), never from model text.
 import { useEffect, useState } from 'react'
-import { api, type Figure, type Metadata, type Plan } from '../api/client'
+import { type Figure, type Metadata, type Plan } from '../api/client'
 import { confirmRow, editPlan, nextTurn, toggleScience, useInvestigation } from '../state/investigation'
 import { withUnits } from '../state/paperFigure'
 import { isHalves, PlanCard, STEP_DETAIL, stepText, windowText } from './PlanCard'
 import { AgentTrace, stepResult } from './StepLog'
-import { Ours, ReproduceView } from './ReproduceView'
+import { Ours, PublishedFigure, ReproduceView } from './ReproduceView'
 import { ReportView, ScienceReport } from './ReportView'
 import { CompareChart } from './CompareChart'
 import { DistancePlot } from './DistancePlot'
@@ -269,7 +269,7 @@ export function FigureSetup({ meta }: { meta: Metadata | null }) {
     <div className="setup">
       <section className="card setup-figure">
         <h2>Your figure</h2>
-        <img src={api.figureUrl(figure.figure_id)} alt={`Uploaded figure: ${figure.spec.summary}`} />
+        <PublishedFigure figure={figure} />
         <p className="muted small">{figure.spec.mode === 'exact'
           ? 'Made from the same simulation we have, so the numbers should match exactly.'
           : 'Made from other data: the method is applied to our simulation, and numbers are not expected to match.'}</p>

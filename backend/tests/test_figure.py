@@ -346,3 +346,26 @@ def test_run_is_blocked_until_the_user_picks_the_adk_pair(monkeypatch, tmp_path)
         session.start_run("pf1", {})
     assert "Asp45–Arg112" in e.value.errors[0] and "Pick the AdK residues" in e.value.errors[0]
     assert "run_id" not in session.PLANS["pf1"]  # still unclaimed
+
+
+def test_a_methods_pdf_shows_its_embedded_figure(tmp_path):
+    """A PDF-only upload: the figure shown beside ours is the PDF's embedded image, as PNG (an <img> cannot
+    show a PDF). The digest stays the uploaded file's, so recorded runs still match the same upload."""
+    import hashlib
+    import io
+    from PIL import Image
+    from pypdf import PdfWriter
+    img = Image.new("RGB", (600, 380), "white")
+    buf = io.BytesIO()
+    img.save(buf, "PDF")  # a one-page PDF that embeds a 600 x 380 image
+    pdf = buf.getvalue()
+    fig = figure.save_figure([("paper.pdf", "application/pdf", pdf)], directory=tmp_path)
+    raw, mime = figure.load_figure(fig["figure_id"], directory=tmp_path)
+    assert mime == "image/png" and Image.open(io.BytesIO(raw)).size == (600, 380)
+    assert fig["sha256"] == hashlib.sha256(pdf).hexdigest()
+    w = PdfWriter()
+    w.add_blank_page(200, 200)
+    out = io.BytesIO()
+    w.write(out)
+    blank = figure.save_figure([("blank.pdf", "application/pdf", out.getvalue())], directory=tmp_path)
+    assert blank["mime"] == "application/pdf"  # no embedded figure: the PDF itself is kept

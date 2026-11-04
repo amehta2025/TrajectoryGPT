@@ -3,7 +3,7 @@
 // from the figure. It appears as soon as the figure is read, while the plan is still being drafted.
 // Settings the AI inferred are marked; one "Confirm & run" on the plan accepts them all (the backend
 // refuses a run until every low-confidence setting is confirmed).
-import { useMemo } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Data, Layout } from 'plotly.js'
 import { api, type Contacts, type Distances, type Figure, type FigureDisplay, type FigureSpec, type RunView } from '../api/client'
 import { useInvestigation } from '../state/investigation'
@@ -45,29 +45,99 @@ const paperLayout: Partial<Layout> = {
 }
 const title = (text: string) => ({ text, font: { size: 11, color: INK } })
 
-function PaperPlot({ data, layout, height = 270 }: { data: Data[]; layout: Partial<Layout>; height?: number }) {
+/** The published image's pixel size, so our panel can take the same aspect ratio. */
+function useImageSize(src: string | null): { w: number; h: number } | null {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    if (!src) return
+    const img = new Image()
+    img.onload = () => img.naturalWidth && setSize({ w: img.naturalWidth, h: img.naturalHeight })
+    img.src = src
+  }, [src])
+  return size
+}
+
+function useWidth(): [React.RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement>(null)
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    if (!ref.current) return
+    setW(ref.current.clientWidth) // at once: ResizeObserver only reports on the next rendered frame
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)))
+    ro.observe(ref.current)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, w]
+}
+
+// Matplotlib's defaults (10 pt text on a 6.4 in figure) make text about 2.2% of the figure's width; the paper's
+// image is shown at the column width, so text at 2.2% of our width matches its apparent size. The paper's exact
+// font size cannot be read off a picture; this is the usual default.
+const FONT_SHARE = 0.022
+
+/** A white, paper-style plot the same width and aspect ratio as the published figure beside it (PaperSize). */
+function PaperPlot({ data, layout }: { data: Data[]; layout: Partial<Layout> }) {
+  const size = useContext(PaperSize)
+  const [ref, width] = useWidth()
+  const height = size && width ? Math.round((width * size.h) / size.w) : 270
+  const f = Math.max(8, Math.min(16, Math.round((width || 480) * FONT_SHARE)))
+  const font = { size: f, color: INK }
+  const axes = Object.fromEntries(Object.entries(layout).filter(([k]) => /^[xy]axis\d*$/.test(k)).map(([k, ax]) => {
+    const a = (ax ?? {}) as Partial<NonNullable<Layout['xaxis']>>
+    const t = typeof a.title === 'object' ? a.title : { text: a.title }
+    return [k, { ...a, tickfont: font, title: { ...t, font } }]
+  }))
+  const sized = data.map((t) => ('colorbar' in t && t.colorbar
+    ? { ...t, colorbar: { ...t.colorbar, thickness: Math.round(f * 1.2), tickfont: font, title: { ...(t.colorbar.title as object), font } } }
+    : t)) as Data[]
+  const legend = layout.legend ? { ...layout.legend, font } : undefined
   return (
-    <div className="paper-plot">
-      <Plot data={data} layout={{ ...paperLayout, height, ...layout }} config={{ displaylogo: false, responsive: true }}
-        style={{ width: '100%' }} useResizeHandler />
+    <div className="paper-plot" ref={ref}>
+      {width > 0 && (
+        <Plot data={sized} config={{ displaylogo: false, responsive: true }} style={{ width: '100%', height }}
+          layout={{ ...paperLayout, font, ...layout, ...axes, ...(legend ? { legend } : {}), height,
+            margin: { l: Math.round(f * 5.2), r: Math.round(f * 1.2), t: Math.round(f * (layout.showlegend && layout.legend?.orientation === 'h' ? 2.6 : 1.2)), b: Math.round(f * 3.8) } }} />
+      )}
     </div>
   )
 }
+const PaperSize = createContext<{ w: number; h: number } | null>(null)
+const EXCLUDED_GREY = '#d9d9d9'
+const EXCLUDED_LABEL = 'excluded: too close in sequence'
 
 /** Contact map or difference map: residues on both axes, laid out and cropped like the paper's. */
-function MapFigure({ keysA, keysB, z, groupA, groupB, display, diverging }: {
-  keysA: string[]; keysB: string[]; z: (number | null)[][]; groupA: string; groupB: string; display?: FigureDisplay; diverging: boolean
+function MapFigure({ keysA, keysB, z, excluded, groupA, groupB, display, diverging }: {
+  keysA: string[]; keysB: string[]; z: (number | null)[][]; excluded?: boolean[][]; groupA: string; groupB: string
+  display?: FigureDisplay; diverging: boolean
 }) {
   const o = useMemo(() => orientMap(keysA, keysB, z, groupA, groupB, display), [keysA, keysB, z, groupA, groupB, display])
+  // Pairs skipped as too close in sequence (|Δresid| ≤ the approved exclusion): drawn light grey underneath, with a
+  // legend entry, rather than left white like an empty cell.
+  const ex = useMemo(() => {
+    const m = excluded ?? z.map((row) => row.map((v) => v === null))
+    return orientMap(keysA, keysB, m.map((row) => row.map((b) => (b ? 1 : null))), groupA, groupB, display).z
+  }, [excluded, keysA, keysB, z, groupA, groupB, display])
+  const anyExcluded = ex.some((row) => row.some((v) => v === 1))
   const [zmin, zmax] = colorRange(display, o.z.flat(), diverging)
   const text = o.keysY.map((ky) => o.keysX.map((kx) => `${residueLabel(kx)} – ${residueLabel(ky)}`))
-  const data = [{
-    type: 'heatmap', x: o.x, y: o.y, z: o.z, text, zmin, zmax, colorscale: colorscaleFor(display, diverging),
-    hovertemplate: `%{text}<br>${diverging ? 'change' : 'frequency'} %{z:.2f}<extra></extra>`, xgap: 0, ygap: 0,
-    colorbar: { title: title(diverging ? 'Δ contact frequency (B − A)' : 'contact frequency'), thickness: 12, outlinecolor: INK, tickcolor: INK },
-  }] as Data[]
+  const data = [
+    ...(anyExcluded ? [{
+      type: 'heatmap', x: o.x, y: o.y, z: ex, text, colorscale: [[0, EXCLUDED_GREY], [1, EXCLUDED_GREY]], showscale: false,
+      hovertemplate: `%{text}<br>${EXCLUDED_LABEL}<extra></extra>`, showlegend: false,
+    }, {
+      type: 'scatter', mode: 'markers', x: [null], y: [null], name: EXCLUDED_LABEL, showlegend: true, hoverinfo: 'skip',
+      marker: { symbol: 'square', size: 11, color: EXCLUDED_GREY, line: { color: '#999', width: 1 } },
+    }] : []),
+    {
+      type: 'heatmap', x: o.x, y: o.y, z: o.z, text, zmin, zmax, colorscale: colorscaleFor(display, diverging),
+      hovertemplate: `%{text}<br>${diverging ? 'change' : 'frequency'} %{z:.2f}<extra></extra>`, xgap: 0, ygap: 0, showlegend: false,
+      colorbar: { title: title(diverging ? 'Δ contact frequency (B − A)' : 'contact frequency'), outlinecolor: INK, tickcolor: INK },
+    },
+  ] as Data[]
   const label = (axis: FigureDisplay['x'] | undefined, g: string) => (axis && axis.group === g && axis.title ? axis.title : `${g} residue number`)
   return <PaperPlot data={data} layout={{
+    showlegend: anyExcluded,
+    legend: { orientation: 'h', x: 0, xanchor: 'left', y: 1.01, yanchor: 'bottom', bgcolor: 'rgba(0,0,0,0)' },
     xaxis: { ...paperAxis, title: title(label(display?.x, o.xGroup)) },
     yaxis: { ...paperAxis, title: title(label(display?.y, o.yGroup)) },
   }} />
@@ -126,10 +196,16 @@ function Q1Q2Figure({ d }: { d: Repro }) {
   }} />
 }
 
-/** Our version of the figure: the same figure type as theirs, drawn from this run's stored results. */
+/** Our version of the figure: the same figure type as theirs, drawn from this run's stored results, at the
+ *  published image's aspect ratio. */
 export function Ours({ run }: { run: RunView | null }) {
   const { proposal } = useInvestigation()
   const figure = run?.figure ?? proposal?.figure
+  const size = useImageSize(figure && figure.mime.startsWith('image/') ? api.figureUrl(figure.figure_id) : null)
+  return <PaperSize.Provider value={size}><OursBody run={run} figure={figure ?? null} /></PaperSize.Provider>
+}
+
+function OursBody({ run, figure }: { run: RunView | null; figure: Figure | null }) {
   const display = figure?.spec.display
   const kind = figure?.spec.kind
   const repro = lastData<Repro>(run, 'reproduction_check')
@@ -148,11 +224,12 @@ export function Ours({ run }: { run: RunView | null }) {
       series={native.ref_frames.map((f, k) => ({ y: native.q.map((row) => row[k]), name: many ? `reference frame ${f}` : 'Q' }))} />
   }
   if (kind === 'contact_map' && contacts) {
-    return <MapFigure keysA={contacts.keys_a} keysB={contacts.keys_b} z={contacts.frequency} groupA={contacts.group_a}
+    return <MapFigure keysA={contacts.keys_a} keysB={contacts.keys_b} z={contacts.frequency} excluded={contacts.excluded} groupA={contacts.group_a}
       groupB={contacts.group_b} display={display} diverging={false} />
   }
   if (kind === 'difference_contact_map' && diff) {
-    return <MapFigure keysA={diff.keys_a} keysB={diff.keys_b} z={diff.delta} groupA={diff.group_a} groupB={diff.group_b}
+    return <MapFigure keysA={diff.keys_a} keysB={diff.keys_b} z={diff.delta} excluded={(diff as DiffData & { excluded?: boolean[][] }).excluded}
+      groupA={diff.group_a} groupB={diff.group_b}
       display={display} diverging />
   }
   if (kind === 'distance_trace' && dist) {
@@ -164,6 +241,14 @@ export function Ours({ run }: { run: RunView | null }) {
   const finished = run && ['awaiting_verification', 'verified', 'flagged', 'needs_review', 'error'].includes(run.status)
   return <div className="muted small placeholder">{!run ? 'Appears once the plan runs.'
     : finished ? `This run didn’t produce a ${KIND_LABEL[kind ?? 'other']} to draw.` : 'Computing…'}</div>
+}
+
+/** The published figure: the uploaded image, or the figure the backend took out of the PDF. A PDF with no
+ *  embedded figure cannot be shown as an image, so it gets a link instead of a broken picture. */
+export function PublishedFigure({ figure }: { figure: Figure }) {
+  const url = api.figureUrl(figure.figure_id)
+  if (figure.mime.startsWith('image/')) return <img src={url} alt={`Uploaded figure: ${figure.spec.summary}`} />
+  return <div className="muted small placeholder"><a href={url} target="_blank" rel="noreferrer">Open the uploaded PDF</a> (no figure image found in it)</div>
 }
 
 /** "contact distance 6 Å (published: 8 Å)" for each setting the user changed from the published figure's. */
@@ -234,7 +319,7 @@ export function ReproduceView() {
       <div className="repro-grid">
         <figure>
           <figcaption className="muted small" title={figure.filename}>Published (from paper)</figcaption>
-          <img src={api.figureUrl(figure.figure_id)} alt={`Uploaded figure: ${figure.spec.summary}`} />
+          <PublishedFigure figure={figure} />
         </figure>
         <figure>
           <figcaption className="muted small">Our result (reproduced)</figcaption>

@@ -220,15 +220,47 @@ def foreign_residues(spec: dict) -> list[str]:
     return []
 
 
+MAX_FIGURE_PIXELS = 40_000_000  # an embedded image larger than this is skipped (decompression-bomb guard)
+
+
+def figure_from_pdf(raw: bytes) -> bytes | None:
+    """The figure embedded in a methods PDF (its largest raster image, at least 300 x 200 px) as PNG on white,
+    so ReproduceView can show the paper's figure beside ours; None if the PDF embeds no such image."""
+    from PIL import Image
+    try:
+        best = None
+        for page in PdfReader(io.BytesIO(raw)).pages[:MAX_PDF_PAGES]:
+            for im in page.images:
+                w, h = im.image.size
+                if w >= 300 and h >= 200 and w * h <= MAX_FIGURE_PIXELS and (best is None or w * h > best[0]):
+                    best = (w * h, im.image)
+        if best is None:
+            return None
+        img = best[1]
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGBA")
+            white = Image.new("RGBA", img.size, "white")
+            img = Image.alpha_composite(white, img)
+        out = io.BytesIO()
+        img.convert("RGB").save(out, "PNG")
+        return out.getvalue()
+    except Exception:  # an unreadable image just means no extracted figure
+        return None
+
+
 def save_figure(files: list[tuple[str, str, bytes]], directory: Path | None = None) -> dict:
-    """Store the first image (or PDF) for ReproduceView; returns {figure_id, filename, mime}."""
+    """Store the first image for ReproduceView, else the figure embedded in the PDF (else the PDF itself);
+    returns {figure_id, filename, mime, sha256}. sha256 is of the uploaded file."""
     d = directory or FIGURES_DIR
     d.mkdir(parents=True, exist_ok=True)
     name, mime, raw = next((f for f in files if f[1].startswith("image/")), files[0])
+    sha = hashlib.sha256(raw).hexdigest()
+    if mime == "application/pdf" and (png := figure_from_pdf(raw)):
+        name, mime, raw = f"{name} (figure)", "image/png", png
     fid = uuid.uuid4().hex[:16]
     (d / fid).write_bytes(raw)
     (d / f"{fid}.json").write_text(json.dumps({"filename": name, "mime": mime}), encoding="utf-8")
-    return {"figure_id": fid, "filename": name, "mime": mime, "sha256": hashlib.sha256(raw).hexdigest()}
+    return {"figure_id": fid, "filename": name, "mime": mime, "sha256": sha}
 
 
 def load_figure(figure_id: str, directory: Path | None = None) -> tuple[bytes, str]:
