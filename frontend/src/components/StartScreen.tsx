@@ -234,7 +234,6 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
               <select id="ds" value={dataset} onChange={(e) => { clearNotices(); setSelection({ dataset: e.target.value }) }} disabled={busy}>
                 {datasets.map((d) => <option key={d.id} value={d.id}>AdK · {datasetName(d.id)}</option>)}
               </select>
-              <span className="muted small">Model</span>
               <ModelToggle disabled={busy} />
             </div>
           </details>
