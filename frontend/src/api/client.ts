@@ -246,6 +246,8 @@ export type Report = {
   interpretation?: TextItem | null
   interpretation_label?: string
   text_dropped?: string[]
+  /** The AI's wording failed the checks after its retries: failing text removed, code-built findings shown. */
+  fallback?: { note: string; removed: string[] } | null
   findings: Finding[]
   statistical_support: StatRow[]
   background: TextItem[]

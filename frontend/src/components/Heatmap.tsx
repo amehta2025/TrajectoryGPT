@@ -120,7 +120,7 @@ export function Heatmap({ meta }: { meta: Metadata }) {
           </>
         )}
       </p>
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" title={error}>Couldn’t load this chart. Try again in a moment.</div>}
       <div className="plot-wrap heatmap-wrap">
         {loading && <div className="overlay">Computing contacts… (first run on a new pair can take ~15 s)</div>}
         {data && (

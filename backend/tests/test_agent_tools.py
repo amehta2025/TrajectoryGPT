@@ -145,7 +145,7 @@ def test_submit_full_check(pretend_stats_valid):
         assert "no cutoff_sensitivity result shows it robust" in call(s, "submit_report", finding_ids=[f_rob])["summary_for_model"]
 
     r = call(s, "submit_report", finding_ids=[f_ok, f_null], gaps=["0.5 of the run is unexplained"])
-    assert r["status"] == "refused" and "gaps[0]: bare numbers" in r["summary_for_model"]
+    assert r["status"] == "refused" and "gaps[0]: replace the bare numbers ['0.5']" in r["summary_for_model"]
 
     r = call(s, "submit_report", finding_ids=[f_ok, f_null], hypotheses=["LID motion may loosen this contact"])
     assert r["status"] == "submitted"

@@ -24,6 +24,12 @@ MAX_TURNS_CAP = 10
 FINDING_TURNS = 3  # the prompt allows at most three findings
 
 
+def _plan_placeholders(state) -> dict[str, str]:
+    """{{plan.<name>}} -> its filled text, shown to the agent with the plan."""
+    from app.agent.report import format_value, plan_values
+    return {k: format_value(v["v"], v["kind"]) for k, v in plan_values(state.plan).items()}
+
+
 def turn_budget(plan: ApprovedPlan) -> int:
     """Turns for a plan: each analysis step, up to three findings, the report, and one spare; at least
     MAX_TURNS (SPEC §9b), at most MAX_TURNS_CAP. A 5-step plan (4 analyses) would otherwise have no slack."""
@@ -124,14 +130,18 @@ def run_investigation(
     tools = tools_for(plan.dataset)
     if not run.input_items:
         run.input_items = [{"role": "system", "content": prompts.AGENT_SYSTEM},
-                           {"role": "user", "content": prompts.agent_user(run.question, plan.as_dict(), run.figure)}]
+                           {"role": "user", "content": prompts.agent_user(run.question, plan.as_dict(), run.figure,
+                                                                          _plan_placeholders(state))}]
     refusals = sum(1 for t in run.turns if t["tool"] == "submit_report" and t["status"] == "refused")
     seen_at_start = 0 if not run.turns else len(run.input_items)  # timeline shows only what is new each turn
     run.save()
     emit({"type": "run_started", "run_id": run.run_id, "checklist": state.checklist})
 
+    nudged = False  # one extra chance when the model goes quiet right after a refused report
     try:
-        for turn in range(len(run.turns) + 1, max_turns + 1):
+        turn = len(run.turns)
+        while turn < max_turns:
+            turn += 1
             if turn == max_turns:
                 run.input_items.append({"role": "user", "content": "Last turn: call submit_report now."})
             new_input = run.input_items[seen_at_start:]
@@ -142,7 +152,17 @@ def run_investigation(
             rec = {"turn": turn, "saw": _visible(new_input), "output": _visible(resp.output_items),
                    "usage": resp.usage.as_dict(), "model_s": resp.usage.latency_s}
             if not resp.tool_calls:
-                run.input_items.append({"role": "user", "content": "Call exactly one tool."})
+                last = next((t for t in reversed(run.turns) if t.get("tool")), None)
+                if last and last["tool"] == "submit_report" and last["status"] == "refused" and not nudged:
+                    # After a refused report the model sometimes replies in text; say exactly what to fix and give it
+                    # one more turn before the run stops for review.
+                    nudged = True
+                    max_turns += 1
+                    fix = "\n- ".join(run.problems) or "the problems listed in the refusal"
+                    run.input_items.append({"role": "user", "content": "Your submit_report was refused. Fix these, then call "
+                                            f"submit_report again (one tool call):\n- {fix}"})
+                else:
+                    run.input_items.append({"role": "user", "content": "Call exactly one tool."})
                 rec.update(tool=None, status="no_tool_call", tool_s=0.0, summary=resp.final_text[:500])
                 run.turns.append(rec)
                 emit({"type": "turn", **_event(rec, state)})
@@ -170,6 +190,16 @@ def run_investigation(
                     break
             if wait_for_next:
                 wait_for_next()
+        if not state.report:
+            # The AI's wording kept failing the checks: show the report from computed results instead (failing
+            # sentences removed, code-built findings if none pass). Review only when nothing was computed.
+            from app.agent.report import fallback_report
+            last = next((t for t in reversed(run.turns) if t.get("tool") == "submit_report"), None)
+            try:
+                last_args = json.loads(last["arguments"]) if last and last.get("arguments") else {}
+            except ValueError:
+                last_args = {}
+            state.report = fallback_report(state, last_args, run.problems or ["no report was submitted"])
         run.status = "awaiting_verification" if state.report else "needs_review"
         if state.report:
             run.problems = []

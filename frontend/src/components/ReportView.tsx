@@ -14,6 +14,7 @@ import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
 import { buildCards, touchAnswer, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
 import { MicButton } from './VoiceInput'
+import { stepText } from './PlanCard'
 import { onTranscript } from '../state/voice'
 
 type CompareData = {
@@ -70,11 +71,13 @@ export function Headline({ meta }: { meta: Metadata | null }) {
         <header className="rb-head">
           <span className="rb-icon" aria-hidden>!</span>
           <div className="rb-titles">
-            <h2>Analysis stopped: needs review</h2>
-            <p className="rb-lead">The agent’s report didn’t pass the automatic checks, so no conclusion is shown. The computed results are in the tabs below.</p>
+            <h2>No result for this question</h2>
+            <p className="rb-lead">The analysis couldn’t compute anything to report. Try rephrasing the question, or start from an example.</p>
           </div>
         </header>
-        {why.length > 0 && <ul className="plain why">{why.map((w) => <li key={w}>{w}</li>)}</ul>}
+        {why.length > 0 && (
+          <details className="error-detail"><summary>Show the science</summary><ul>{why.map((w) => <li key={w}>{w}</li>)}</ul></details>
+        )}
       </section>
     )
   }
@@ -150,6 +153,7 @@ export function Headline({ meta }: { meta: Metadata | null }) {
         </div>
       </div>
       {(run.plan?.notes ?? []).map((n) => <p key={n} className="plan-note">Note: {n}</p>)}
+      {run.report.fallback && <p className="plan-note">{run.report.fallback.note}</p>}
       {interp && (
         <p className="headline-interp"><span className="interp-label">Interpretation, not computed:</span> {interp.text}</p>
       )}
@@ -335,7 +339,7 @@ function Citation({ id, run, onShow }: { id: string; run: RunView; onShow: (id: 
       if (keys) setSelection({ pair: { keyA: keys.key_a, keyB: keys.key_b, excluded: false } })
       onShow(pid)
     }} title={keys ? 'Highlight this pair in 3D and show provenance' : 'Show provenance'}>
-      {hisText(id)} <span className="muted small">{res?.tool}</span>
+      {hisText(id)} <span className="muted small">{res ? stepText(res.tool, null) : ''}</span>
     </button>
   )
 }
@@ -345,7 +349,7 @@ function Provenance({ pid, run }: { pid: string; run: RunView }) {
   if (!r) return null
   return (
     <div className="provenance">
-      <b>{pid}</b> · <code>{r.tool}</code> · {r.status}
+      <b>{stepText(r.tool, null)}</b>
       <pre>{JSON.stringify(r.params, null, 1)}</pre>
     </div>
   )
@@ -599,6 +603,12 @@ export function ScienceReport({ meta }: { meta: Metadata | null }) {
   return (
     <section className="card report-science">
       <VerifierDetail run={run} />
+      {rep.fallback && (
+        <>
+          <h2>Wording removed by the automatic checks</h2>
+          <ul className="plain review-problems">{rep.fallback.removed.map((p, i) => <li key={i}>{hisText(p)}</li>)}</ul>
+        </>
+      )}
       <h2>Findings in detail</h2>
       {cmp && (
         <p className="small muted">

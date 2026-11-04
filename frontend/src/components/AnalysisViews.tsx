@@ -43,7 +43,7 @@ export function DifferenceMap({ d, height = 320 }: { d: DiffData; height?: numbe
     const text = labA.map((a, i) => labB.map((b, j) => {
       const v = d.delta[i][j]
       if (v === null) return `${a} – ${b}<br>excluded (sequence-local)`
-      const status = !d.stats_valid ? 'not statistically tested' : !d.tested ? 'not tested (run compare_intervals)'
+      const status = !d.stats_valid ? 'not statistically tested' : !d.tested ? 'not tested yet'
         : supported.has(`${d.keys_a[i]}|${d.keys_b[j]}`) ? 'supported change' : 'not supported (noise)'
       return `${a} – ${b}<br>${d.freq_a[i][j].toFixed(3)} → ${d.freq_b[i][j].toFixed(3)} (Δ ${v >= 0 ? '+' : ''}${v.toFixed(3)})<br>${status}`
     }))

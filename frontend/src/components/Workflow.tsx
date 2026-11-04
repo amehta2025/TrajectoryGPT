@@ -277,7 +277,7 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
   }
   if (plan && meta) {
     const halves = isHalves(plan, meta.n_frames)
-    rows.push({ id: 'frames', label: 'Frames', spec: fieldLike(/frame|window|time/),
+    rows.push({ id: 'frames', label: 'Time window', spec: fieldLike(/frame|window|time/),
       value: plan.window_b ? `${windowText(meta, plan.window_a, 'A', halves)} vs ${windowText(meta, plan.window_b, 'B', halves)}`
         : windowText(meta, plan.window_a, 'A', false).replace(/^window A: /, ''),
       editor: (close) => <WindowEditor plan={plan} meta={meta} onSave={save('frames')} close={close} /> })

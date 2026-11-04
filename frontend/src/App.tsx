@@ -25,7 +25,7 @@ export default function App() {
     // The backend scales to zero when idle; a cold start took about 6 s on Modal (measured 2026-11-02).
     const slow = window.setTimeout(() => setWaking(true), WAKING_AFTER_MS)
     api.datasets()
-      .then(setDatasets, (e) => setError(`Backend unreachable: ${(e as Error).message}`))
+      .then(setDatasets, () => setError('Can’t reach the server right now. Try again in a minute.'))
       .finally(() => {
         window.clearTimeout(slow)
         setWaking(false)
@@ -35,7 +35,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     setMeta(null)
-    api.metadata(dataset).then((m) => !cancelled && setMeta(m), (e) => !cancelled && setError((e as Error).message))
+    api.metadata(dataset).then((m) => !cancelled && setMeta(m), () => !cancelled && setError('Couldn’t load the simulation data. Try again in a minute.'))
     return () => {
       cancelled = true
     }

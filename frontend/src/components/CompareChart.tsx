@@ -164,7 +164,7 @@ export function CompareChart({ meta }: { meta: Metadata }) {
           <span className="swatch" style={{ background: EXCLUDED_GREY, marginLeft: 10 }} />not supported (noise)
         </p>
       )}
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" title={error}>Couldn’t load this chart. Try again in a moment.</div>}
       {data?.status === 'refused' && (
         <div className="note">No statistics on this dataset, so no intervals are drawn. {data.reason}</div>
       )}

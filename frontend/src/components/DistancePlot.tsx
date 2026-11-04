@@ -57,7 +57,7 @@ export function DistancePlot({ meta }: { meta: Metadata }) {
         Dashed line: cutoff {cutoff} Å · white line: viewer frame {frame} ({frameTimeLabel(meta, frame)}) · click any point to jump
         {pair?.excluded && <span className="warn"> · this pair is sequence-local (excluded from contact counts)</span>}
       </p>
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" title={error}>Couldn’t load this chart. Try again in a moment.</div>}
       <div className="plot-wrap distance-wrap">
         {!pair && <div className="overlay">Click a heatmap cell to plot that pair.</div>}
         {pair && !data && !error && <div className="overlay">Loading distances…</div>}

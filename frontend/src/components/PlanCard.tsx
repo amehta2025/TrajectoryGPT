@@ -71,8 +71,8 @@ export function windowText(meta: Metadata | null, w: [number, number], which: 'A
       ? `path steps ${w[0]}–${w[1] - 1}`
       : `${Math.round(w[0] * meta.dt_ns)}–${Math.round(w[1] * meta.dt_ns)} ns`
   if (halves) return `${which === 'A' ? 'first half' : 'second half'} (${time})`
-  if (meta?.dt_ns === null) return `window ${which}: ${time}`
-  return `window ${which}: frames ${w[0]}–${w[1] - 1}${time ? ` (${time})` : ''}`
+  if (meta && w[0] === 0 && w[1] === meta.n_frames) return meta.dt_ns === null ? 'the whole path' : `the whole run (${time})`
+  return meta?.dt_ns === null ? time : time || `window ${which}`
 }
 
 export function isHalves(p: Pick<Plan, 'window_a' | 'window_b'>, nFrames: number | undefined): boolean {

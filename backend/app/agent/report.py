@@ -73,7 +73,55 @@ def format_value(v, kind: str, time_label: str = "ns") -> str:
         return ", ".join(f"{c:.1f}" for c in v) + " Å" if v else "no cutoff"
     if kind == "cutoff_range":
         return f"{v[0]:.1f}–{v[1]:.1f} Å"
+    if kind == "setting_distance":
+        return f"{v:g} Å"
+    if kind == "ns":
+        return f"{v:g} ns"
     return str(v)
+
+
+# ---------- approved plan settings ----------
+# Settings the user approved (cutoff, windows, sequence exclusion, residue ranges...) are not computed results:
+# the agent may cite them as {{plan.<name>}}, and a bare number equal to one of them is not flagged.
+
+def plan_values(plan) -> dict[str, dict]:
+    """{name: {"v", "kind"}} for {{plan.<name>}} placeholders."""
+    dt = dataset_config(plan.dataset)["dt_ns"]
+    out = {"cutoff": {"v": float(plan.cutoff), "kind": "setting_distance"},
+           "robustness_cutoffs": {"v": list(plan.robustness_cutoffs), "kind": "cutoff_list"},
+           "sequence_exclusion": {"v": int(plan.sequence_exclusion), "kind": "count"},
+           "stride": {"v": int(plan.stride), "kind": "count"}}
+    for w in ("a", "b"):
+        win = getattr(plan, f"window_{w}")
+        if not win:
+            continue
+        out[f"window_{w}_first_frame"] = {"v": int(win[0]), "kind": "frame"}
+        out[f"window_{w}_last_frame"] = {"v": int(win[1]) - 1, "kind": "frame"}
+        if dt:
+            out[f"window_{w}_start_ns"] = {"v": round(win[0] * dt), "kind": "ns"}
+            out[f"window_{w}_end_ns"] = {"v": round(win[1] * dt), "kind": "ns"}
+            out[f"window_{w}_length_ns"] = {"v": round((win[1] - win[0]) * dt), "kind": "ns"}
+    if any(s.get("tool") in ("native_contacts", "reproduction_check") for s in plan.steps):
+        out["native_radius"] = {"v": float(plan.native_radius), "kind": "setting_distance"}
+    for g, (lo, hi) in (plan.residue_ranges or {}).items():
+        out[f"range_{g}_first"] = {"v": int(lo), "kind": "count"}
+        out[f"range_{g}_last"] = {"v": int(hi), "kind": "count"}
+    return out
+
+
+def plan_numbers(plan) -> set[float]:
+    """Every number an approved setting shows, for the bare-number check (exact matches only)."""
+    nums = set()
+    for val in plan_values(plan).values():
+        for x in (val["v"] if isinstance(val["v"], list) else [val["v"]]):
+            nums.add(round(float(x), 3))
+    return nums
+
+
+def bare_hint(state) -> str:
+    """What to write instead of a bare number, for refusal messages."""
+    names = ", ".join(f"{{{{plan.{k}}}}}" for k in plan_values(state.plan))
+    return f"write a computed value as its result placeholder (e.g. {{{{r1.n_supported}}}}) and a plan setting as one of {names}"
 
 
 def format_pct(v: float, kind: str) -> str | None:
@@ -92,8 +140,14 @@ def format_pct(v: float, kind: str) -> str | None:
 
 
 def resolve(state, path: str, fmt: str | None = None) -> dict | None:
-    """'r2.HSE134-ASP118.delta' -> {"v", "kind", "pid", "text"}; None if it does not resolve."""
+    """'r2.HSE134-ASP118.delta' -> {"v", "kind", "pid", "text"}; None if it does not resolve.
+    'plan.cutoff' and the other approved plan settings resolve too (plan_values)."""
     pid, _, name = path.partition(".")
+    if pid == "plan":
+        val = plan_values(state.plan).get(name)
+        if val is None or fmt == "pct":
+            return None
+        return {**val, "pid": "plan", "path": path, "text": format_value(val["v"], val["kind"])}
     res = state.results.get(pid)
     if res is None or res["status"] != "ok" or name not in res["values"]:
         return None
@@ -152,12 +206,11 @@ def number_words(text: str) -> list[str]:
 
 
 def bare_numbers(state, text: str) -> list[str]:
-    """Numerals left after removing placeholders, except residue/frame numbers and approved distances: the
-    cutoffs and, in a native-contacts plan, the approved radius (e.g. "8 Å", which the user may have edited)."""
+    """Numerals left after removing placeholders, except residue/frame numbers and numbers exactly equal to an
+    approved plan setting (cutoffs, window bounds and lengths in ns, sequence exclusion, residue ranges, the
+    native-contacts radius...). Computed results still need placeholders."""
     plan = state.plan
-    cutoffs = {round(c, 3) for c in [plan.cutoff, *plan.robustness_cutoffs]}
-    if any(s.get("tool") in ("native_contacts", "reproduction_check") for s in plan.steps):
-        cutoffs.add(round(float(plan.native_radius), 3))
+    cutoffs = plan_numbers(plan)
     stripped = PLACEHOLDER.sub(" ", text)
     bad = []
     for m in NUMBER.finditer(stripped):
@@ -165,9 +218,7 @@ def bare_numbers(state, text: str) -> list[str]:
         if ALLOWED_CONTEXT.search(before[-40:]):
             continue
         tok = m[0].replace("−", "-")
-        if "." in tok and round(float(tok), 3) in cutoffs:
-            continue
-        if re.match(r"\s*(?:Å|A\b|angstrom)", after) and round(float(tok), 3) in cutoffs:
+        if round(float(tok), 3) in cutoffs:
             continue
         bad.append(m[0])
     return bad
@@ -219,7 +270,7 @@ def finding_problems(state, fid: str, f: dict) -> list[str]:
     p += [f"{fid}: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, f["text"])]
     nums = bare_numbers(state, f["text"])
     if nums:
-        p.append(f"{fid}: bare numbers {nums} - use placeholders for every value")
+        p.append(f"{fid}: replace the bare numbers {nums}: {bare_hint(state)}")
     for e in f["evidence_ids"]:
         res = state.results.get(e.partition(".")[0])
         if res and res["status"] != "ok":
@@ -281,8 +332,8 @@ def update_checklist(state, args: dict) -> dict:
 
 
 def record_finding(state, args: dict) -> dict:
-    text = (args.get("text") or "").strip()
     ids = [str(e) for e in (args.get("evidence_ids") or [])]
+    text = autorepair(state, (args.get("text") or "").strip(), ids)
     claim = args.get("claim")
     if claim is None and "claim" in args:
         claim = "null"  # Muse Spark Open sends JSON null for the claim type named "null" (red-team G2)
@@ -300,7 +351,7 @@ def record_finding(state, args: dict) -> dict:
     fid = state.next_id("f", state.findings)
     state.findings[fid] = {"id": fid, "text": text, "evidence_ids": ids, "claim": claim}
     out = {"status": "ok", "message": f"recorded {fid}", "finding_id": fid}
-    plain = (args.get("plain") or "").strip()
+    plain = autorepair(state, (args.get("plain") or "").strip(), ids)
     if plain:
         bad = plain_problems(state, state.findings[fid], plain)
         if bad:  # the finding stands; the UI falls back to its code-built sentence
@@ -378,7 +429,7 @@ def interpretation_problems(state, args: dict) -> list[str]:
     p += [f"interpretation: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
     nums = bare_numbers(state, text) + number_words(text)
     if nums:
-        p.append(f"interpretation: bare numbers {nums} - use placeholders")
+        p.append(f"interpretation: replace the bare numbers {nums}: {bare_hint(state)}")
     if _unnegated_support_words(text):
         p.append("interpretation cannot claim statistical support")
     return p
@@ -405,7 +456,7 @@ def report_problems(state, args: dict) -> list[str]:
         problems += [f"{where}: placeholder {{{{{x}}}}} does not resolve" for x in unresolved_placeholders(state, text)]
         nums = bare_numbers(state, text)
         if nums:
-            problems.append(f"{where}: bare numbers {nums} - use placeholders")
+            problems.append(f"{where}: replace the bare numbers {nums}: {bare_hint(state)}")
         if where.startswith(("hypotheses", "background")) and _unnegated_support_words(text):
             problems.append(f"{where}: {where.split('[')[0]} cannot claim statistical support")
     # Anti-cherry-picking (SPEC §4): supported findings need a robustness verdict before submission.
@@ -420,6 +471,7 @@ def report_problems(state, args: dict) -> list[str]:
 
 
 def submit_report(state, args: dict) -> dict:
+    args = repair_report_args(state, args)
     problems = report_problems(state, args)
     if problems:
         return {"status": "refused", "message": "report refused; fix these and resubmit", "problems": problems}
@@ -481,3 +533,175 @@ def build_report(state, args: dict) -> dict:
         "gaps": section("gaps"),
         "follow_ups": [fu for fu in (args.get("follow_ups") or []) if isinstance(fu, dict)],
     }
+
+
+# ---------- auto-repair: numbers the agent typed that code can stand behind ----------
+# A number that exactly equals an approved plan setting, or a value of a result the text cites, is replaced by
+# its placeholder, so code fills it (with provenance) and the check passes. A number matching nothing is left
+# for the check to refuse: only code may write computed numbers.
+
+NUMERIC_KINDS = {"freq", "delta", "q", "sci", "count", "frame", "distance", "tau_ns", "chunks", "setting_distance", "ns"}
+
+
+def _candidates(state, pids: list[str]) -> list[tuple[str, dict]]:
+    """(placeholder path, value) to match against: plan settings, then the cited pairs' values, then the cited
+    results' other values."""
+    out = [(f"plan.{k}", v) for k, v in plan_values(state.plan).items()]
+    pair_first, rest = [], []
+    wanted = {e.partition(".")[0]: set() for e in pids}
+    for e in pids:
+        pid, _, pair = e.partition(".")
+        if pair:
+            wanted[pid].add(pair)
+    for pid, pairs in wanted.items():
+        res = state.results.get(pid)
+        if not res or res["status"] != "ok":
+            continue
+        for name, val in res["values"].items():
+            (pair_first if name.split(".")[0] in pairs else rest).append((f"{pid}.{name}", val))
+    return out + pair_first + rest
+
+
+def _matches(tok: str, val: dict) -> bool:
+    if val["kind"] not in NUMERIC_KINDS or isinstance(val["v"], (list, bool)) or val["v"] is None:
+        return False
+    # Exact only: the value as the tool summary showed it (3 decimals) or as the report prints it. A shorter
+    # rounding ("0.5" for 0.527) is not a match.
+    try:
+        t = float(tok.replace("−", "-").lstrip("+"))
+        v = float(val["v"])
+    except (TypeError, ValueError):
+        return False
+    m = re.search(r"[-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?", format_value(v, val["kind"]).replace("−", "-"))
+    return t == round(v, 3) or (m is not None and t == float(m[0]))
+
+
+def autorepair(state, text: str, pids: list[str]) -> str:
+    """Replace each bare number (one that bare_numbers would flag) that equals a plan setting or a cited value
+    with that value's placeholder; '53%' becomes a |pct placeholder of a matching frequency."""
+    if not text:
+        return text
+    bad = set(bare_numbers(state, text))
+    if not bad:
+        return text
+    cands = _candidates(state, pids)
+    out, pos = [], 0
+    for m in NUMBER.finditer(text):
+        tok = m[0]
+        if tok not in bad or any(m.start() >= a and m.end() <= b for a, b in _placeholder_spans(text)):
+            continue
+        after = text[m.end():m.end() + 1]
+        repl, end = None, m.end()
+        if after == "%":
+            for path, val in cands:
+                if val["kind"] == "freq" and val["v"] is not None and format_pct(val["v"], "freq") == f"{tok}%":
+                    repl, end = f"{{{{{path}|pct}}}}", m.end() + 1
+                    break
+        if repl is None:
+            for path, val in cands:
+                if _matches(tok, val):
+                    repl = f"{{{{{path}}}}}"
+                    break
+        if repl is None:
+            continue
+        out.append(text[pos:m.start()] + repl)
+        pos = end
+    return "".join(out) + text[pos:]
+
+
+def _placeholder_spans(text: str) -> list[tuple[int, int]]:
+    return [(m.start(), m.end()) for m in PLACEHOLDER.finditer(text)]
+
+
+def repair_report_args(state, args: dict) -> dict:
+    """submit_report's text items with auto-repaired numbers; values come from the results its findings cite."""
+    pids = [e for fid in args.get("finding_ids") or [] for e in (state.findings.get(fid) or {}).get("evidence_ids", [])]
+    pids = pids or list(state.results)
+    fix = lambda t: autorepair(state, t, pids) if isinstance(t, str) else t
+    out = dict(args)
+    for key in ("headline", "interpretation"):
+        if isinstance(out.get(key), str):
+            out[key] = fix(out[key])
+    for key in ("background", "hypotheses", "caveats", "gaps", "next_questions"):
+        if isinstance(out.get(key), list):
+            out[key] = [fix(t) for t in out[key]]
+    if isinstance(out.get("follow_ups"), list):
+        out["follow_ups"] = [{**fu, "rationale": fix(fu.get("rationale", ""))} if isinstance(fu, dict) else fu
+                             for fu in out["follow_ups"]]
+    return out
+
+
+# ---------- fallback: the report from computed results when the AI's wording keeps failing the checks ----------
+
+FALLBACK_NOTE = ("Some of the AI's wording couldn't be verified, so it was removed. "
+                 "Every result shown comes from computation.")
+
+
+def computed_findings(state) -> list[str]:
+    """Findings written by code from the stored results (no model text), one or a few per analysis."""
+    made = []
+
+    def add(text, ids, claim):
+        fid = state.next_id("f", state.findings)
+        state.findings[fid] = {"id": fid, "text": text, "evidence_ids": ids, "claim": claim, "code_built": True}
+        made.append(fid)
+
+    for pid, res in state.results.items():
+        if res["status"] != "ok":
+            continue
+        tool, pairs, v = res["tool"], res.get("pairs") or {}, res["values"]
+        if tool == "compare_intervals":
+            sup = sorted((p for p, d in pairs.items() if d.get("supported")), key=lambda p: v.get(f"{p}.q", {}).get("v", 1))
+            for p in sup[:3]:
+                add(f"{p} contact frequency changed from {{{{{pid}.{p}.freq_a}}}} to {{{{{pid}.{p}.freq_b}}}} "
+                    f"(change {{{{{pid}.{p}.delta}}}}, CI {{{{{pid}.{p}.ci}}}}, q {{{{{pid}.{p}.q}}}}).", [f"{pid}.{p}"], "supported")
+            if not sup:
+                add(f"None of the {{{{{pid}.n_tested}}}} tested pairs changed beyond random variation.", [pid], "null")
+        elif tool == "calculate_contacts" and "any_contact_freq" in v:
+            add(f"The two groups touch in {{{{{pid}.any_contact_freq|pct}}}} of frames, across "
+                f"{{{{{pid}.n_pairs_in_contact}}}} residue pairs.", [pid], "descriptive")
+        elif tool == "distance_over_time" and pairs:
+            p = next(iter(pairs))
+            add(f"{p}: median minimum distance {{{{{pid}.{p}.median_distance}}}}, within the cutoff in "
+                f"{{{{{pid}.{p}.frac_in_contact|pct}}}} of frames.", [f"{pid}.{p}"], "descriptive")
+        elif tool == "native_contacts" and "ref0.q_first" in v:
+            add(f"The fraction of reference contacts went from {{{{{pid}.ref0.q_first}}}} to {{{{{pid}.ref0.q_last}}}}.",
+                [pid], "descriptive")
+        elif tool == "reproduction_check":
+            add(f"Compared with the published code, our values {{{{{pid}.match}}}} (largest difference "
+                f"{{{{{pid}.max_abs_diff}}}}).", [pid], "descriptive")
+        elif tool == "residue_flexibility":
+            meds = [k for k in v if k.startswith("median_rmsf.")]
+            if meds:
+                add("Median flexibility by domain: " + ", ".join(f"{k.split('.', 1)[1]} {{{{{pid}.{k}}}}}" for k in meds) + ".",
+                    [pid], "descriptive")
+        elif tool == "domain_opening":
+            name = next((k.rsplit(".", 1)[0] for k in v if k.endswith(".median_distance")), None)
+            if name:
+                add(f"{name} centre-of-mass distance: median {{{{{pid}.{name}.median_distance}}}}, from "
+                    f"{{{{{pid}.{name}.min_distance}}}} to {{{{{pid}.{name}.max_distance}}}}.", [pid], "descriptive")
+    return made
+
+
+def fallback_report(state, args: dict | None, problems: list[str]) -> dict | None:
+    """The report when the agent's wording failed the checks after its retries: keep the findings and text that
+    pass, drop the rest, and use code-built findings when none pass. None when there is no computed result to
+    report (then the run stops for review)."""
+    args = repair_report_args(state, dict(args or {}))
+    keep = [fid for fid in (args.get("finding_ids") or list(state.findings))
+            if fid in state.findings and not finding_problems(state, fid, state.findings[fid])]
+    if not keep:
+        keep = computed_findings(state)
+    if not keep:
+        return None
+    clean = {k: v for k, v in args.items() if k in ("headline", "interpretation", "next_questions")}
+    for sec in ("background", "hypotheses", "caveats", "gaps"):
+        clean[sec] = [t for t in args.get(sec) or [] if isinstance(t, str)
+                      and not bare_numbers(state, t) and not unresolved_placeholders(state, t)
+                      and not (sec in ("hypotheses", "background") and _unnegated_support_words(t))]
+    clean["follow_ups"] = [fu for fu in args.get("follow_ups") or [] if isinstance(fu, dict)
+                           and not bare_numbers(state, fu.get("rationale", "")) and not unresolved_placeholders(state, fu.get("rationale", ""))]
+    clean["finding_ids"] = keep
+    rep = build_report(state, clean)
+    rep["fallback"] = {"note": FALLBACK_NOTE, "removed": list(problems)}
+    return rep

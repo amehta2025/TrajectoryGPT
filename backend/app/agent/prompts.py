@@ -51,6 +51,9 @@ Numbers:
   {{r2.HSE134-ASP118.delta}}, {{r2.HSE134-ASP118.ci}}, {{r2.HSE134-ASP118.q}} or {{r2.n_tested}};
   code fills in the values. Residue names with numbers (HSE134), "residues 122-159", "frames 0-2093" and the
   approved cutoff with its unit (4.5 Å) are allowed as written.
+- Approved plan settings have placeholders too, listed in the plan message: {{plan.cutoff}},
+  {{plan.window_a_length_ns}}, {{plan.sequence_exclusion}}, {{plan.range_CORE_first}}... Use them for the
+  window ("the last {{plan.window_a_length_ns}}"), the cutoff or a residue range rather than typing the number.
 
 Evidence and claims:
 - record_finding cites evidence ids: a result ("r2") or one pair in a result ("r2.HSE134-ASP118").
@@ -215,8 +218,10 @@ def follow_up_block(c: dict) -> str:
     return "\n".join(lines)
 
 
-def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
+def agent_user(question: str, plan: dict, figure: dict | None = None, plan_placeholders: dict | None = None) -> str:
     steps = "\n".join(f"{i + 1}. {s['tool']} - {s.get('rationale', '')}" for i, s in enumerate(plan["steps"]))
+    settings = ("Plan-setting placeholders (approved settings, not results): "
+                + ", ".join(f"{{{{plan.{k}}}}} = {v}" for k, v in plan_placeholders.items()) + "\n\n") if plan_placeholders else ""
     wb = f", window_b {plan['window_b']}" if plan.get("window_b") else ""
     pair = f", residue pair {plan['pair']} (chosen by the user; use exactly this pair)" if plan.get("pair") else ""
     if plan.get("residue_ranges"):
@@ -228,7 +233,7 @@ def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
             + (f"Figure: {figure['spec']['summary']} Mode: {figure['spec']['mode']}.\n\n" if figure else "")
             + ("Data notes (checked by code, already in the report's caveats; do not contradict them):\n"
                + "\n".join(f"- {n}" for n in plan["notes"]) + "\n\n" if plan.get("notes") else "")
-            + "Start with item 1.")
+            + settings + "Start with item 1.")
 
 
 VERIFIER_SYSTEM = """You are an independent reviewer of a TrajectoryGPT report on a molecular dynamics trajectory of E. coli

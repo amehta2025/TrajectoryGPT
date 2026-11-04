@@ -69,11 +69,22 @@ def test_nudge_when_no_tool_call():
     assert run.input_items[3]["content"] == "Call exactly one tool."
 
 
-def test_two_refused_reports_need_review():
+def test_two_refused_reports_fall_back_to_the_computed_report():
+    """A judge never sees "needs review" over wording: the report is built by code from the computed results,
+    with a plain note; the technical reasons are kept for Show the science."""
     bad = ("submit_report", {"finding_ids": ["f9"]})
     run = orch.run_investigation(ScriptedLLM([GOOD[0], bad, bad, GOOD[1]]), orch.new_run("q", plan()))
+    assert run.status == "awaiting_verification" and len(run.turns) == 3
+    rep = run.state.report
+    assert rep["fallback"]["note"].startswith("Some of the AI's wording couldn't be verified")
+    assert any("f9" in p for p in rep["fallback"]["removed"])
+    assert rep["findings"] and all(f.get("code_built") for f in rep["findings"]) and "{{" not in rep["findings"][0]["rendered"]
+
+
+def test_nothing_computed_still_needs_review():
+    bad = ("submit_report", {"finding_ids": ["f9"]})
+    run = orch.run_investigation(ScriptedLLM([("get_metadata", {}), bad, bad]), orch.new_run("q", plan()))
     assert run.status == "needs_review"
-    assert len(run.turns) == 3 and any("f9" in p for p in run.problems)
 
 
 def test_turn_limit_needs_review():
@@ -89,10 +100,10 @@ def test_budget_aborts_run():
 
 
 def test_resume_continues_saved_run():
-    run = orch.run_investigation(ScriptedLLM(GOOD[:1]), orch.new_run("q", plan()), max_turns=1)
-    assert run.status == "needs_review"
-    resumed = orch.resume_run(ScriptedLLM(GOOD[1:]), run.run_id, max_turns=3)
-    assert resumed.status == "awaiting_verification" and len(resumed.turns) == 3
+    run = orch.run_investigation(ScriptedLLM([("get_metadata", {})]), orch.new_run("q", plan()), max_turns=1)
+    assert run.status == "needs_review"  # nothing computed yet, so no fallback report
+    resumed = orch.resume_run(ScriptedLLM(GOOD), run.run_id, max_turns=4)
+    assert resumed.status == "awaiting_verification" and len(resumed.turns) == 4
 
 
 # ---------- planner validation (code side, no LLM) ----------
@@ -177,8 +188,10 @@ def test_descriptive_findings_cannot_claim_support(text):
     script = [("native_contacts", {}), ("record_finding", {"text": text, "evidence_ids": ["r1"], "claim": "descriptive"}),
               ("submit_report", {"finding_ids": ["f1"]}), ("submit_report", {"finding_ids": ["f1"]})]
     run = orch.run_investigation(ScriptedLLM(script), orch.new_run("q", explain_plan()))
-    assert run.status == "needs_review"
-    assert any("descriptive finding is not statistically tested" in p for p in run.problems)
+    rep = run.state.report  # the overclaiming sentence is removed; the report is built from the computed result
+    assert run.status == "awaiting_verification" and rep["fallback"]
+    assert any("descriptive finding is not statistically tested" in p for p in rep["fallback"]["removed"])
+    assert not any(w in f["rendered"].lower() for f in rep["findings"] for w in ("significant", "robust", "supported"))
 
 
 # ---------- persistence: runs are saved as they progress and read back from disk ----------
@@ -203,3 +216,43 @@ def test_turn_budget_leaves_room_for_findings_and_the_report():
     assert orch.turn_budget(mk(1)) == 8 and orch.turn_budget(mk(3)) == 8
     assert orch.turn_budget(mk(4)) == 9  # 4 analyses + 3 findings + report + 1 spare
     assert orch.turn_budget(mk(6)) == 10
+
+
+# ---------- plan settings are not bare numbers; numbers code can stand behind are repaired ----------
+
+def paper01_plan():
+    return ApprovedPlan("adk_equilibrium", "LID", "CORE", 4.0, [2104, 4187], None, sequence_exclusion=3,
+                        residue_ranges={"LID": [122, 159], "CORE": [100, 121]},
+                        steps=[{"tool": "calculate_contacts", "rationale": ""}, {"tool": "submit_report", "rationale": ""}])
+
+
+def test_plan_settings_are_placeholders_and_not_bare_numbers():
+    """The live refusal: a follow-up on paper 01 wrote "last 500 ns" and "3 residues" (approved settings)."""
+    from app.agent.report import bare_numbers, render
+    from app.agent.tools import RunState
+    s = RunState(paper01_plan())
+    assert bare_numbers(s, "over the last 500 ns, skipping pairs within 3 residues, CORE 100-121 at 4.0 Å") == []
+    assert bare_numbers(s, "0.527 of frames") == ["0.527"]  # a computed result still needs its placeholder
+    text, _ = render(s, "the last {{plan.window_a_length_ns}} at {{plan.cutoff}}; CORE {{plan.range_CORE_first}}")
+    assert text == "the last 500 ns at 4 Å; CORE 100"
+
+
+def test_numbers_equal_to_a_cited_value_are_repaired_into_placeholders():
+    from app.agent.report import autorepair
+    from app.agent.tools import RunState, run_tool
+    s = RunState(plan())
+    run_tool(s, "calculate_contacts", "{}")
+    n = s.results["r1"]["values"]["n_pairs_in_contact"]["v"]
+    pct = s.results["r1"]["values"]["any_contact_freq"]["v"]
+    from app.agent.report import format_pct
+    fixed = autorepair(s, f"{n} pairs touch, in {format_pct(pct, 'freq')} of frames; 0.5 is unexplained", ["r1"])
+    assert "{{r1.n_pairs_in_contact}}" in fixed and "{{r1.any_contact_freq|pct}}" in fixed and "0.5" in fixed
+
+
+def test_a_quiet_turn_after_a_refused_report_gets_one_more_nudge():
+    bad = ("submit_report", {"finding_ids": ["f9"]})
+    script = [GOOD[0], GOOD[1], bad, None, GOOD[2]]
+    run = orch.run_investigation(ScriptedLLM(script), orch.new_run("q", plan()), max_turns=4)
+    assert run.status == "awaiting_verification" and not run.state.report.get("fallback")
+    nudge = next(i["content"] for i in run.input_items if isinstance(i.get("content"), str) and i["content"].startswith("Your submit_report was refused"))
+    assert "f9" in nudge
