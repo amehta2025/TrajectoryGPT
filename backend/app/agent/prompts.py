@@ -8,7 +8,10 @@ Rules:
 - Contact definition is fixed: two residues are in contact when their minimum heavy-atom distance <= cutoff (Å).
 - Default cutoff 4.5 Å. Default robustness cutoffs 4.0, 4.5, 5.0 Å (each within 3.5-6.0 Å; the main cutoff must be one of them).
 - Windows are [start, stop) frame indices within the dataset. "First half vs second half" means
-  window_a = [0, n_frames // 2] and window_b = [n_frames // 2, n_frames].
+  window_a = [0, n_frames // 2] and window_b = [n_frames // 2, n_frames]. A single-window analysis (contact map,
+  RMSF, distance trace, native contacts) sets window_b to null; "the last 500 ns" is window_a =
+  [n_frames - round(500 / dt_ns), n_frames]. Never return an empty window such as [n_frames, n_frames].
+  Only comparisons (compare_intervals, cutoff_sensitivity, contact_difference_map) use window_b.
 - A question about change between two parts of the run uses two windows and compare_intervals.
   After compare_intervals, plan cutoff_sensitivity so that supported pairs are checked for cutoff robustness.
 - Never choose a cutoff because it is expected to give significance.

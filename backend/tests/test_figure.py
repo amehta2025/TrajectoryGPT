@@ -369,3 +369,21 @@ def test_a_methods_pdf_shows_its_embedded_figure(tmp_path):
     w.write(out)
     blank = figure.save_figure([("blank.pdf", "application/pdf", out.getvalue())], directory=tmp_path)
     assert blank["mime"] == "application/pdf"  # no embedded figure: the PDF itself is kept
+
+
+# ---------- planner windows: one window unless comparing ----------
+
+def test_an_empty_second_window_is_dropped_for_a_single_window_analysis():
+    """The live bug: paper 01 ("last 500 ns") came back with window_b [4187, 4187] and planning failed."""
+    from app.agent.planner import repair_windows, validate_plan
+    eq = {**PLAN, "dataset": "adk_equilibrium", "window_a": [2104, 4187], "window_b": [4187, 4187],
+          "steps": [{"tool": "calculate_contacts", "rationale": ""}, {"tool": "submit_report", "rationale": ""}]}
+    fixed = repair_windows(eq)
+    assert fixed["window_b"] is None and fixed["window_a"] == [2104, 4187] and validate_plan(fixed) == []
+    assert repair_windows({**eq, "window_a": [2104, 9999]})["window_a"] == [2104, 4187]  # clamped to the run
+    # A comparison keeps its (empty) second window, so the model's retry, then the user, sees the problem.
+    cmp = {**eq, "steps": [{"tool": "contact_difference_map", "rationale": ""}, {"tool": "submit_report", "rationale": ""}]}
+    assert repair_windows(cmp)["window_b"] == [4187, 4187] and validate_plan(repair_windows(cmp))
+    assert any("need two windows" in e for e in validate_plan({**cmp, "window_b": None}))
+    # A valid second window is left alone even without a comparison ('all' spans both windows).
+    assert repair_windows({**eq, "window_a": [0, 2093], "window_b": [2093, 4187]})["window_b"] == [2093, 4187]

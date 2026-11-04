@@ -11,6 +11,21 @@ const CONTACT_TOOLS = new Set(['calculate_contacts', 'distance_over_time', 'comp
   'cutoff_sensitivity', 'contact_difference_map'])
 const STATUS_ICON: Record<ChecklistItem['status'], string> = { pending: '○', in_progress: '◐', done: '●', skipped: '⊘' }
 
+/** An error in plain words; the backend's own wording (validation problems) is folded under Show the science. */
+export function ErrorNote({ error, detail, className = 'error' }: { error: string; detail?: string[] | null; className?: string }) {
+  return (
+    <div className={className} role="alert">
+      {error}
+      {!!detail?.length && (
+        <details className="error-detail">
+          <summary>Show the science</summary>
+          <ul>{detail.map((d) => <li key={d}>{d}</li>)}</ul>
+        </details>
+      )}
+    </div>
+  )
+}
+
 /** Plain sentence for a plan step, from the tool and the plan's groups. */
 export function stepText(tool: string, p: Pick<Plan, 'group_a' | 'group_b'> | null): string {
   const pair = p ? `${p.group_a}–${p.group_b}` : ''
@@ -215,7 +230,7 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
           }}>{starting ? 'Starting…' : 'Run analysis →'}</button>
         </div>
       )}
-      {error && <div className="error">{error}</div>}
+      {error && <ErrorNote error={error} detail={inv.errorDetail} />}
     </section>
   )
 }

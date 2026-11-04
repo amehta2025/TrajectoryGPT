@@ -350,6 +350,19 @@ export function setPasscode(code: string) {
 /** Thrown on HTTP 401 so the UI can ask for the passcode and retry. */
 export class PasscodeRequired extends Error {}
 
+/** HTTP 422 with a list of problems (a plan or settings the backend's checks refused); the UI shows a plain
+ *  sentence and keeps these under Show the science. */
+export class PlanProblems extends Error {
+  details: string[]
+  constructor(details: string[]) {
+    super(details.join('; '))
+    this.details = details
+  }
+}
+
+/** A message written for users (rate limits): shown as it is. */
+export class UserMessage extends Error {}
+
 /** POST /runs: the server no longer has this plan (404 with plan_expired); the UI plans again. */
 export class PlanExpired extends Error {}
 
@@ -378,7 +391,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
   if (r.status === 429) {
     const d = await r.clone().json().then((j) => j.detail, () => null)
-    throw new Error(typeof d === 'string' ? d : 'Too many requests; try again later.')
+    throw new UserMessage(typeof d === 'string' ? d : 'Too many requests; try again later.')
   }
   if (!r.ok) {
     let detail: unknown = r.statusText
@@ -393,7 +406,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       throw new UnsupportedFigure(unsupported.unsupported, unsupported.spec, unsupported.figure)
     }
     const errors = (detail as { errors?: string[] } | null)?.errors
-    throw new Error(errors ? errors.join('; ') : `${r.status} ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
+    if (errors) throw new PlanProblems(errors)
+    throw new Error(`${r.status} ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
   }
   return r.json() as Promise<T>
 }

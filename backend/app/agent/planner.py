@@ -129,10 +129,38 @@ def validate_plan(p: dict) -> list[str]:
         bad = sorted(set(tools) & STATS_TOOLS)
         if bad:
             errs.append(f"{p['dataset']} has stats_valid: false, so {bad} are not allowed: {cfg['stats_refusal'].strip()}")
-    needs_two = {"compare_intervals", "cutoff_sensitivity"} & set(tools)
+    needs_two = TWO_WINDOW_TOOLS & set(tools)
     if needs_two and not p.get("window_b"):
         errs.append(f"{sorted(needs_two)} need two windows (window_b)")
     return errs
+
+
+# Only comparisons need a second window; a contact map, RMSF, distance trace or native contacts uses one.
+TWO_WINDOW_TOOLS = {"compare_intervals", "cutoff_sensitivity", "contact_difference_map"}
+
+
+def repair_windows(p: dict) -> dict:
+    """Mend the planner's windows before validation, without guessing intent: clamp each to [0, n_frames]; drop
+    an empty second window (e.g. [4187, 4187] for "the last 500 ns") when no step compares two windows. An empty
+    window a comparison needs is left for the model's one retry, and then for the user."""
+    try:
+        with TRAJ_LOCK:
+            n = load_universe(p["dataset"]).trajectory.n_frames
+    except Exception:  # unknown dataset: validate_plan reports it
+        return p
+    p = dict(p)
+
+    def clamp(w):
+        if isinstance(w, list) and len(w) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in w):
+            return [max(0, min(n, w[0])), max(0, min(n, w[1]))]
+        return w
+
+    p["window_a"] = clamp(p.get("window_a"))
+    wb = clamp(p.get("window_b"))
+    two = TWO_WINDOW_TOOLS & {s.get("tool") for s in p.get("steps") or []}
+    empty = not (isinstance(wb, list) and len(wb) == 2 and wb[0] < wb[1])
+    p["window_b"] = None if wb is not None and empty and not two else wb
+    return p
 
 
 def _native_errors(p: dict, n_frames: int) -> list[str]:
@@ -194,7 +222,7 @@ def make_plan(llm: LLM, question: str, dataset: str, context: dict | None = None
     for attempt in range(2):
         r = llm.run_turn(history, schema=plan_schema(), effort=effort or EFFORT["plan"])
         usages.append(r.usage)
-        plan = r.parsed
+        plan = repair_windows(r.parsed) if isinstance(r.parsed, dict) else r.parsed
         errs = validate_plan(plan) if isinstance(plan, dict) else ["the plan is not a JSON object"]
         if not errs:
             if plan["dataset"] != dataset:

@@ -1,7 +1,7 @@
 // The current investigation: question -> proposed plan -> approved run with its live events.
 // Like the selection store, one module-level store read with useSyncExternalStore.
 import { useSyncExternalStore } from 'react'
-import { api, getPasscode, PasscodeRequired, PlanExpired, ReplayOnly, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
+import { api, getPasscode, PasscodeRequired, PlanExpired, PlanProblems, ReplayOnly, UserMessage, setPasscode, UnsupportedFigure, type Declined, type Figure, type Plan, type Provider, type UploadFile, type PlanResponse, type RunEvent, type RunView } from '../api/client'
 import { getSelection, setSelection } from './selection'
 import { parseResidueKey } from './residueKey'
 
@@ -21,6 +21,7 @@ export type Investigation = {
   unsupported: { message: string; figure: Figure } | null // figure read, but not a type we can run yet
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
   declined: (Declined & { question: string; followUp: boolean }) | null // turned away before planning, or a residue to pick
+  errorDetail: string[] | null // technical detail behind error (validation problems), shown under Show the science
   notice: string | null // a status line while planning, e.g. "This plan expired. Re-planning…"
   edits: Partial<Plan> // the user's changes to the proposed plan (figure rows and Settings); Run sends them
   rows: Record<string, 'confirmed' | 'edited'> // figure-setting rows the user confirmed ("Looks right") or edited
@@ -29,7 +30,7 @@ export type Investigation = {
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
-  kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null, notice: null,
+  kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null, notice: null, errorDetail: null,
   edits: {}, rows: {}, editSeq: 0,
 }
 
@@ -56,6 +57,13 @@ const listeners = new Set<() => void>()
 function set(patch: Partial<Investigation>) {
   state = { ...state, ...patch }
   listeners.forEach((l) => l())
+}
+
+/** Users never see raw validation errors: a plain sentence, with the backend's details kept for Show the science.
+ *  A message written for users (a rate limit) is shown as it is. */
+function plainError(e: unknown, plain: string): Pick<Investigation, 'error' | 'errorDetail'> {
+  if (e instanceof UserMessage) return { error: e.message, errorDetail: null }
+  return { error: plain, errorDetail: e instanceof PlanProblems ? e.details : [(e as Error).message] }
 }
 
 /** Current state outside React (tests, event handlers). */
@@ -116,7 +124,7 @@ export async function ask(question: string, dataset: string, followUp = false, s
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
-    else set({ phase: 'idle', error: `Planning failed: ${(e as Error).message}` })
+    else set({ phase: 'idle', ...plainError(e, 'Couldn’t build a plan for this question; try again or rephrase it.') })
   }
 }
 
@@ -159,7 +167,7 @@ export async function askFigure(files: File[], dataset: string, note: string, op
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
     else if (e instanceof UnsupportedFigure) set({ phase: 'idle', unsupported: { message: e.message, figure: e.figure } })
     else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
-    else set({ phase: 'idle', error: `Figure planning failed: ${(e as Error).message}` })
+    else set({ phase: 'idle', ...plainError(e, 'Couldn’t build a plan from this figure; try again or edit the settings.') })
   }
 }
 
@@ -206,7 +214,8 @@ export async function approve(edits: Partial<Plan>, stepThrough: boolean, plantO
       }
       return
     }
-    set(e instanceof PasscodeRequired ? { needPasscode: true, error: 'Demo passcode required.' } : { error: `Could not start: ${(e as Error).message}` })
+    set(e instanceof PasscodeRequired ? { needPasscode: true, error: 'Demo passcode required.' }
+      : plainError(e, 'Couldn’t start the run with these settings; check the values you changed and try again.'))
   }
 }
 

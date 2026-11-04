@@ -4,7 +4,7 @@ import { useSelection } from './state/selection'
 import { reset, useInvestigation } from './state/investigation'
 import { DatasetBadge } from './components/DatasetBadge'
 import { PasscodePrompt, StartScreen } from './components/StartScreen'
-import { PlanCard } from './components/PlanCard'
+import { ErrorNote, PlanCard } from './components/PlanCard'
 import { Headline } from './components/ReportView'
 import { hisText } from './state/residueKey'
 import { VoiceLayer } from './components/VoiceInput'
@@ -60,7 +60,7 @@ export default function App() {
         <div className="waking banner" role="status">Starting the server. After a quiet spell this takes a few seconds.</div>
       )}
       {error && <div className="error banner">{error}</div>}
-      {inv.error && !asking && !inv.needPasscode && <div className="error banner">{inv.error}</div>}
+      {inv.error && !asking && !inv.needPasscode && <ErrorNote className="error banner" error={inv.error} detail={inv.errorDetail} />}
 
       {!asking && <StartScreen datasets={datasets} dataset={dataset} meta={meta} />}
       {asking && (
