@@ -308,3 +308,41 @@ def test_reproduction_check_is_refused_off_the_published_data():
     s = RunState(ApprovedPlan("adk_equilibrium", "LID", "CORE", 4.5, [0, 4187], steps=PLAN["steps"]))
     r = run_tool(s, "reproduction_check", "{}")
     assert r["status"] == "refused" and "adk_transition" in r["summary_for_model"]
+
+
+# ---------- residues named from another protein (method transfer) ----------
+
+def test_foreign_residues_are_flagged_by_code_only_for_another_protein():
+    spec = {"kind": "distance_trace", "protein_is_adk": False, "named_residues": ["Asp45", "Arg112"]}
+    assert figure.foreign_residues(spec) == ["Asp45", "Arg112"]
+    assert figure.foreign_residues({**spec, "protein_is_adk": True}) == []  # AdK numbers are AdK numbers
+    assert figure.foreign_residues({**spec, "named_residues": []}) == []
+    assert figure.foreign_residues({**spec, "kind": "rmsf"}) == []
+
+
+def test_a_chosen_pair_is_validated_and_used_exactly():
+    from app.agent.planner import to_approved, validate_plan
+    from app.agent.tools import resolve_pair
+    assert any("residue ASP45 is not in this protein" in e for e in validate_plan({**PLAN, "pair": "ASP45-ARG112"}))
+    assert any("look like" in e for e in validate_plan({**PLAN, "pair": "Asp45 to Arg112"}))
+    a = to_approved({**PLAN, "pair": "asp54-lys157"})
+    assert a.pair == "ASP54-LYS157"
+    ka, kb = resolve_pair(a, None)  # the agent may omit it
+    assert ka.endswith(":54:ASP") and kb.endswith(":157:LYS")
+    s = RunState(a)
+    assert run_tool(s, "distance_over_time", '{"pair": "LEU45-PRO112"}')["status"] == "refused"
+    assert run_tool(s, "distance_over_time", "{}")["status"] == "ok"
+
+
+def test_run_is_blocked_until_the_user_picks_the_adk_pair(monkeypatch, tmp_path):
+    from app.agent import session
+    from app.agent.planner import PlanInvalid
+    monkeypatch.setattr(session, "PLANS_DIR", tmp_path)
+    plan = {**PLAN, "steps": [{"tool": "distance_over_time", "rationale": ""}, {"tool": "submit_report", "rationale": ""}]}
+    spec = {"kind": "distance_trace", "fields": [], "foreign_residues": ["Asp45", "Arg112"]}
+    monkeypatch.setitem(session.PLANS, "pf1", {"question": "q", "dataset": "adk_transition", "plan": plan, "usage": [],
+                                               "llm": None, "figure": {"spec": spec}})
+    with pytest.raises(PlanInvalid) as e:
+        session.start_run("pf1", {})
+    assert "Asp45–Arg112" in e.value.errors[0] and "Pick the AdK residues" in e.value.errors[0]
+    assert "run_id" not in session.PLANS["pf1"]  # still unclaimed

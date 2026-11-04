@@ -94,6 +94,30 @@ function GroupEditor({ groups, plan, onSave, close }: { groups: string[]; plan: 
   )
 }
 
+/** Domain of an AdK residue, for the picker's labels. */
+function domainOf(meta: Metadata, resid: number): string {
+  return Object.entries(meta.groups).find(([, g]) => g.ranges.some(([a, b]) => resid >= a && resid <= b))?.[0] ?? ''
+}
+
+/** Two AdK residues for a figure whose residues come from another protein. Saving puts the pair in the plan. */
+function ResiduePicker({ meta, value, onSave }: { meta: Metadata; value?: string; onSave: (pair: string) => void }) {
+  const res = meta.residues ?? []
+  const label = ([id, name]: [number, string]) => `${name}${id}`
+  const [initA, initB] = (value ?? '').split('-')
+  const [a, setA] = useState(initA ?? '')
+  const [b, setB] = useState(initB ?? '')
+  const options = res.map((r) => <option key={r[0]} value={label(r)}>{label(r)} · {domainOf(meta, r[0])}</option>)
+  return (
+    <form className="u-edit picker" onSubmit={(e) => { e.preventDefault(); if (a && b && a !== b) onSave(`${a}-${b}`) }}>
+      <select value={a} onChange={(e) => setA(e.target.value)} aria-label="First AdK residue"><option value="">First residue…</option>{options}</select>
+      <span>–</span>
+      <select value={b} onChange={(e) => setB(e.target.value)} aria-label="Second AdK residue"><option value="">Second residue…</option>{options}</select>
+      <button type="submit" className="small primary" disabled={!a || !b || a === b}>Use this pair</button>
+      {a && a === b && <span className="u-hint">Pick two different residues</span>}
+    </form>
+  )
+}
+
 /** Frame windows: [start, stop) within the run, shown with their time. */
 function WindowEditor({ plan, meta, onSave, close }: { plan: Plan; meta: Metadata; onSave: (p: Partial<Plan>) => void; close: () => void }) {
   const [w, setW] = useState([...plan.window_a, ...(plan.window_b ?? [])].map(String))
@@ -150,6 +174,11 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
     rows.push({ id: 'groups', label: 'Domains compared', value: `${plan.group_a}${range(plan.group_a)} vs ${plan.group_b}${range(plan.group_b)}`,
       raw: 'Drawn over the residue ranges the paper’s axes span; contacts are computed for the whole domains', spec: fieldLike(/x axis|y axis/),
       editor: (close) => <GroupEditor groups={groups} plan={plan} onSave={save('groups')} close={close} /> })
+  }
+  if ((figure.spec.foreign_residues ?? []).length && plan && meta) {
+    rows.push({ id: 'pair', label: 'AdK residues', value: plan.pair ? plan.pair.replace('-', '–') : 'not chosen yet',
+      raw: `The paper measured ${(figure.spec.foreign_residues ?? []).join('–')} in another protein`,
+      editor: plan.pair ? (close) => <ResiduePicker meta={meta} value={plan.pair} onSave={(p) => { save('pair')({ pair: p }); close() }} /> : undefined })
   }
   if (native && plan) {
     const sel = plan.native_selection ?? 'name CA'
@@ -229,6 +258,7 @@ export function FigureSetup({ meta }: { meta: Metadata | null }) {
   const figure = proposal?.figure ?? figureRead
   if (!figure) return null
   const inferred = figure.spec.fields.some((f) => f.confidence !== 'high')
+  const foreign = figure.spec.foreign_residues ?? []
   // An exact reproduction only matches with the published settings: say so as soon as one is changed.
   const changed = proposal && figure.spec.mode === 'exact'
     ? [...new Set((Object.keys(edits) as (keyof Plan)[])
@@ -248,6 +278,12 @@ export function FigureSetup({ meta }: { meta: Metadata | null }) {
         <header className="card-head">
           <h2>What I understood from your figure</h2>
         </header>
+        {foreign.length > 0 && proposal && meta && !edits.pair && (
+          <div className="pick-residues" role="status">
+            <p><b>This paper’s residues (e.g. {foreign.slice(0, 2).join('–')}) are from a different protein.</b> Pick the AdK residues to use.</p>
+            <ResiduePicker meta={meta} onSave={(p) => editPlan({ pair: p }, 'pair')} />
+          </div>
+        )}
         <Understood figure={figure} meta={meta} />
         {changed.length > 0 && (
           <p className="inferred-note warn" role="status">⚠ You changed the {changed.join(' and ')} the published figure used, so the result can no longer match it.</p>

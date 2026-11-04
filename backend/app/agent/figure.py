@@ -174,10 +174,14 @@ def spec_schema() -> dict:
                         "description": "Our dataset the figure was made from, or none."},
             "mode_reason": {"type": "string", "description": "Why exact or transfer; cite the evidence."},
             "fields": {"type": "array", "items": field},
+            "protein_is_adk": {"type": "boolean", "description": "True only if the figure's protein is adenylate kinase."},
+            "named_residues": {"type": "array", "items": {"type": "string"},
+                               "description": "Residues the analysis is about, as printed (e.g. Asp45, Arg112); [] if none."},
             "display": display_schema(),
             "question": {"type": "string", "description": "The analysis to run, as a plain request for the planner."},
         },
-        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "display", "question"],
+        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "protein_is_adk",
+                     "named_residues", "display", "question"],
         "additionalProperties": False,
     }}
 
@@ -199,8 +203,21 @@ def extract_spec(llm: LLM, files: list[tuple[str, str, bytes]], note: str = "") 
         if spec["mode"] == "exact" and spec["dataset"] == "none":
             spec["mode"] = "transfer"  # exact needs one of our datasets
         spec["pdf_fallback"] = pdf_as_text
+        spec["foreign_residues"] = foreign_residues(spec)
         return spec, usages
     raise RuntimeError("unreachable")
+
+
+PAIR_KINDS = {"distance_trace"}  # figure types about one named residue pair
+
+
+def foreign_residues(spec: dict) -> list[str]:
+    """Residues a figure names from another protein: their numbers mean nothing on AdK, so the user picks the
+    AdK pair before anything runs (start_run refuses until then). Decided here in code, not by the model."""
+    named = [str(r) for r in spec.get("named_residues") or []][:4]
+    if spec.get("kind") in PAIR_KINDS and named and spec.get("protein_is_adk") is False:
+        return named
+    return []
 
 
 def save_figure(files: list[tuple[str, str, bytes]], directory: Path | None = None) -> dict:
@@ -248,7 +265,13 @@ def plan_from_spec(llm: LLM, figure: dict, selected_dataset: str) -> dict:
     question = (f"{spec['question']}\n\nThis comes from an uploaded figure ({spec['kind']}, "
                 f"{'exact reproduction on ' + dataset if spec['mode'] == 'exact' else 'method transfer'}). "
                 f"Extracted spec: {fields}")
+    foreign = spec.get("foreign_residues") or []
+    if foreign:
+        question += (f"\n\nThe residues {', '.join(foreign)} belong to another protein; their numbers mean nothing on AdK. "
+                     "The user picks the AdK residue pair before the run; plan the tools without naming a pair.")
     plan, usages = make_plan(llm, question, dataset, effort=EFFORT["figure_plan"])
+    if foreign:  # "Residue 45 is LEU, not ASP; the analysis uses LEU45" would contradict the user's pick
+        plan["notes"] = [n for n in plan.get("notes", []) if not n.startswith(("Residue ", "There is no residue"))]
     return {"plan": plan, "figure": figure, "question": question, "usages": usages}
 
 

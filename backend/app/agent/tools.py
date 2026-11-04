@@ -54,6 +54,7 @@ class ApprovedPlan:
     native_selection: str = "name CA"  # a key of NATIVE_SELECTIONS
     native_radius: float = 8.0         # Å
     ref_frames: list[int] = field(default_factory=lambda: [0, -1])
+    pair: str | None = None  # a residue pair the user chose (a figure from another protein); tools use exactly it
     steps: list[dict] = field(default_factory=list)  # [{tool, rationale}]
     notes: list[str] = field(default_factory=list)  # code-written data notes (agent/limits.py), shown as caveats
 
@@ -115,8 +116,19 @@ def _in_group(dataset: str, group: str, resid: int) -> bool:
     return any(a <= resid <= b for a, b in dataset_config(dataset)["domains"][group])
 
 
-def resolve_pair(plan: ApprovedPlan, label: str) -> tuple[str, str]:
-    """'HSE134-ASP118' -> (key in group_a, key in group_b). Both residues must be in the approved groups."""
+def same_pair(a: str | None, b: str | None) -> bool:
+    """'asp54-lys157' and 'LYS157 - ASP54' name the same pair."""
+    norm = lambda s: sorted(x.strip().upper() for x in (s or "").split("-"))
+    return bool(a and b) and norm(a) == norm(b)
+
+
+def resolve_pair(plan: ApprovedPlan, label: str | None) -> tuple[str, str]:
+    """'HSE134-ASP118' -> (key in group_a, key in group_b). Both residues must be in the approved groups, unless
+    the plan carries a pair the user chose: then only that pair is allowed, wherever its residues are."""
+    if plan.pair:
+        if label and not same_pair(label, plan.pair):
+            raise Refused(f"the approved residue pair is {plan.pair} (chosen by the user); call without a pair or with it")
+        label = plan.pair
     m = re.fullmatch(r"\s*([A-Za-z]{3})(\d+)\s*-\s*([A-Za-z]{3})(\d+)\s*", label or "")
     if not m:
         raise Refused(f"pair must look like 'HSE134-ASP118', got {label!r}")
@@ -128,6 +140,8 @@ def resolve_pair(plan: ApprovedPlan, label: str) -> tuple[str, str]:
             actual = res[0].resname if res else "none"
             raise Refused(f"residue {resname}{resid} not found (residue {resid} is {actual})")
         keys.append(make_residue_key(plan.dataset, res[0].segid, resid, resname))
+    if plan.pair:
+        return keys[0], keys[1]
     ra, rb = (parse_residue_key(k).resid for k in keys)
     if _in_group(plan.dataset, plan.group_b, ra) and _in_group(plan.dataset, plan.group_a, rb):
         keys.reverse()
@@ -442,7 +456,7 @@ def _tool(name: str, description: str, props: dict, required: list[str] | None =
 
 
 WINDOW = {"type": "string", "enum": ["a", "b", "all"], "description": "Approved window: 'a', 'b', or 'all' (both)."}
-PAIR = {"type": "string", "description": "Residue pair from the approved groups, e.g. 'HSE134-ASP118'."}
+PAIR = {"type": "string", "description": "Residue pair from the approved groups, e.g. 'HSE134-ASP118'. If the approved plan names a pair, omit this (that pair is used)."}
 
 SCHEMAS = [
     _tool("get_metadata", "Dataset facts: frames, residues, time step, stats validity, groups.", {}),

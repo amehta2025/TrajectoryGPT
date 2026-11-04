@@ -622,3 +622,6 @@ button.example-card.selected { border-color: var(--violet); background: var(--vi
 .u-tag.confirmed { color: var(--ok); border-color: #2e5a43; }
 .u-ok { margin-left: 8px; font-size: 12px; }
 .inferred-note.warn { border-color: #6b3a2a; background: rgba(240, 135, 79, 0.08); color: #f3c2a6; }
+.pick-residues { margin: 6px 0 4px; padding: 12px 14px; border: 1px solid #6b3a2a; border-radius: 8px; background: rgba(240, 135, 79, 0.08); color: #f3c2a6; }
+.pick-residues p { margin: 0 0 8px; font-size: 14px; line-height: 1.45; }
+.pick-residues select { max-width: 200px; }

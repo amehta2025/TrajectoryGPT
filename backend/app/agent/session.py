@@ -24,7 +24,7 @@ from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
 EDITABLE = ("cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b",
-            "native_selection", "native_radius", "ref_frames")
+            "native_selection", "native_radius", "ref_frames", "pair")
 
 
 @dataclass
@@ -319,6 +319,10 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
             missing = [n for n in low_confidence(stored["figure"]["spec"]) if n not in (confirmed_fields or [])]
             if missing:
                 raise PlanInvalid([f"Confirm these low-confidence settings read from the figure first: {', '.join(missing)}"], None)
+            foreign = stored["figure"]["spec"].get("foreign_residues") or []
+            if foreign and not edits.get("pair"):  # their numbers mean nothing on AdK: the user picks the pair first
+                raise PlanInvalid([f"This paper's residues ({'–'.join(foreign[:2])}) are from a different protein. "
+                                   "Pick the AdK residues to use."], None)
         plan = {**stored["plan"], **{k: v for k, v in edits.items() if k in EDITABLE}}
         if "steps" in edits:  # the user may drop steps, never add tools the planner did not propose
             proposed = {s["tool"] for s in stored["plan"]["steps"]}

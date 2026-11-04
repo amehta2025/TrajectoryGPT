@@ -107,6 +107,7 @@ def metadata(dataset: str):
             "n_atoms": u.atoms.n_atoms,
             "n_viewer_atoms": len(viewer_atoms(dataset)),
             "n_residues": u.residues.n_residues,
+            "residues": [[int(r.resid), str(r.resname)] for r in u.residues],  # for the residue picker
             "segids": sorted(set(u.segments.segids)),
             "n_frames": n_frames,
             "dt_ns": cfg["dt_ns"],

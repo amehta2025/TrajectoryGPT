@@ -8,6 +8,7 @@ export type Metadata = {
   n_atoms: number
   n_viewer_atoms: number
   n_residues: number
+  residues?: [number, string][] // [resid, resname] for the residue picker
   n_frames: number
   dt_ns: number | null
   time_label: string
@@ -122,6 +123,7 @@ export type Plan = {
   native_selection?: 'name CA' | 'heavy atoms'
   native_radius?: number
   ref_frames?: number[]
+  pair?: string // a residue pair the user chose (e.g. 'ASP54-LYS157'); tools use exactly it
   steps: PlanStep[]
   notes?: string[] // code-written: what the question asks that the data cannot give (e.g. a longer time range)
 }
@@ -147,6 +149,9 @@ export type FigureSpec = {
   dataset: string
   mode_reason: string
   fields: SpecField[]
+  protein_is_adk?: boolean
+  named_residues?: string[]
+  foreign_residues?: string[] // residues named from another protein: the user picks the AdK pair before Run (set by code)
   display?: FigureDisplay // how the published figure is drawn; absent on figures read before 2026-11-03
   question: string
   pdf_fallback: boolean

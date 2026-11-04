@@ -118,6 +118,8 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
   }
   if (!proposal || !draft) return null
   const p = { ...proposal.plan, ...edits }
+  // Residues named from another protein: Run waits for the AdK pair (the backend refuses without it too).
+  const needsPair = !!proposal.figure?.spec.foreign_residues?.length && !p.pair
   const locked = phase !== 'plan'
   const fixed = locked || !!proposal.recorded // a recorded plan (replay mode) cannot be edited, only run
   const checklist = run?.checklist
@@ -205,7 +207,8 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
             </label>
           )}
           {proposal.recorded && <span className="small muted">Recorded plan: its settings are fixed.</span>}
-          <button className="primary" disabled={starting} onClick={async () => {
+          {needsPair && <span className="small muted">Pick the AdK residues above first.</span>}
+          <button className="primary" disabled={starting || needsPair} onClick={async () => {
             setStarting(true)
             await approve(editsOf(p, draft), stepThrough, plant)
             setStarting(false)

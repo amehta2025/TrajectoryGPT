@@ -133,6 +133,9 @@ Rules:
   it (caption, methods, axis); use "assumed" with low confidence when you infer a value. Use low confidence whenever you are unsure, including
   for values read off a blurry axis; the user confirms every low-confidence setting before anything runs. Never
   invent precision. Write Å for angstroms (8 Å, not 8 A).
+- protein_is_adk: true only if the figure's protein is adenylate kinase (AdK, any species); false for any other
+  or fictional protein. named_residues: the specific residues the analysis is about, as printed (e.g.
+  ["Asp45", "Arg112"] for a distance between them); [] when the figure names none.
 - display: how the figure is drawn, read off the plot itself, so our version can be drawn the same way. x and y:
   the axis title as printed; group: the protein domain on that axis (LID, NMP or CORE) or "none"; residue_min /
   residue_max: the first and last residue numbers the axis spans (null if it is not a residue axis). color_min /
@@ -209,9 +212,10 @@ def follow_up_block(c: dict) -> str:
 def agent_user(question: str, plan: dict, figure: dict | None = None) -> str:
     steps = "\n".join(f"{i + 1}. {s['tool']} - {s.get('rationale', '')}" for i, s in enumerate(plan["steps"]))
     wb = f", window_b {plan['window_b']}" if plan.get("window_b") else ""
+    pair = f", residue pair {plan['pair']} (chosen by the user; use exactly this pair)" if plan.get("pair") else ""
     return (f"Question: {question}\n\nApproved plan (dataset {plan['dataset']}, groups {plan['group_a']}-{plan['group_b']}, "
             f"cutoff {plan['cutoff']} Å, window_a {plan['window_a']}{wb}, stride {plan['stride']}, "
-            f"robustness cutoffs {plan['robustness_cutoffs']} Å):\n{steps}\n\n"
+            f"robustness cutoffs {plan['robustness_cutoffs']} Å{pair}):\n{steps}\n\n"
             + (f"Figure: {figure['spec']['summary']} Mode: {figure['spec']['mode']}.\n\n" if figure else "")
             + ("Data notes (checked by code, already in the report's caveats; do not contradict them):\n"
                + "\n".join(f"- {n}" for n in plan["notes"]) + "\n\n" if plan.get("notes") else "")

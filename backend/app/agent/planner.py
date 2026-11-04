@@ -4,6 +4,8 @@ An invalid plan goes back to the model once with the errors; a second failure is
 """
 from __future__ import annotations
 
+import re
+
 from app.agent import prompts
 from app.agent.llm import EFFORT, LLM
 from app.agent.tools import NATIVE_SELECTIONS, STATS_TOOLS, ApprovedPlan
@@ -108,6 +110,8 @@ def validate_plan(p: dict) -> list[str]:
     if not isinstance(p.get("sequence_exclusion"), int) or not 0 <= p["sequence_exclusion"] <= SEQ_EXCLUSION_MAX:
         errs.append(f"sequence_exclusion must be 0..{SEQ_EXCLUSION_MAX}")
     errs += _native_errors(p, n)
+    if p.get("pair") is not None:
+        errs += _pair_errors(p)
     try:
         cs.validate_robustness_cutoffs(p.get("robustness_cutoffs") or [], c)
     except ValueError as e:
@@ -146,6 +150,20 @@ def _native_errors(p: dict, n_frames: int) -> list[str]:
     return errs
 
 
+def _pair_errors(p: dict) -> list[str]:
+    """A user-chosen residue pair: two different residues of this protein, named as the structure names them."""
+    m = re.fullmatch(r"([A-Za-z]{3})(\d+)-([A-Za-z]{3})(\d+)", str(p.get("pair") or ""))
+    if not m:
+        return [f"pair must look like 'ASP54-LYS157', got {p.get('pair')!r}"]
+    with TRAJ_LOCK:
+        names = {int(r.resid): str(r.resname) for r in load_universe(p["dataset"]).residues}
+    errs = [f"residue {rn.upper()}{rid} is not in this protein (residue {rid} is {names.get(int(rid), 'none')})"
+            for rn, rid in ((m[1], m[2]), (m[3], m[4])) if names.get(int(rid)) != rn.upper()]
+    if m[2] == m[4]:
+        errs.append("pick two different residues")
+    return errs
+
+
 def to_approved(p: dict) -> ApprovedPlan:
     errs = validate_plan(p)
     if errs:
@@ -158,6 +176,7 @@ def to_approved(p: dict) -> ApprovedPlan:
         native_selection=p.get("native_selection", NATIVE_DEFAULTS["native_selection"]),
         native_radius=float(p.get("native_radius", NATIVE_DEFAULTS["native_radius"])),
         ref_frames=list(p.get("ref_frames", NATIVE_DEFAULTS["ref_frames"])),
+        pair=str(p["pair"]).upper() if p.get("pair") else None,
         steps=[{"tool": s["tool"], "rationale": s["rationale"]} for s in p["steps"]],
         notes=[str(n) for n in p.get("notes") or []],
     )
