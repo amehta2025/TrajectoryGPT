@@ -191,12 +191,6 @@ export function StartScreen({ datasets, dataset, meta }: { datasets: DatasetInfo
             <button type="button" className="link small" onClick={() => setChoose(false)}>Cancel</button>
           </div>
         )}
-        {files.length > 0 && !loaded && question.trim() && !choose && (
-          <p className="note-chip small" role="status">
-            Sent as a note about <b>{files.map((f) => f.name).join(' + ')}</b>.{' '}
-            <button type="button" className="link" onClick={() => { setFiles([]); setFileError(null) }}>Remove the figure</button> to ask it on its own.
-          </p>
-        )}
         {loaded && (
           <p className="loaded-note muted small">
             Example loaded. Review it, then press Analyze. <button type="button" className="link" onClick={clearBox}>Clear</button>

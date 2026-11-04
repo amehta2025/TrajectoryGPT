@@ -245,9 +245,8 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
       editor: (close) => <GroupEditor groups={groups} plan={plan} onSave={save('groups')} close={close} /> })
   }
   if (plan && meta) {
-    const why = figure.spec.mode === 'exact' ? ' (the paper’s own data)'
-      : figure.spec.closest_dataset === plan.dataset ? ' (matches the paper’s methods)' : ''
-    rows.push({ id: 'data', label: 'Data', value: `${datasetName(plan.dataset)}${why}`, spec: field('data source'),
+    const fromPaper = figure.spec.mode === 'exact' || figure.spec.closest_dataset === proposal!.plan.dataset
+    rows.push({ id: 'data', label: 'Data', value: datasetName(plan.dataset), spec: field('data source'), paper: fromPaper || undefined,
       raw: field('data source')?.value,
       editor: figure.spec.mode === 'exact' ? undefined : (close) => <DataEditor plan={plan} original={proposal!.plan} meta={meta} onSave={save('data')} close={close} /> })
   }
@@ -320,7 +319,6 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
                   {st === 'confirmed' && <span className="u-tag confirmed">confirmed</span>}
                   {inferred && <span className="u-tag">inferred</span>}
                   {!st && !inferred && r.paper === true && <span className="u-tag paper">from the paper</span>}
-                  {!st && !inferred && r.paper === false && <span className="u-tag default">default</span>}
                   {inferred && editable && <button type="button" className="small link u-ok" onClick={() => confirmRow(r.id)}>Looks right</button>}
                 </span>
               )}
