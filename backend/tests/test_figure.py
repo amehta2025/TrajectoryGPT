@@ -387,3 +387,45 @@ def test_an_empty_second_window_is_dropped_for_a_single_window_analysis():
     assert any("need two windows" in e for e in validate_plan({**cmp, "window_b": None}))
     # A valid second window is left alone even without a comparison ('all' spans both windows).
     assert repair_windows({**eq, "window_a": [0, 2093], "window_b": [2093, 4187]})["window_b"] == [2093, 4187]
+
+
+# ---------- fixes after live run 20261104-014851 ----------
+
+def test_a_transfer_runs_on_the_data_the_paper_used_not_a_leftover_picker():
+    spec = {"mode": "transfer", "dataset": "none", "closest_dataset": "adk_equilibrium"}
+    assert figure.transfer_dataset(spec, "adk_transition") == "adk_equilibrium"
+    assert figure.transfer_dataset({**spec, "closest_dataset": "none"}, "adk_transition") == "adk_transition"
+    assert "closest_dataset" in figure.spec_schema()["schema"]["required"]
+
+
+def test_the_approved_radius_is_not_a_bare_number():
+    """The live native-contacts sample ended in needs_review: the finding wrote "8.0 Å" (the approved radius)."""
+    from app.agent.report import bare_numbers
+    s = RunState(ApprovedPlan("adk_transition", "LID", "CORE", 4.5, [0, 98], steps=PLAN["steps"]))
+    assert bare_numbers(s, "Q1 and Q2 with Cα atoms within 8.0 Å, as published.") == []
+    s6 = RunState(ApprovedPlan("adk_transition", "LID", "CORE", 4.5, [0, 98], native_radius=6.0, steps=PLAN["steps"]))
+    assert bare_numbers(s6, "radius 6 Å") == [] and bare_numbers(s6, "radius 8.0 Å") == ["8.0"]
+    plain = RunState(ApprovedPlan("adk_transition", "LID", "CORE", 4.5, [0, 98],
+                                  steps=[{"tool": "calculate_contacts"}, {"tool": "submit_report"}]))
+    assert bare_numbers(plain, "within 8.0 Å") == ["8.0"]  # only native-contacts plans approve a radius
+
+
+def test_a_check_that_could_not_run_can_be_run_again(monkeypatch, tmp_path):
+    import app.agent.orchestrator as orch
+    from app.agent import session, verifier
+    monkeypatch.setattr(orch, "INVESTIGATIONS_DIR", tmp_path)
+    run = orch.new_run("q", ApprovedPlan("adk_transition", "LID", "CORE", 4.5, [0, 98], steps=PLAN["steps"]))
+    run.state.report = {"findings": []}
+    run.verification = {"status": "error", "error": "NotFoundError: Error code: 404 - The requested model was not found."}
+    run.save()
+    calls = []
+    monkeypatch.setattr(verifier, "verify_run", lambda r: (calls.append(r.run_id), verifier.settle(r, {"status": "verified", "flags": []}, "verified")))
+    session.reverify(run.run_id)  # read back from disk, as after a restart
+    for _ in range(50):
+        if session.run_view(run.run_id)["verification"]["status"] == "verified":
+            break
+        import time; time.sleep(0.05)
+    assert calls == [run.run_id] and session.run_view(run.run_id)["status"] == "verified"
+    with pytest.raises(session.CannotReverify):
+        session.reverify(run.run_id)  # a finished check is not re-run
+    session.RUNS.pop(run.run_id, None)

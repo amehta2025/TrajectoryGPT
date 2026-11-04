@@ -162,6 +162,9 @@ export async function askFigure(files: File[], dataset: string, note: string, op
     }
     set({ figureRead: read.figure ?? null })
     const proposal = await api.figureReadPlan(read.read_id!, dataset)
+    // The plan may run on another dataset than the picker's (a transfer uses the paper's kind of data): the
+    // picker, charts and frame labels follow the plan.
+    if (proposal.plan.dataset !== getSelection().dataset) setSelection({ dataset: proposal.plan.dataset })
     set({ phase: 'plan', proposal, notice: null })
   } catch (e) {
     if (e instanceof PasscodeRequired) set({ phase: 'idle', needPasscode: true })
@@ -169,6 +172,23 @@ export async function askFigure(files: File[], dataset: string, note: string, op
     else if (e instanceof ReplayOnly) set({ phase: 'idle', error: e.message })
     else set({ phase: 'idle', ...plainError(e, 'Couldn’t build a plan from this figure; try again or edit the settings.') })
   }
+}
+
+/** "Run the check again" after the second-AI check could not run: start it, then follow the run until it
+ *  settles. Returns a plain message if it could not start, else null. */
+export async function recheck(runId: string): Promise<string | null> {
+  try {
+    await api.reverify(runId)
+  } catch (e) {
+    if (e instanceof PasscodeRequired) { set({ needPasscode: true }); return 'The demo passcode is needed first.' }
+    return e instanceof UserMessage ? e.message : 'The check could not start; try again in a minute.'
+  }
+  for (let i = 0; i < 80; i++) {
+    await refresh(runId)
+    if (state.runId !== runId || state.run?.verification?.status !== 'pending') break
+    await new Promise((r) => setTimeout(r, 3000))
+  }
+  return null
 }
 
 async function refresh(runId: string) {

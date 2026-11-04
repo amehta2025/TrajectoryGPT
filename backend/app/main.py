@@ -524,6 +524,20 @@ def _sandbox_done(run_id: str, job: dict) -> None:
         session.ON_RUN_FINISHED()  # on Modal: commit the Volume
 
 
+@app.post("/runs/{run_id}/verify", dependencies=[Depends(require_passcode), Depends(rate_limit("run"))])
+def reverify(run_id: str):
+    """Run the second-AI check again when it could not run (the user's "Run the check again"). One Muse Wonder
+    call, in the background; the run view shows "Verifying..." until it settles."""
+    require_budget()
+    try:
+        session.reverify(run_id)
+    except session.CannotReverify as e:
+        raise HTTPException(409, str(e)) from None
+    except KeyError:
+        raise HTTPException(404, "unknown run") from None
+    return {"status": "pending"}
+
+
 @app.post("/runs/{run_id}/sandbox", dependencies=[Depends(require_passcode), Depends(rate_limit("sandbox"))])
 def sandbox_start(run_id: str):
     """Re-run the export in a clean Modal Sandbox (deployed app only: SANDBOX_ENABLED=1)."""

@@ -9,7 +9,7 @@
 // Verification is not shown until a verifier result exists (SPEC §9 step 7, Day 6).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type Finding, type Metadata, type RunView, type SandboxJob, type Segment, type TextItem } from '../api/client'
-import { ask, toggleScience, useInvestigation } from '../state/investigation'
+import { ask, recheck, toggleScience, useInvestigation } from '../state/investigation'
 import { getSelection, setSelection, useSelection } from '../state/selection'
 import { hisNote, hisText } from '../state/residueKey'
 import { buildCards, touchAnswer, locatedSentence, locateNotes, markersFor, plainSentence, type Card, type Located } from '../state/cards'
@@ -211,8 +211,16 @@ function VerifierLine({ run, cardOf }: { run: RunView; cardOf: Map<string, numbe
   for (const f of (v?.flags ?? []).filter((x) => x.severity === 'major')) {
     if (!byFinding.has(f.finding_id)) byFinding.set(f.finding_id, f.plain || f.problem)
   }
+  const [again, setAgain] = useState<'idle' | 'starting' | string>('idle')
+  const retry = (
+    <button className="link small recheck" disabled={again === 'starting'} onClick={async () => {
+      setAgain('starting')
+      setAgain((await recheck(run.run_id)) ?? 'idle')
+    }}>{again === 'starting' ? 'Starting…' : 'Run the check again'}</button>
+  )
+  const failedNote = again !== 'idle' && again !== 'starting' && <span className="muted small"> {again}</span>
   let line: ReactNode
-  if (v?.status === 'timeout' || stale) line = <span className="verify muted">The second AI check couldn't finish, so this report has not been double-checked.</span>
+  if (v?.status === 'timeout' || stale) line = <span className="verify muted">The second AI check couldn't finish, so this report has not been double-checked. {retry}{failedNote}</span>
   else if (!v || v.status === 'pending') line = <span className="verify pending">A second AI model is checking this report…</span>
   else if (v.status === 'verified') line = <span className="verify ok">✓ A second AI model checked this report: no problems found.</span>
   else if (v.status === 'flagged') {
@@ -227,7 +235,7 @@ function VerifierLine({ run, cardOf }: { run: RunView; cardOf: Map<string, numbe
         ))}
       </span>
     )
-  } else line = <span className="verify muted">The second AI check could not run, so this report has not been double-checked.</span>
+  } else line = <span className="verify muted">The second AI check could not run, so this report has not been double-checked. {retry}{failedNote}</span>
   if (run.status === 'needs_review') return null
   return (
     <p className="verify-line">

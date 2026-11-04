@@ -220,5 +220,7 @@ def verify_run(run, llm: LLM | None = None) -> dict:
         settle(run, {"status": status, "summary": out["summary"], "flags": flags, "figures": [p for p, _ in figs],
                      "usage": resp.usage.as_dict(), "wall_s": round(time.perf_counter() - t0, 2)}, status)
     except Exception as e:  # a failed check is shown as "could not be checked", never as verified
-        settle(run, {"status": "error", "error": f"{type(e).__name__}: {e}", "wall_s": round(time.perf_counter() - t0, 2)})
+        err = f"{type(e).__name__}: {e}"
+        print(f"[verifier] run {run.run_id}: check could not run: {err}", flush=True)  # API errors carry no key
+        settle(run, {"status": "error", "error": err, "wall_s": round(time.perf_counter() - t0, 2)})
     return run.verification

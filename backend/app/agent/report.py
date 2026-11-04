@@ -152,9 +152,12 @@ def number_words(text: str) -> list[str]:
 
 
 def bare_numbers(state, text: str) -> list[str]:
-    """Numerals left after removing placeholders, except residue/frame numbers and approved cutoffs."""
+    """Numerals left after removing placeholders, except residue/frame numbers and approved distances: the
+    cutoffs and, in a native-contacts plan, the approved radius (e.g. "8 Å", which the user may have edited)."""
     plan = state.plan
     cutoffs = {round(c, 3) for c in [plan.cutoff, *plan.robustness_cutoffs]}
+    if any(s.get("tool") in ("native_contacts", "reproduction_check") for s in plan.steps):
+        cutoffs.add(round(float(plan.native_radius), 3))
     stripped = PLACEHOLDER.sub(" ", text)
     bad = []
     for m in NUMBER.finditer(stripped):

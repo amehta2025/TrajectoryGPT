@@ -123,6 +123,9 @@ Our datasets:
 Rules:
 - mode "exact" only if the figure was made from one of our datasets; name it in dataset and give the evidence in
   mode_reason (caption, axis labels, frame count, cited source). Otherwise mode "transfer" and dataset "none".
+- closest_dataset (for a transfer): the dataset matching the kind of data the paper used: adk_equilibrium for
+  unbiased or equilibrium MD (time in ns or us), adk_transition for a transition path, steered, targeted or other
+  biased path; "none" if the paper does not say. For an exact reproduction, the same as dataset.
 - is_figure: false if the image is not a scientific figure at all (a photo of food, people, places or objects, a meme, a
   screenshot of plain text); then the rest of the spec does not matter. A figure from a paper is true even if its type
   is not supported.

@@ -147,6 +147,7 @@ export type FigureSpec = {
   kind: 'native_contacts' | 'contact_map' | 'difference_contact_map' | 'distance_trace' | 'rmsf' | 'other'
   mode: 'exact' | 'transfer'
   dataset: string
+  closest_dataset?: string // for a transfer: our dataset matching the paper's kind of data
   mode_reason: string
   fields: SpecField[]
   protein_is_adk?: boolean
@@ -469,6 +470,7 @@ export const api = {
   compare: async (ds: string, groupA: string, groupB: string, a: [number, number], b: [number, number], cutoff = 4.5): Promise<Compare> =>
     (await get(`/compare/${ds}`, { group_a: groupA, group_b: groupB, a_start: a[0], a_stop: a[1], b_start: b[0], b_stop: b[1], cutoff })).json(),
   checkPasscode: () => post<{ ok: boolean }>('/auth/check', {}),
+  reverify: (runId: string) => post<{ status: string }>(`/runs/${runId}/verify`, {}),
   figurePlan: (files: UploadFile[], dataset: string, note: string, provider?: Provider) =>
     post<PlanResponse>('/figure/plan', { files, dataset, note, provider: provider ?? null }),
   /** Figure mode, first request: what the AI read from the figure (or, in replay mode, a recorded plan). */

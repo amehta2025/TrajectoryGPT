@@ -628,3 +628,5 @@ button.example-card.selected { border-color: var(--violet); background: var(--vi
 .error-detail { margin-top: 6px; font-size: 12px; color: var(--muted); }
 .error-detail summary { cursor: pointer; }
 .error-detail ul { margin: 4px 0 0; padding-left: 18px; }
+.note-chip { margin: 8px 0 0; padding: 8px 12px; border: 1px solid #34506b; border-radius: 8px; background: rgba(156, 195, 230, 0.07); color: var(--text); }
+.recheck { margin-left: 6px; }

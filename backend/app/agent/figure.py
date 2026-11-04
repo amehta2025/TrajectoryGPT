@@ -172,6 +172,10 @@ def spec_schema() -> dict:
             "mode": {"type": "string", "enum": ["exact", "transfer"]},
             "dataset": {"type": "string", "enum": datasets + ["none"],
                         "description": "Our dataset the figure was made from, or none."},
+            "closest_dataset": {"type": "string", "enum": datasets + ["none"],
+                                "description": "For a method transfer: which of our datasets matches the kind of data "
+                                               "the paper used (equilibrium MD or a transition path), or none if the "
+                                               "paper does not say."},
             "mode_reason": {"type": "string", "description": "Why exact or transfer; cite the evidence."},
             "fields": {"type": "array", "items": field},
             "protein_is_adk": {"type": "boolean", "description": "True only if the figure's protein is adenylate kinase."},
@@ -180,7 +184,7 @@ def spec_schema() -> dict:
             "display": display_schema(),
             "question": {"type": "string", "description": "The analysis to run, as a plain request for the planner."},
         },
-        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "protein_is_adk",
+        "required": ["summary", "is_figure", "kind", "mode", "dataset", "closest_dataset", "mode_reason", "fields", "protein_is_adk",
                      "named_residues", "display", "question"],
         "additionalProperties": False,
     }}
@@ -289,10 +293,19 @@ def read_figure(llm: LLM, raw_files: list[dict], note: str = "") -> tuple[dict, 
     return figure, usages
 
 
+def transfer_dataset(spec: dict, selected_dataset: str) -> str:
+    """Where a method transfer runs: the dataset matching the kind of data the paper used (its methods: equilibrium
+    MD or a transition path), else the picker's. The picker alone was wrong when a sample had left it on the
+    transition path and the paper described 1 us of equilibrium MD (live run 20261104-014851). The user can still
+    change it on the plan card."""
+    closest = spec.get("closest_dataset")
+    return closest if closest in load_config()["datasets"] else selected_dataset
+
+
 def plan_from_spec(llm: LLM, figure: dict, selected_dataset: str) -> dict:
     """The analysis plan for a figure already read. Returns what /figure/plan sends."""
     spec = figure["spec"]
-    dataset = spec["dataset"] if spec["mode"] == "exact" else selected_dataset
+    dataset = transfer_dataset(spec, selected_dataset) if spec["mode"] != "exact" else spec["dataset"]
     fields = "; ".join(f"{f['name']}: {f['value']} ({f['confidence']}, {f['source']})" for f in spec["fields"])
     question = (f"{spec['question']}\n\nThis comes from an uploaded figure ({spec['kind']}, "
                 f"{'exact reproduction on ' + dataset if spec['mode'] == 'exact' else 'method transfer'}). "

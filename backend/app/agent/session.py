@@ -23,7 +23,7 @@ from app.agent.tools import res_label
 from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
-EDITABLE = ("cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b",
+EDITABLE = ("dataset", "cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b",
             "native_selection", "native_radius", "ref_frames", "pair")
 
 
@@ -324,6 +324,8 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
                 raise PlanInvalid([f"This paper's residues ({'–'.join(foreign[:2])}) are from a different protein. "
                                    "Pick the AdK residues to use."], None)
         plan = {**stored["plan"], **{k: v for k, v in edits.items() if k in EDITABLE}}
+        if plan["dataset"] != stored["plan"]["dataset"]:  # the data notes were written for the other dataset
+            plan["notes"] = []
         if "steps" in edits:  # the user may drop steps, never add tools the planner did not propose
             proposed = {s["tool"] for s in stored["plan"]["steps"]}
             plan["steps"] = [s for s in edits["steps"] if s.get("tool") in proposed]
@@ -369,6 +371,42 @@ def verify_in_background(run: Run, emit, plant: bool = False) -> None:
         verifier.settle(run, verifier.timed_out())
     run.save()
     emit({"type": "verification_finished", "status": run.status, "verification": run.verification})
+
+
+class CannotReverify(ValueError):
+    """str(e) is shown to the user."""
+
+
+def reverify(run_id: str) -> None:
+    """Run the second-AI check again for a report whose check could not run (an API error or a timeout). Never
+    automatic: the user asks (SPEC §9 step 7; we do not retry 4xx answers on our own). Runs in the background;
+    the run view shows "Verifying..." until it settles."""
+    with _lock:
+        h = RUNS.get(run_id)
+    if h is None:
+        try:
+            run = orchestrator.load_run(run_id)
+        except (FileNotFoundError, ValueError):
+            raise KeyError(f"unknown run {run_id}") from None
+    else:
+        run = h.run
+    with _lock:
+        status = (run.verification or {}).get("status")
+        stale = status == "pending" and h is None  # saved mid-check before a restart: shown as timed out
+        if not run.state.report or not (status in ("error", "timeout") or stale):
+            raise CannotReverify("The check is already running." if status == "pending"
+                                 else "Only a check that could not run can be run again.")
+        if h is None:  # a run read back from disk: keep it live here so its view shows "Verifying..."
+            h = RUNS[run_id] = RunHandle(run, done=True)
+        run.verification = verifier.pending()  # claimed under the lock: a second click is refused above
+        run.status = "awaiting_verification"
+
+    def work():
+        verify_in_background(run, h.emit)
+        if ON_RUN_FINISHED:
+            ON_RUN_FINISHED()
+
+    threading.Thread(target=work, name=f"reverify-{run_id}", daemon=True).start()
 
 
 def get_handle(run_id: str) -> RunHandle:

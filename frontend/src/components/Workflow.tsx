@@ -3,7 +3,9 @@
 // viewer), so nothing the backend computes is lost; this file only arranges them. Every number shown
 // comes from stored tool results (stepResult, the report's filled placeholders), never from model text.
 import { useEffect, useState } from 'react'
-import { type Figure, type Metadata, type Plan } from '../api/client'
+import { api, type Figure, type Metadata, type Plan } from '../api/client'
+import { setSelection } from '../state/selection'
+import { datasetName } from './DatasetBadge'
 import { confirmRow, editPlan, nextTurn, toggleScience, useInvestigation } from '../state/investigation'
 import { withUnits } from '../state/paperFigure'
 import { isHalves, PlanCard, STEP_DETAIL, stepText, windowText } from './PlanCard'
@@ -118,6 +120,45 @@ function ResiduePicker({ meta, value, onSave }: { meta: Metadata; value?: string
   )
 }
 
+/** Which simulation to run on. Switching scales the frame windows to the other run's length (the whole run stays
+ *  the whole run, the last half stays the last half); the backend validates the result again at Run. */
+function DataEditor({ plan, original, meta, onSave, close }: {
+  plan: Plan; original: Plan; meta: Metadata; onSave: (p: Partial<Plan>) => void; close: () => void
+}) {
+  const [ids, setIds] = useState<string[]>([plan.dataset])
+  const [ds, setDs] = useState(plan.dataset)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { api.datasets().then((d) => setIds(d.map((x) => x.id)), () => {}) }, [])
+  return (
+    <form className="u-edit" onSubmit={async (e) => {
+      e.preventDefault()
+      if (ds === plan.dataset) return close()
+      setBusy(true)
+      try {
+        const n = (await api.metadata(ds)).n_frames
+        const scale = (w: [number, number]): [number, number] => {
+          const a = Math.min(n - 1, Math.round((w[0] * n) / meta.n_frames))
+          return [a, Math.max(a + 1, Math.min(n, Math.round((w[1] * n) / meta.n_frames)))]
+        }
+        // Back on the proposed dataset: its own windows exactly, not a scaled round trip.
+        onSave(ds === original.dataset
+          ? { dataset: ds, window_a: original.window_a, window_b: original.window_b }
+          : { dataset: ds, window_a: scale(plan.window_a), ...(plan.window_b ? { window_b: scale(plan.window_b) } : {}) })
+        setSelection({ dataset: ds })
+        close()
+      } finally {
+        setBusy(false)
+      }
+    }}>
+      <select value={ds} autoFocus onChange={(e) => setDs(e.target.value)} aria-label="Simulation">
+        {ids.map((id) => <option key={id} value={id}>{datasetName(id)}</option>)}
+      </select>
+      <button type="submit" className="small primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      <button type="button" className="small link" onClick={close}>Cancel</button>
+    </form>
+  )
+}
+
 /** Frame windows: [start, stop) within the run, shown with their time. */
 function WindowEditor({ plan, meta, onSave, close }: { plan: Plan; meta: Metadata; onSave: (p: Partial<Plan>) => void; close: () => void }) {
   const [w, setW] = useState([...plan.window_a, ...(plan.window_b ?? [])].map(String))
@@ -174,6 +215,13 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
     rows.push({ id: 'groups', label: 'Domains compared', value: `${plan.group_a}${range(plan.group_a)} vs ${plan.group_b}${range(plan.group_b)}`,
       raw: 'Drawn over the residue ranges the paper’s axes span; contacts are computed for the whole domains', spec: fieldLike(/x axis|y axis/),
       editor: (close) => <GroupEditor groups={groups} plan={plan} onSave={save('groups')} close={close} /> })
+  }
+  if (plan && meta) {
+    const why = figure.spec.mode === 'exact' ? ' (the paper’s own data)'
+      : figure.spec.closest_dataset === plan.dataset ? ' (matches the paper’s methods)' : ''
+    rows.push({ id: 'data', label: 'Data', value: `${datasetName(plan.dataset)}${why}`, spec: field('data source'),
+      raw: field('data source')?.value,
+      editor: figure.spec.mode === 'exact' ? undefined : (close) => <DataEditor plan={plan} original={proposal!.plan} meta={meta} onSave={save('data')} close={close} /> })
   }
   if ((figure.spec.foreign_residues ?? []).length && plan && meta) {
     rows.push({ id: 'pair', label: 'AdK residues', value: plan.pair ? plan.pair.replace('-', '–') : 'not chosen yet',
