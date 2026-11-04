@@ -381,11 +381,11 @@ def figure_read(files: list[dict] = Body(...), note: str = Body(""), provider: s
 
 
 @app.post("/figure/read/{read_id}/plan", dependencies=[Depends(require_passcode), Depends(rate_limit("plan"))])
-def figure_read_plan(read_id: str, dataset: str = Body("adk_equilibrium", embed=True)):
+def figure_read_plan(request: Request, read_id: str, dataset: str = Body("adk_equilibrium", embed=True)):
     _check_dataset(dataset)
     require_budget()
-    try:
-        return session.plan_figure_read(read_id, dataset)
+    try:  # the tab's session id: a follow-up after this figure run then builds on it
+        return session.plan_figure_read(read_id, dataset, session_id=_session(request))
     except KeyError as e:
         raise HTTPException(404, str(e)) from None
     except PlanInvalid as e:

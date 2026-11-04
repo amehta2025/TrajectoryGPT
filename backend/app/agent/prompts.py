@@ -210,11 +210,16 @@ def follow_up_block(c: dict) -> str:
     lines = ["", "This is a follow-up in the same session. Previous investigation:",
              f"- question: {c['question']}",
              f"- approved: dataset {p['dataset']}, groups {p['group_a']}-{p['group_b']}, cutoff {p['cutoff']} Å, "
-             f"window_a {p['window_a']}{wb}, stride {p['stride']}, robustness cutoffs {p['robustness_cutoffs']} Å"]
+             f"window_a {p['window_a']}{wb}, stride {p['stride']}, sequence_exclusion {p.get('sequence_exclusion')}, "
+             f"robustness cutoffs {p['robustness_cutoffs']} Å"
+             + (", residue ranges " + ", ".join(f"{g} {a}-{b}" for g, (a, b) in p["residue_ranges"].items())
+                + " (kept by code for the same groups)" if p.get("residue_ranges") else "")]
     lines += [f"- finding: {f}" for f in c["findings"]]
     if c.get("focus_pair"):
         lines.append(f"- \"that\", \"it\" or \"this contact\" refers to the pair {c['focus_pair']} ({c['focus_reason']})")
-    lines.append("Keep the previous dataset, groups, cutoff, windows and robustness cutoffs unless the question asks to change them.")
+    lines.append("Keep the previous dataset, groups, cutoff, sequence_exclusion and robustness cutoffs unless the question "
+                 "asks to change them. Keep the windows too, except that a question comparing two parts of the run "
+                 "(e.g. first vs second half) needs two windows: split the previous window into halves.")
     return "\n".join(lines)
 
 

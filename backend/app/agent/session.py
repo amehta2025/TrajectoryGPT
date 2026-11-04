@@ -211,6 +211,20 @@ def follow_up_context(session_id: str | None) -> dict | None:
             "focus_pair": pair, "focus_reason": why}
 
 
+def inherit_settings(plan: dict, previous: dict) -> dict:
+    """A follow-up on the same groups keeps the settings the planner cannot express: the previous run's residue
+    ranges (a figure's axes) and, unless the planner chose another, its sequence exclusion. ("Do any of these
+    contacts change?" after paper 01 must test LID 122-159 x CORE 100-121, not the whole domains.)"""
+    same = plan.get("dataset") == previous.get("dataset") and \
+        {plan.get("group_a"), plan.get("group_b")} == {previous.get("group_a"), previous.get("group_b")}  # order is free
+    if not same:
+        return plan
+    out = dict(plan)
+    if previous.get("residue_ranges") and not out.get("residue_ranges"):
+        out["residue_ranges"] = previous["residue_ranges"]
+    return out
+
+
 def new_llm(provider: str | None = None) -> LLM:
     """The agent's model: Meta (Muse Spark) by default, or Baseten (Muse Spark Open, open weights).
     The plan stores this client, so the run uses the same provider; the verifier is always Muse Wonder."""
@@ -236,6 +250,8 @@ def propose_plan(question: str, dataset: str, llm: LLM | None = None, session_id
         return {"declined": gate, "usage": [u.as_dict() for u in gate_usages], "model": llm.model,
                 "provider": llm.provider}
     plan, usages = make_plan(llm, question, dataset, context)
+    if context:
+        plan = inherit_settings(plan, context["plan"])
     usages = gate_usages + usages
     pid = uuid.uuid4().hex[:12]
     entry = {"question": question, "dataset": dataset, "plan": plan, "usage": [u.as_dict() for u in usages],
@@ -273,7 +289,7 @@ def read_figure(files: list[dict], note: str = "", llm: LLM | None = None, provi
     return {"read_id": rid, "figure": figure, "usage": usage, "model": llm.model, "provider": llm.provider}
 
 
-def plan_figure_read(read_id: str, dataset: str) -> dict:
+def plan_figure_read(read_id: str, dataset: str, session_id: str | None = None) -> dict:
     """Figure mode, second half: the plan for a figure read by read_figure(), stored like any plan."""
     from app.agent.figure import plan_from_spec
     with _lock:
@@ -281,14 +297,14 @@ def plan_figure_read(read_id: str, dataset: str) -> dict:
     if read is None:
         raise KeyError(f"unknown figure read {read_id}")
     llm = read["llm"]
-    return _store_figure_plan(llm, plan_from_spec(llm, read["figure"], dataset), read["usage"])
+    return _store_figure_plan(llm, plan_from_spec(llm, read["figure"], dataset), read["usage"], session_id)
 
 
-def _store_figure_plan(llm: LLM, out: dict, read_usage: list[dict]) -> dict:
+def _store_figure_plan(llm: LLM, out: dict, read_usage: list[dict], session_id: str | None = None) -> dict:
     pid = uuid.uuid4().hex[:12]
     usage = read_usage + [u.as_dict() for u in out["usages"]]
     entry = {"question": out["question"], "dataset": out["plan"]["dataset"], "plan": out["plan"],
-             "usage": usage, "llm": llm, "figure": out["figure"]}
+             "usage": usage, "llm": llm, "figure": out["figure"], "session_id": session_id}
     _save_plan(pid, entry)
     with _lock:
         PLANS[pid] = entry
@@ -348,7 +364,8 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
 
     def work():
         run_investigation(llm, run, on_event=handle.emit, wait_for_next=handle.wait_for_next)
-        if run.status == "awaiting_verification":
+        # SKIP_VERIFIER=1 is for local test sweeps only (never set on the deploy): the second-AI check is left out.
+        if run.status == "awaiting_verification" and os.environ.get("SKIP_VERIFIER") != "1":
             verify_in_background(run, handle.emit, plant)
         if ON_RUN_FINISHED:
             ON_RUN_FINISHED()

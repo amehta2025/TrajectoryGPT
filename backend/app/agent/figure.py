@@ -119,13 +119,18 @@ def pdf_text(raw: bytes) -> str:
 
 
 def _content(files: list[tuple[str, str, bytes]], pdf_as_text: bool) -> list[dict]:
+    """The uploads as model input. A PDF read as text (the fallback, and always for Muse Spark Open, whose chat
+    endpoint takes no PDF files) also sends its embedded figure as an image when no image was uploaded."""
     parts: list[dict] = []
+    has_image = any(m.startswith("image/") for _, m, _ in files)
     for name, mime, raw in files:
         url = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
         if mime.startswith("image/"):
             parts.append({"type": "input_image", "image_url": url})
         elif pdf_as_text:
             parts.append({"type": "input_text", "text": f"Text of {name} (extracted with pypdf):\n{pdf_text(raw)}"})
+            if not has_image and (png := figure_from_pdf(raw)):
+                parts.append({"type": "input_image", "image_url": f"data:image/png;base64,{base64.b64encode(png).decode()}"})
         else:
             parts.append({"type": "input_file", "filename": name, "file_data": url})
     return parts
@@ -193,7 +198,8 @@ def spec_schema() -> dict:
 def extract_spec(llm: LLM, files: list[tuple[str, str, bytes]], note: str = "") -> tuple[dict, list]:
     """One Muse Spark call (medium effort) -> (spec, usages). Falls back to PDF text if a PDF is rejected."""
     usages = []
-    for pdf_as_text in (False, True):
+    # Muse Spark Open (Baseten chat) drops PDF file parts: send the PDF as text plus its figure from the start.
+    for pdf_as_text in ((True,) if llm.provider == "baseten" else (False, True)):
         user = [{"type": "input_text", "text": prompts.figure_user(note)}] + _content(files, pdf_as_text)
         try:
             r = llm.run_turn([{"role": "system", "content": prompts.FIGURE_SYSTEM}, {"role": "user", "content": user}],

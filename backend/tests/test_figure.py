@@ -463,3 +463,44 @@ def test_a_pair_outside_the_ranges_is_refused():
                               steps=[{"tool": "distance_over_time"}, {"tool": "submit_report"}]))
     assert run_tool(s, "distance_over_time", '{"pair": "THR155-GLN160"}')["status"] == "refused"
     assert resolve_pair(s.plan, "LYS136-ASP118")[1].endswith(":118:ASP")
+
+
+# ---------- sweep failure classes (backend/scripts/sweep.py) ----------
+
+def test_a_follow_up_keeps_the_figure_runs_ranges():
+    """Class: follow-ups after a figure run lost its settings (paper 01's follow-up tested whole domains)."""
+    from app.agent.session import inherit_settings
+    prev = {"dataset": "adk_equilibrium", "group_a": "LID", "group_b": "CORE", "residue_ranges": {"CORE": [100, 121]}}
+    assert inherit_settings({**prev, "residue_ranges": None}, prev)["residue_ranges"] == {"CORE": [100, 121]}
+    swapped = {**prev, "group_a": "CORE", "group_b": "LID", "residue_ranges": None}  # the planner may swap the order
+    assert inherit_settings(swapped, prev)["residue_ranges"] == {"CORE": [100, 121]}
+    assert "residue_ranges" not in inherit_settings({"dataset": "adk_equilibrium", "group_a": "NMP", "group_b": "CORE"}, prev)
+
+
+def test_a_figure_plan_remembers_the_session(monkeypatch, tmp_path):
+    from app.agent import session
+    monkeypatch.setattr(session, "PLANS_DIR", tmp_path)
+
+    class L:
+        provider, model = "meta", "fake"
+    out = session._store_figure_plan(L(), {"question": "q", "plan": PLAN, "figure": {"spec": {}}, "usages": []}, [], "sess12345678")
+    assert session.PLANS[out["plan_id"]]["session_id"] == "sess12345678"
+    session.PLANS.pop(out["plan_id"])
+
+
+def test_a_residue_number_outside_the_protein_is_stopped_before_planning():
+    """Class: "Does residue 300 contact the LID?" was planned and answered (AdK has 214 residues)."""
+    from app.agent.limits import residue_check
+    r = residue_check("Does residue 300 contact the LID?", "adk_transition")
+    assert r and r["verdict"] == "check_residue" and "no residue 300" in r["message"]
+    assert residue_check("Does residue 30 contact the LID?", "adk_transition") is None
+
+
+def test_a_pdf_read_as_text_also_sends_its_figure():
+    """Class: Muse Spark Open (chat API, no PDF parts) got nothing from a PDF and called it 'not a figure'."""
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (600, 380), "white").save(buf, "PDF")
+    parts = figure._content([("paper.pdf", "application/pdf", buf.getvalue())], pdf_as_text=True)
+    assert [p["type"] for p in parts] == ["input_text", "input_image"]

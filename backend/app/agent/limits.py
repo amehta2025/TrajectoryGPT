@@ -87,6 +87,11 @@ def residue_check(question: str, dataset: str) -> dict | None:
         return {"verdict": "check_residue", "message": message, "examples": [], "ask_anyway": False,
                 "why": question[start:end],
                 "choices": [{"label": lb, "question": question[:start] + lb + question[end:]} for lb in labels]}
+    for m in RES_NUMBER.finditer(question):  # "residue 300" with no name: nothing to plan on outside 1..N
+        n = int(m[1])
+        if n not in names:
+            return {"verdict": "check_residue", "examples": [], "ask_anyway": False, "why": m[0], "choices": [],
+                    "message": f"There is no residue {n}: this protein has residues {first}–{last}. Ask again with one in that range."}
     return None
 
 

@@ -91,6 +91,32 @@
       "autoPort": false
     },
     {
+      "name": "backend-sweep",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
+      "env": {
+        "RATE_LIMIT_PLAN_PER_HOUR": "1000", "RATE_LIMIT_PLAN_PER_SESSION": "1000",
+        "RATE_LIMIT_FIGURE_PER_HOUR": "1000", "RATE_LIMIT_FIGURE_PER_SESSION": "1000",
+        "RATE_LIMIT_RUN_PER_HOUR": "1000", "RATE_LIMIT_RUN_PER_SESSION": "1000",
+        "DAILY_LLM_BUDGET_USD": "6.1", "SKIP_VERIFIER": "1"
+      },
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "backend-sweep-verify",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8000"],
+      "env": {
+        "RATE_LIMIT_PLAN_PER_HOUR": "1000", "RATE_LIMIT_PLAN_PER_SESSION": "1000",
+        "RATE_LIMIT_FIGURE_PER_HOUR": "1000", "RATE_LIMIT_FIGURE_PER_SESSION": "1000",
+        "RATE_LIMIT_RUN_PER_HOUR": "1000", "RATE_LIMIT_RUN_PER_SESSION": "1000",
+        "DAILY_LLM_BUDGET_USD": "6.1"
+      },
+      "port": 8000,
+      "autoPort": false
+    },
+    {
       "name": "backend-passcode",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": [
