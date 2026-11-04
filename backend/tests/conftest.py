@@ -21,3 +21,15 @@ def _tmp_plan_store(tmp_path, monkeypatch):
     from app.agent import session
     monkeypatch.setattr(session, "PLANS_DIR", tmp_path / "plans")
     monkeypatch.setattr(session, "CLAIMS", session.FileClaims())
+
+
+@pytest.fixture(autouse=True)
+def _no_paid_verifier(monkeypatch):
+    """Tests never call the real second-AI check (Muse Wonder costs money; it ran on every API test run whenever
+    a key was in .env). Runs skip the check; a test that exercises it passes its own fake LLM."""
+    monkeypatch.setenv("SKIP_VERIFIER", "1")
+    from app.agent import verifier
+
+    def offline(*a, **k):
+        raise RuntimeError("tests do not call the real verifier")
+    monkeypatch.setattr(verifier, "verifier_llm", offline)

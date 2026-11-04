@@ -367,6 +367,8 @@ def start_run(plan_id: str, edits: dict, step_through: bool = False, confirmed_f
         # SKIP_VERIFIER=1 is for local test sweeps only (never set on the deploy): the second-AI check is left out.
         if run.status == "awaiting_verification" and os.environ.get("SKIP_VERIFIER") != "1":
             verify_in_background(run, handle.emit, plant)
+        elif run.status == "awaiting_verification":  # skipped: still end the event stream
+            handle.emit({"type": "verification_finished", "status": run.status, "verification": None})
         if ON_RUN_FINISHED:
             ON_RUN_FINISHED()
 

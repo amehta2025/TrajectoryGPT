@@ -211,8 +211,11 @@ def main() -> None:
     ap.add_argument("--verify", action="store_true", help="wait for the second-AI check and count flags as failures")
     ap.add_argument("--only", default="", help="'demo' or a comma list of case ids")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--no-followups", default="", help="comma list of case ids to run without their follow-ups")
     a = ap.parse_args()
     cases = DEMO_CASES if a.only == "demo" else [c for c in CASES if not a.only or c[0] in a.only.split(",")]
+    skip_fu = set(a.no_followups.split(","))
+    cases = [c[:6] + (False,) if c[0] in skip_fu else c for c in cases]
     cl = Client(a.base, a.verify)
     OUT.mkdir(parents=True, exist_ok=True)
     rows: list[dict] = []
