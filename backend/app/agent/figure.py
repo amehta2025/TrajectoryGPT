@@ -131,6 +131,27 @@ def _content(files: list[tuple[str, str, bytes]], pdf_as_text: bool) -> list[dic
     return parts
 
 
+COLORMAPS = ["viridis", "magma", "greys", "blues", "reds", "red_blue", "other"]
+
+
+def display_schema() -> dict:
+    """How the published figure is drawn (axes, residue ranges, colour scale, reference line), so ours can be
+    drawn the same way for a side-by-side look. Display only: it never changes what is computed."""
+    num = {"anyOf": [{"type": "number"}, {"type": "null"}]}
+    axis = {"type": "object", "properties": {
+        "title": {"type": "string"},
+        "group": {"type": "string", "enum": ["LID", "NMP", "CORE", "none"]},
+        "residue_min": num, "residue_max": num},
+        "required": ["title", "group", "residue_min", "residue_max"], "additionalProperties": False}
+    return {"type": "object", "properties": {
+        "x": axis, "y": axis, "color_min": num, "color_max": num,
+        "colormap": {"type": "string", "enum": COLORMAPS},
+        "time_unit": {"type": "string", "enum": ["ns", "us", "ps", "frame", "none"]},
+        "reference_line": num, "y_min": num, "y_max": num},
+        "required": ["x", "y", "color_min", "color_max", "colormap", "time_unit", "reference_line", "y_min", "y_max"],
+        "additionalProperties": False}
+
+
 def spec_schema() -> dict:
     datasets = sorted(load_config()["datasets"])
     field = {"type": "object", "properties": {
@@ -153,9 +174,10 @@ def spec_schema() -> dict:
                         "description": "Our dataset the figure was made from, or none."},
             "mode_reason": {"type": "string", "description": "Why exact or transfer; cite the evidence."},
             "fields": {"type": "array", "items": field},
+            "display": display_schema(),
             "question": {"type": "string", "description": "The analysis to run, as a plain request for the planner."},
         },
-        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "question"],
+        "required": ["summary", "is_figure", "kind", "mode", "dataset", "mode_reason", "fields", "display", "question"],
         "additionalProperties": False,
     }}
 

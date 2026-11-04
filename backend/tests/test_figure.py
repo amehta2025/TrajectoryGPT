@@ -283,3 +283,28 @@ def test_read_in_replay_mode_returns_the_recorded_plan_or_a_clear_miss(monkeypat
         assert r.status_code == 200 and r.json()["proposal"]["plan_id"].startswith("replay:")
     miss = c.post("/figure/read", json={"files": [{"filename": "f.png", "mime": "image/png", "data": b64(PNG + b"other")}]})
     assert miss.status_code == 409 and miss.json()["detail"]["replay"] is True
+
+
+def test_native_settings_are_validated_plan_parameters():
+    from app.agent.planner import to_approved, validate_plan
+    ok = {**PLAN, "native_radius": 6.0, "native_selection": "heavy atoms", "ref_frames": [0]}
+    a = to_approved(ok)
+    assert (a.native_radius, a.native_selection, a.ref_frames) == (6.0, "heavy atoms", [0])
+    assert to_approved(PLAN).native_radius == 8.0  # a plan made before these settings existed
+    errs = validate_plan({**PLAN, "native_radius": 40, "native_selection": "LID CORE", "ref_frames": [500]})
+    assert len([e for e in errs if "native_" in e or "ref_frames" in e]) == 3
+
+
+def test_spec_schema_has_a_display_block_strict_mode_accepts():
+    s = figure.spec_schema()["schema"]
+    d = s["properties"]["display"]
+    assert "display" in s["required"] and set(d["required"]) == set(d["properties"]) and d["additionalProperties"] is False
+    assert d["properties"]["x"]["properties"]["residue_min"] == {"anyOf": [{"type": "number"}, {"type": "null"}]}
+
+
+def test_reproduction_check_is_refused_off_the_published_data():
+    """The published Q1/Q2 figure was made from adk_transition; on another trajectory there is nothing to
+    reproduce (the agent once added the check to a method transfer on adk_equilibrium)."""
+    s = RunState(ApprovedPlan("adk_equilibrium", "LID", "CORE", 4.5, [0, 4187], steps=PLAN["steps"]))
+    r = run_tool(s, "reproduction_check", "{}")
+    assert r["status"] == "refused" and "adk_transition" in r["summary_for_model"]

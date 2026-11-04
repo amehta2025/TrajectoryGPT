@@ -199,11 +199,19 @@ def test_results_carry_provenance():
     assert set(p["library_versions"]) == {"MDAnalysis", "numpy", "scipy"} and p["timestamp"].endswith("+00:00")
 
 
-def test_native_contacts_selection_is_restricted():
+def test_native_contacts_settings_come_from_the_approved_plan():
+    """Atoms, radius and reference frames are approved plan settings: the agent cannot change them, and a
+    user's edit (radius 6 Å) is what runs."""
     s = new_state([{"tool": "native_contacts"}])
     r = call(s, "native_contacts", selection="LID CORE")
-    assert r["status"] == "refused" and "selection must be one of" in r["summary_for_model"]
-    assert call(s, "native_contacts", selection="name CA")["status"] == "ok"
+    assert r["status"] == "refused" and "fixed by the approved plan" in r["summary_for_model"]
+    assert call(s, "native_contacts", radius=6.0)["status"] == "refused"
+    assert call(s, "native_contacts", selection="name CA", radius=8)["status"] == "ok"  # the approved values are fine
+    s6 = RunState(ApprovedPlan(DS, "NMP", "CORE", 4.5, [0, 98], native_radius=6.0, steps=[{"tool": "native_contacts"}]))
+    r6 = call(s6, "native_contacts")
+    assert r6["status"] == "ok" and json.loads(r6["summary_for_model"])["radius_A"] == 6.0
+    bad = RunState(ApprovedPlan(DS, "NMP", "CORE", 4.5, [0, 98], native_selection="LID CORE", steps=[{"tool": "native_contacts"}]))
+    assert call(bad, "native_contacts")["status"] == "refused"
 
 
 # ---------- difference map and flexibility (SPEC §10b a, e) ----------

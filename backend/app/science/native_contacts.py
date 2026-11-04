@@ -84,30 +84,46 @@ def native_contacts(
 REPRO_TOLERANCE = 1e-6  # max |ours - published code| for an exact reproduction
 
 
-def reproduction_check(dataset: str, selection: str = "name CA", radius: float = 8.0) -> dict:
-    """Exact-reproduction check (SPEC §5c): our native_contacts vs the published method itself.
+# The published figure's settings (MDAnalysis User Guide, Q1 vs Q2): contacts.q1q2(u, 'name CA', radius=8),
+# Q1 against the first frame and Q2 against the last. The reference is always computed with these.
+PUBLISHED = {"selection": "name CA", "radius": 8.0, "ref_frames": [0, -1]}
+PUBLISHED_DATASET = "adk_transition"  # the published figure was made from this trajectory; comparing another is meaningless
 
-    The reference is the MDAnalysis User Guide's code, contacts.q1q2(u, selection, radius), run in a fresh
-    Universe. Ours is native_contacts() with the same parameters and reference frames 0 and last.
+
+def reproduction_check(dataset: str, selection: str = "name CA", radius: float = 8.0,
+                       ref_frames: tuple[int, ...] = (0, -1)) -> dict:
+    """Exact-reproduction check (SPEC §5c): our native_contacts, with the approved settings, vs the published
+    figure itself, i.e. the MDAnalysis User Guide's code at the published settings (PUBLISHED), run in a fresh
+    Universe. With the published settings the two agree to rounding; a user's edit (say radius 6 Å) is
+    reported as a mismatch, with the settings that changed, rather than re-running the published code at 6 Å.
     """
     if not (RADIUS_MIN <= radius <= RADIUS_MAX):
         raise ValueError(f"radius must be between {RADIUS_MIN} and {RADIUS_MAX} Å, got {radius}")
-    ours = native_contacts(dataset, selection, radius, (0, -1))
+    ours = native_contacts(dataset, selection, radius, tuple(ref_frames))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         u = mda.Universe(*dataset_files(dataset))
-    ref = contacts.q1q2(u, selection, radius=radius).run().results.timeseries  # columns: frame, Q1, Q2
-    if ref.shape != (len(ours["frames"]), 3) or not np.array_equal(ref[:, 0].astype(int), ours["frames"]):
+    ref = contacts.q1q2(u, PUBLISHED["selection"], radius=PUBLISHED["radius"]).run().results.timeseries  # frame, Q1, Q2
+    if ref.shape[0] != len(ours["frames"]) or not np.array_equal(ref[:, 0].astype(int), ours["frames"]):
         raise ValueError("reference and our frames differ; cannot compare")
-    diff = np.abs(ours["q"] - ref[:, 1:])
-    max_diff = float(diff.max())
+    n = ours["q"].shape[0]
+    published_refs = [f % n for f in PUBLISHED["ref_frames"]]
+    changed = {k: {"published": PUBLISHED[k], "ours": v} for k, v in
+               (("selection", selection), ("radius", float(radius)), ("ref_frames", ours["ref_frames"]))
+               if (v != published_refs if k == "ref_frames" else v != PUBLISHED[k])}
+    q = ours["q"]
+    k = min(q.shape[1], 2)  # one reference frame is compared with Q1 only
+    diff = np.abs(q[:, :k] - ref[:, 1:1 + k])
+    max_diff, n_values = float(diff.max()), int(diff.size)
+    last = q.shape[1] - 1
     return {
         "dataset": dataset, "selection": selection, "radius": float(radius), "ref_frames": ours["ref_frames"],
-        "frames": ours["frames"], "time_ns": ours["time_ns"], "ours": ours["q"], "reference": ref[:, 1:],
-        "max_abs_diff": max_diff, "n_values": int(diff.size), "tolerance": REPRO_TOLERANCE,
-        "match": max_diff <= REPRO_TOLERANCE,
-        "reference_method": f"MDAnalysis.analysis.contacts.q1q2(u, {selection!r}, radius={radius}) (MDAnalysis User Guide)",
-        "endpoints": {"q1_first": float(ours["q"][0, 0]), "q1_last": float(ours["q"][-1, 0]),
-                      "q2_first": float(ours["q"][0, 1]), "q2_last": float(ours["q"][-1, 1])},
+        "frames": ours["frames"], "time_ns": ours["time_ns"], "ours": q, "reference": ref[:, 1:],
+        "max_abs_diff": max_diff, "n_values": n_values, "tolerance": REPRO_TOLERANCE,
+        "match": max_diff <= REPRO_TOLERANCE, "published": PUBLISHED, "changed": changed,
+        "reference_method": (f"MDAnalysis.analysis.contacts.q1q2(u, {PUBLISHED['selection']!r}, radius={PUBLISHED['radius']}) "
+                             "(MDAnalysis User Guide, the published settings)"),
+        "endpoints": {"q1_first": float(q[0, 0]), "q1_last": float(q[-1, 0]),
+                      "q2_first": float(q[0, last]), "q2_last": float(q[-1, last])},
         "units": ours["units"],
     }

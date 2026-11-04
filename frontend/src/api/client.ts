@@ -118,6 +118,10 @@ export type Plan = {
   stride: number
   sequence_exclusion: number
   robustness_cutoffs: number[]
+  // Native contacts (figure mode); approved like the cutoff. Absent on plans made before 2026-11-03.
+  native_selection?: 'name CA' | 'heavy atoms'
+  native_radius?: number
+  ref_frames?: number[]
   steps: PlanStep[]
   notes?: string[] // code-written: what the question asks that the data cannot give (e.g. a longer time range)
 }
@@ -143,8 +147,18 @@ export type FigureSpec = {
   dataset: string
   mode_reason: string
   fields: SpecField[]
+  display?: FigureDisplay // how the published figure is drawn; absent on figures read before 2026-11-03
   question: string
   pdf_fallback: boolean
+}
+
+export type FigureAxis = { title: string; group: 'LID' | 'NMP' | 'CORE' | 'none'; residue_min: number | null; residue_max: number | null }
+export type FigureDisplay = {
+  x: FigureAxis; y: FigureAxis
+  color_min: number | null; color_max: number | null
+  colormap: 'viridis' | 'magma' | 'greys' | 'blues' | 'reds' | 'red_blue' | 'other'
+  time_unit: 'ns' | 'us' | 'ps' | 'frame' | 'none'
+  reference_line: number | null; y_min: number | null; y_max: number | null
 }
 
 export type Figure = { figure_id: string; filename: string; mime: string; spec: FigureSpec }
@@ -281,7 +295,7 @@ export type Verification = {
 export type RunView = {
   run_id: string
   question: string
-  plan?: { notes?: string[] } // the approved plan (only its data notes are read here)
+  plan?: Partial<Plan> & { notes?: string[] } // the approved plan, as the run used it (after the user's edits)
   status: RunStatus
   checklist: ChecklistItem[]
   turns: Turn[]

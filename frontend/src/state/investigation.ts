@@ -22,11 +22,29 @@ export type Investigation = {
   science: boolean // "Show the science": technical detail (statistics, units, residue codes, charts, logs) is visible
   declined: (Declined & { question: string; followUp: boolean }) | null // turned away before planning, or a residue to pick
   notice: string | null // a status line while planning, e.g. "This plan expired. Re-planning…"
+  edits: Partial<Plan> // the user's changes to the proposed plan (figure rows and Settings); Run sends them
+  rows: Record<string, 'confirmed' | 'edited'> // figure-setting rows the user confirmed ("Looks right") or edited
+  editSeq: number // bumped by a row edit, so the Settings fold re-reads the edited values
 }
 
 const empty: Investigation = {
   phase: 'idle', question: '', dataset: '', proposal: null, runId: null, events: [], run: null, paused: false, error: null, needPasscode: false,
   kicker: 'You asked', figureRead: null, unsupported: null, science: false, declined: null, notice: null,
+  edits: {}, rows: {}, editSeq: 0,
+}
+
+/** A figure-setting row's edit: merged into the plan Run sends (the backend validates it again). */
+export function editPlan(patch: Partial<Plan>, row?: string) {
+  set({
+    edits: { ...state.edits, ...patch },
+    ...(row ? { rows: { ...state.rows, [row]: 'edited' as const }, editSeq: state.editSeq + 1 } : {}),
+    error: null,
+  })
+}
+
+/** "Looks right" on an inferred row. */
+export function confirmRow(row: string) {
+  if (state.rows[row] !== 'edited') set({ rows: { ...state.rows, [row]: 'confirmed' } })
 }
 const EXPIRED_NOTICE = 'This plan expired. Re-planning…'
 let replanning = false // set while a plan the server lost is planned again
@@ -158,6 +176,7 @@ async function refresh(runId: string) {
 export async function approve(edits: Partial<Plan>, stepThrough: boolean, plantOverclaim = false) {
   const proposal = state.proposal
   if (!proposal) return
+  edits = { ...state.edits, ...edits } // figure-row edits, then the Settings fold (which starts from them)
   const p = { ...proposal.plan, ...edits }
   try {
     // Figure plans: "Confirm & run" is the user's one review of every setting read from the figure, including

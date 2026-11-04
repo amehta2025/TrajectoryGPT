@@ -17,6 +17,11 @@ Rules:
 - If the question names a specific residue pair, use the pair's groups and include contact_statistics.
 - Reproducing a published fraction-of-native-contacts (Q1/Q2) figure made from adk_transition is an exact
   reproduction: plan native_contacts, then reproduction_check, then submit_report, on adk_transition.
+- native_selection, native_radius and ref_frames are the native-contacts settings (atoms, radius in Å,
+  reference frames; negative counts from the end). Set them from the figure's spec when native_contacts is
+  planned: a single "first frame" reference is [0], "last frame" [-1], first and last [0, -1] (the User Guide
+  figure: 'name CA', 8.0, [0, -1]). Otherwise leave 'name CA', 8.0, [0, -1]. reproduction_check is only for the
+  exact reproduction on adk_transition; never plan it for a method transfer.
 - A method transfer applies the figure's method to the selected dataset with the closest tools (a contact map
   -> calculate_contacts; a difference contact map -> contact_difference_map, after compare_intervals on the same
   windows where statistics are allowed; a distance trace -> distance_over_time; an RMSF plot ->
@@ -70,10 +75,11 @@ Report:
 - submit_report with finding_ids, hedged hypotheses (possible explanations, never claims), caveats, gaps
   (what you could not establish) and follow_ups (each a tool plus a rationale).
 - If a tool or submit_report is refused, read the listed problems, fix them, and try again.
-- Figure reproduction: call native_contacts with the extracted settings (selection, radius, reference frames),
-  then reproduction_check, then record a descriptive finding citing the reproduction_check result with its
-  placeholders (e.g. {{r2.max_abs_diff}}, {{r2.match}}). For a method transfer, say the numbers are not
-  expected to match the figure's.
+- Figure reproduction: call native_contacts (its atoms, radius and reference frames are fixed by the approved
+  plan; do not pass them), then reproduction_check, then record a descriptive finding citing the reproduction_check result with its
+  placeholders (e.g. {{r2.max_abs_diff}}, {{r2.match}}). If reproduction_check lists settings changed from the
+  published ones, say the user changed them, so the run is not expected to match the published figure.
+  For a method transfer, say the numbers are not expected to match the figure's.
 - If the dataset refuses statistics (or a stats tool is refused), say so and record descriptive findings from the
   non-statistical results you have; do not stop without a finding.
 - For a very general question, also give one to three short "background" items in submit_report: textbook
@@ -126,9 +132,16 @@ Rules:
   frames or structures, x axis, y axis, contact definition. value is text with units. source is where you read
   it (caption, methods, axis); use "assumed" with low confidence when you infer a value. Use low confidence whenever you are unsure, including
   for values read off a blurry axis; the user confirms every low-confidence setting before anything runs. Never
-  invent precision.
+  invent precision. Write Å for angstroms (8 Å, not 8 A).
+- display: how the figure is drawn, read off the plot itself, so our version can be drawn the same way. x and y:
+  the axis title as printed; group: the protein domain on that axis (LID, NMP or CORE) or "none"; residue_min /
+  residue_max: the first and last residue numbers the axis spans (null if it is not a residue axis). color_min /
+  color_max: the colour-bar limits (null without a colour bar); colormap: the nearest of the listed scales.
+  time_unit: the unit of a time axis (ns, us, ps, frame, or none). reference_line: the value of a horizontal
+  reference line such as a dashed cutoff (null if none). y_min / y_max: the y-axis limits of a line plot (null for
+  maps or when unclear).
 - question: the analysis to run, written as a plain request (e.g. "Compute the fraction of native contacts Q1
-  and Q2 along the transition path with C-alpha atoms and an 8 A radius, and check it against the published code").
+  and Q2 along the transition path with C-alpha atoms and an 8 Å radius, and check it against the published code").
 """
 
 

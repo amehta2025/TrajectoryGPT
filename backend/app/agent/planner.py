@@ -6,11 +6,14 @@ from __future__ import annotations
 
 from app.agent import prompts
 from app.agent.llm import EFFORT, LLM
-from app.agent.tools import STATS_TOOLS, ApprovedPlan
+from app.agent.tools import NATIVE_SELECTIONS, STATS_TOOLS, ApprovedPlan
 from app.config import dataset_config, load_config
 from app.science import contact_stats as cs
 from app.science.contacts import CUTOFF_MAX, CUTOFF_MIN, SEQ_EXCLUSION_MAX
 from app.science.loader import TRAJ_LOCK, load_universe
+from app.science.native_contacts import RADIUS_MAX, RADIUS_MIN
+
+NATIVE_DEFAULTS = {"native_selection": "name CA", "native_radius": 8.0, "ref_frames": [0, -1]}
 
 MAX_STEPS = 5
 PLAN_TOOLS = ["get_metadata", "list_groups", "calculate_contacts", "distance_over_time", "compare_intervals", "contact_statistics",
@@ -44,13 +47,18 @@ def plan_schema() -> dict:
             "stride": {"type": "integer"},
             "sequence_exclusion": {"type": "integer"},
             "robustness_cutoffs": {"type": "array", "items": {"type": "number"}},
+            "native_selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS),
+                                 "description": "Atoms for native_contacts; 'name CA' when unused."},
+            "native_radius": {"type": "number", "description": "Native-contact radius in Å; 8.0 when unused."},
+            "ref_frames": {"type": "array", "items": {"type": "integer"},
+                           "description": "Reference frames for native_contacts (negative counts from the end); [0, -1] when unused."},
             "steps": {"type": "array", "items": {
                 "type": "object",
                 "properties": {"tool": {"type": "string", "enum": PLAN_TOOLS}, "rationale": {"type": "string"}},
                 "required": ["tool", "rationale"], "additionalProperties": False}},
         },
         "required": ["summary", "dataset", "group_a", "group_b", "cutoff", "window_a", "window_b", "stride",
-                     "sequence_exclusion", "robustness_cutoffs", "steps"],
+                     "sequence_exclusion", "robustness_cutoffs", "native_selection", "native_radius", "ref_frames", "steps"],
         "additionalProperties": False,
     }}
 
@@ -99,6 +107,7 @@ def validate_plan(p: dict) -> list[str]:
         errs.append("stride must be an integer >= 1")
     if not isinstance(p.get("sequence_exclusion"), int) or not 0 <= p["sequence_exclusion"] <= SEQ_EXCLUSION_MAX:
         errs.append(f"sequence_exclusion must be 0..{SEQ_EXCLUSION_MAX}")
+    errs += _native_errors(p, n)
     try:
         cs.validate_robustness_cutoffs(p.get("robustness_cutoffs") or [], c)
     except ValueError as e:
@@ -122,6 +131,21 @@ def validate_plan(p: dict) -> list[str]:
     return errs
 
 
+def _native_errors(p: dict, n_frames: int) -> list[str]:
+    """Native-contacts settings; a plan made before they existed gets the published defaults."""
+    errs = []
+    if p.get("native_selection", NATIVE_DEFAULTS["native_selection"]) not in NATIVE_SELECTIONS:
+        errs.append(f"native_selection must be one of {sorted(NATIVE_SELECTIONS)}")
+    r = p.get("native_radius", NATIVE_DEFAULTS["native_radius"])
+    if not isinstance(r, (int, float)) or isinstance(r, bool) or not RADIUS_MIN <= r <= RADIUS_MAX:
+        errs.append(f"native_radius must be between {RADIUS_MIN} and {RADIUS_MAX} Å, got {r}")
+    refs = p.get("ref_frames", NATIVE_DEFAULTS["ref_frames"])
+    if not (isinstance(refs, list) and 1 <= len(refs) <= 4
+            and all(isinstance(f, int) and not isinstance(f, bool) and -n_frames <= f < n_frames for f in refs)):
+        errs.append(f"ref_frames must be 1-4 frame indices within -{n_frames}..{n_frames - 1}, got {refs}")
+    return errs
+
+
 def to_approved(p: dict) -> ApprovedPlan:
     errs = validate_plan(p)
     if errs:
@@ -131,6 +155,9 @@ def to_approved(p: dict) -> ApprovedPlan:
         window_a=list(p["window_a"]), window_b=list(p["window_b"]) if p.get("window_b") else None,
         stride=p["stride"], sequence_exclusion=p["sequence_exclusion"],
         robustness_cutoffs=cs.validate_robustness_cutoffs(p["robustness_cutoffs"], p["cutoff"]),
+        native_selection=p.get("native_selection", NATIVE_DEFAULTS["native_selection"]),
+        native_radius=float(p.get("native_radius", NATIVE_DEFAULTS["native_radius"])),
+        ref_frames=list(p.get("ref_frames", NATIVE_DEFAULTS["ref_frames"])),
         steps=[{"tool": s["tool"], "rationale": s["rationale"]} for s in p["steps"]],
         notes=[str(n) for n in p.get("notes") or []],
     )

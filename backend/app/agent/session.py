@@ -23,7 +23,8 @@ from app.agent.tools import res_label
 from app.safety import budget
 
 RUN_BUDGET_USD = float(os.environ.get("RUN_BUDGET_USD", "0.50"))
-EDITABLE = ("cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b")
+EDITABLE = ("cutoff", "robustness_cutoffs", "window_a", "window_b", "stride", "sequence_exclusion", "group_a", "group_b",
+            "native_selection", "native_radius", "ref_frames")
 
 
 @dataclass

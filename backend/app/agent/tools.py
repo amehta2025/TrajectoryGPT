@@ -28,7 +28,7 @@ from app.science.distances import distance_over_time
 from app.science.domain_opening import REFERENCE as OPENING_REFERENCE, domain_opening
 from app.science.flexibility import residue_flexibility
 from app.science.loader import TRAJ_LOCK, load_universe
-from app.science.native_contacts import native_contacts, reproduction_check
+from app.science.native_contacts import PUBLISHED_DATASET, native_contacts, reproduction_check
 from app.science.residues import make_residue_key, parse_residue_key
 
 TOP_N = 8  # rows per table in a model summary (keeps it well under ~2k tokens)
@@ -50,6 +50,10 @@ class ApprovedPlan:
     stride: int = 1
     sequence_exclusion: int = 2
     robustness_cutoffs: list[float] = field(default_factory=lambda: list(cs.DEFAULT_ROBUST_CUTOFFS))
+    # Native contacts (figure mode): approved like the cutoff, so a user's edit is what runs.
+    native_selection: str = "name CA"  # a key of NATIVE_SELECTIONS
+    native_radius: float = 8.0         # Å
+    ref_frames: list[int] = field(default_factory=lambda: [0, -1])
     steps: list[dict] = field(default_factory=list)  # [{tool, rationale}]
     notes: list[str] = field(default_factory=list)  # code-written data notes (agent/limits.py), shown as caveats
 
@@ -381,16 +385,24 @@ def _cutoff_sensitivity(plan, args):
     return r, summary, values, out_pairs
 
 
+def _native_settings(plan, args) -> tuple[str, float, tuple[int, ...]]:
+    """Selection, radius and reference frames come from the approved plan (the user may have edited them);
+    a call that asks for different ones is refused, like a call that changes the cutoff."""
+    asked = {"selection": plan.native_selection, "radius": plan.native_radius, "ref_frames": list(plan.ref_frames)}
+    for k, approved in asked.items():
+        v = args.get(k)
+        if v is not None and v != approved and not (k == "radius" and isinstance(v, (int, float)) and float(v) == approved):
+            raise Refused(f"{k} is fixed by the approved plan ({approved}); call without it")
+    if plan.native_selection not in NATIVE_SELECTIONS:
+        raise Refused(f"selection must be one of {sorted(NATIVE_SELECTIONS)}")
+    return NATIVE_SELECTIONS[plan.native_selection], float(plan.native_radius), tuple(int(f) for f in plan.ref_frames)
+
+
 def _native_contacts(plan, args):
     start, stop = _window(plan, args.get("window") or "all")
-    label = args.get("selection") or "name CA"
-    if label not in NATIVE_SELECTIONS:
-        raise Refused(f"selection must be one of {sorted(NATIVE_SELECTIONS)}")
-    selection = NATIVE_SELECTIONS[label]
-    radius = float(args.get("radius") or 8.0)
-    ref = args.get("ref_frames") or [0, -1]
+    selection, radius, ref = _native_settings(plan, args)
     with TRAJ_LOCK:
-        r = native_contacts(plan.dataset, selection, radius, tuple(int(f) for f in ref), start, stop, plan.stride)
+        r = native_contacts(plan.dataset, selection, radius, ref, start, stop, plan.stride)
     q = r["q"]
     values, per_ref = {}, []
     for k, f in enumerate(r["ref_frames"]):
@@ -404,18 +416,19 @@ def _native_contacts(plan, args):
 
 
 def _reproduction_check(plan, args):
-    label = args.get("selection") or "name CA"
-    if label not in NATIVE_SELECTIONS:
-        raise Refused(f"selection must be one of {sorted(NATIVE_SELECTIONS)}")
-    radius = float(args.get("radius") or 8.0)
+    if plan.dataset != PUBLISHED_DATASET:  # e.g. the agent adding it to a method transfer on adk_equilibrium
+        raise Refused(f"the published Q1/Q2 figure was made from {PUBLISHED_DATASET}; there is nothing to reproduce on "
+                      f"{plan.dataset}. For a method transfer, say the numbers are not expected to match.")
+    selection, radius, ref = _native_settings(plan, args)
     with TRAJ_LOCK:
-        r = reproduction_check(plan.dataset, NATIVE_SELECTIONS[label], radius)
+        r = reproduction_check(plan.dataset, selection, radius, ref)
     e = r["endpoints"]
     values = {"max_abs_diff": _v(r["max_abs_diff"], "sci"), "tolerance": _v(r["tolerance"], "sci"),
               "n_values": _v(r["n_values"], "count"), "match": _v(r["match"], "match"),
               **{k: _v(v, "freq") for k, v in e.items()}}
     summary = {"reference": r["reference_method"], "match": r["match"], "max_abs_diff": r["max_abs_diff"],
-               "tolerance": r["tolerance"], "n_values": r["n_values"], "endpoints": {k: _r(v) for k, v in e.items()}}
+               "tolerance": r["tolerance"], "n_values": r["n_values"], "endpoints": {k: _r(v) for k, v in e.items()},
+               "changed_from_published": r["changed"]}
     return r, summary, values, {}
 
 
@@ -442,8 +455,8 @@ SCHEMAS = [
     _tool("contact_difference_map", "Contact-frequency change per residue pair, window B minus window A, for the approved groups and cutoff. Raw differences; pairs are marked supported only if compare_intervals already ran on the same windows. Not statistically tested on a stats-invalid dataset.", {}),
     _tool("residue_flexibility", "Per-residue C-alpha RMSF over an approved window, after superposing CORE C-alphas. On a biased path this is a path RMSF, not equilibrium flexibility.", {"window": WINDOW}),
     _tool("domain_opening", "How open a mobile domain (LID or NMP) is in each frame: the centre-of-mass distance between it and CORE, in Å. Descriptive, not statistically tested. The domain must be one of the approved groups.", {"domain": {"type": "string", "description": "LID or NMP; must be an approved group. Default: the approved group that is not CORE."}, "window": WINDOW}),
-    _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method).", {"window": WINDOW, "selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS), "description": "Atoms used: 'name CA' (default, as in the User Guide) or 'heavy atoms'."}, "radius": {"type": "number"}, "ref_frames": {"type": "array", "items": {"type": "integer"}}}),
-    _tool("reproduction_check", "Exact-reproduction check: run the published MDAnalysis User Guide code (contacts.q1q2) and compare it with our native_contacts (reference frames first and last); reports the largest difference and whether it is within tolerance.", {"selection": {"type": "string", "enum": sorted(NATIVE_SELECTIONS)}, "radius": {"type": "number"}}),
+    _tool("native_contacts", "Fraction of native contacts per frame against reference frames (MDAnalysis Q1/Q2 method). Atom selection, radius and reference frames are fixed by the approved plan.", {"window": WINDOW}),
+    _tool("reproduction_check", "Exact-reproduction check: compares our native contacts (with the approved selection, radius and reference frames) with the published MDAnalysis User Guide code at the published settings (contacts.q1q2, name CA, 8 Å); reports the largest difference, whether it is within tolerance, and which approved settings differ from the published ones.", {}),
     _tool("update_checklist", "Mark a plan item done, in progress or skipped (a skip needs a reason in note).", {"item": {"type": "integer", "description": "1-based plan item"}, "status": {"type": "string", "enum": ["in_progress", "done", "skipped"]}, "note": {"type": "string"}}, ["item", "status"]),
     _tool("record_finding", "Record one finding. Text uses placeholders like {{r2.HSE134-ASP118.delta}} for every number; never write numbers. Cite evidence ids (a result 'r2' or a pair 'r2.HSE134-ASP118').", {
         "text": {"type": "string"},

@@ -94,7 +94,7 @@ function editsOf(p: Plan, d: Draft): Partial<Plan> {
  *  settingsOpen lets the page's Edit button open that fold. */
 export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta: Metadata | null; compact?: boolean; settingsOpen?: boolean }) {
   const inv = useInvestigation()
-  const { phase, proposal, run, error } = inv
+  const { phase, proposal, run, error, edits, editSeq } = inv
   const [draft, setDraft] = useState<Draft | null>(null)
   const [stepThrough, setStepThrough] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -104,9 +104,10 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
     api.health().then((h) => setCanPlant(h.dev_overclaim_toggle), () => {})
   }, [])
 
+  // The Settings fold starts from the plan with the user's figure-row edits (re-read after each row edit).
   useEffect(() => {
-    if (proposal) setDraft(draftOf(proposal.plan))
-  }, [proposal])
+    if (proposal) setDraft(draftOf({ ...proposal.plan, ...edits }))
+  }, [proposal, editSeq]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'planning') {
     const status = inv.kicker === 'Recorded run'
@@ -116,7 +117,7 @@ export function PlanCard({ meta, compact = false, settingsOpen = false }: { meta
     return <section className="card plan-card"><h2>Analysis plan</h2><p className="muted plan-status">{status}</p></section>
   }
   if (!proposal || !draft) return null
-  const p = proposal.plan
+  const p = { ...proposal.plan, ...edits }
   const locked = phase !== 'plan'
   const fixed = locked || !!proposal.recorded // a recorded plan (replay mode) cannot be edited, only run
   const checklist = run?.checklist

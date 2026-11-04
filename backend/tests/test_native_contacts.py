@@ -61,3 +61,13 @@ def test_reproduction_check_detects_a_mismatch(monkeypatch):
     real = nc.native_contacts
     monkeypatch.setattr(nc, "native_contacts", lambda *a, **k: {**(r := real(*a, **k)), "q": r["q"] + 1e-3})
     assert not nc.reproduction_check(DS)["match"]
+
+
+def test_an_edited_radius_no_longer_matches_the_published_figure():
+    """The reference is the published settings (name CA, 8 Å), not the edited ones: 6 Å is reported as a
+    mismatch, with what changed, instead of re-running the published code at 6 Å."""
+    from app.science.native_contacts import reproduction_check
+    r = reproduction_check(DS, radius=6.0)
+    assert not r["match"] and r["max_abs_diff"] > r["tolerance"]
+    assert r["changed"] == {"radius": {"published": 8.0, "ours": 6.0}} and r["radius"] == 6.0
+    assert reproduction_check(DS)["changed"] == {}
