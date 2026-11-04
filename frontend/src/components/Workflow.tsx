@@ -274,13 +274,6 @@ function Understood({ figure, meta }: { figure: Figure; meta: Metadata | null })
       raw: 'Two residues are in contact when their closest heavy atoms are within this distance', spec: field('cutoff or radius'),
       paper: !!proposal && proposal.plan.cutoff !== DEFAULT_CUTOFF,
       editor: (close) => <NumberEditor value={plan!.cutoff} min={2} max={10} step={0.5} unit="Å" close={close} onSave={(v) => save('distance')({ cutoff: v })} /> })
-    if (plan && meta) {
-      const dflt = meta.sequence_exclusion_default
-      rows.push({ id: 'exclusion', label: 'Skip neighbours', value: `pairs within ${plan.sequence_exclusion} residues in sequence`,
-        raw: 'Residue pairs this close in sequence touch trivially, so they are not counted', paper: proposal!.plan.sequence_exclusion !== dflt,
-        editor: (close) => <NumberEditor value={plan.sequence_exclusion} min={0} max={10} step={1} unit="residues" close={close}
-          onSave={(v) => save('exclusion')({ sequence_exclusion: v })} /> })
-    }
   }
   if (plan && meta) {
     const halves = isHalves(plan, meta.n_frames)
