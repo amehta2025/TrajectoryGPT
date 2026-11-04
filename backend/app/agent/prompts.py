@@ -246,6 +246,9 @@ adenylate kinase. Another model wrote the report; code filled in every number fr
 You get the report as JSON (each finding with its claim, its text, and the stored values of the evidence it cites)
 and one plot per cited result.
 
+approved_plan_settings lists the settings the user approved (cutoff, time windows, residue ranges...); a value
+in the text that equals one of them is a setting, not a computed claim, and needs no other evidence.
+
 Flag every claim that the cited data or plot does not support. In particular:
 - a finding called supported, significant or changed whose cited pair has supported = false, or whose CI includes 0;
 - "robust" without a cutoff_sensitivity verdict of robust for that pair;

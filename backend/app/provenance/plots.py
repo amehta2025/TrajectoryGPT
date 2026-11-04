@@ -28,11 +28,15 @@ def png_b64(fig, dpi: int = 80) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def plot_result(res: dict, time_label: str):
+def plot_result(res: dict, time_label: str, focus: list[str] | None = None):
     """A matplotlib figure for one stored result, or None when the tool has no plot."""
     d, tool, pid = res["data_for_ui"] or {}, res["tool"], res["provenance_id"]
     if tool == "compare_intervals" and d.get("rows"):
-        rows = sorted(d["rows"], key=lambda r: -abs(r["delta"]))[:15][::-1]
+        # The pairs a finding cites are always drawn (a small change is otherwise cut by the top-15 by |Δ|).
+        label = lambda r: f"{res_label(r['key_a'])}-{res_label(r['key_b'])}"
+        cited = [r for r in d["rows"] if label(r) in (focus or [])]
+        rest = [r for r in sorted(d["rows"], key=lambda r: -abs(r["delta"])) if r not in cited]
+        rows = sorted(cited + rest[:max(0, 15 - len(cited))], key=lambda r: -abs(r["delta"]))[::-1]
         fig, ax = plt.subplots(figsize=(6, 0.3 * len(rows) + 1))
         for i, r in enumerate(rows):
             c = "tab:blue" if r["supported"] else "0.6"

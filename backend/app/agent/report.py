@@ -97,6 +97,7 @@ def plan_values(plan) -> dict[str, dict]:
             continue
         out[f"window_{w}_first_frame"] = {"v": int(win[0]), "kind": "frame"}
         out[f"window_{w}_last_frame"] = {"v": int(win[1]) - 1, "kind": "frame"}
+        out[f"window_{w}_stop_frame"] = {"v": int(win[1]), "kind": "frame"}  # as the plan shows it, [start, stop)
         if dt:
             out[f"window_{w}_start_ns"] = {"v": round(win[0] * dt), "kind": "ns"}
             out[f"window_{w}_end_ns"] = {"v": round(win[1] * dt), "kind": "ns"}

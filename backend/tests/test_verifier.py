@@ -148,3 +148,26 @@ def test_saved_pending_check_without_a_live_thread_is_not_endless(monkeypatch, t
     run.save()
     assert session.run_view(run.run_id)["verification"]["status"] == "timeout"  # e.g. after a server restart
     assert verifier.resolve_stale(verifier.pending(), live=True)["status"] == "pending"  # a live check keeps spinning
+
+
+# ---------- sweep failure classes: what the verifier is shown ----------
+
+def test_cited_contact_map_pairs_carry_their_values_and_plan_settings_are_listed():
+    """Class: paper 01 was flagged for "empty stored values" (pairs cited from calculate_contacts) and a vague
+    question for a run length that came from an approved plan setting."""
+    from app.agent.tools import ApprovedPlan, RunState, run_tool
+    from app.agent.verifier import _pair_facts
+    s = RunState(ApprovedPlan("adk_transition", "LID", "CORE", 4.5, [0, 98], steps=[{"tool": "calculate_contacts"}, {"tool": "submit_report"}]))
+    r = run_tool(s, "calculate_contacts", "{}")
+    pair = next(iter(s.results["r1"]["pairs"]))
+    assert "freq" in _pair_facts(s.results["r1"], pair)
+
+
+def test_the_comparison_plot_always_draws_the_cited_pairs():
+    from app.provenance.plots import plot_result
+    rows = [{"key_a": f"d:A:{i}:ALA", "key_b": f"d:A:{i + 100}:GLY", "delta": 0.5 - i * 0.01, "ci_low": 0.4 - i * 0.01,
+             "ci_high": 0.6 - i * 0.01, "q": 0.01, "supported": True} for i in range(20)]
+    small = {"key_a": "d:A:122:GLY", "key_b": "d:A:118:ASP", "delta": -0.021, "ci_low": -0.03, "ci_high": -0.01, "q": 0.02, "supported": True}
+    fig = plot_result({"tool": "compare_intervals", "status": "ok", "provenance_id": "r1", "data_for_ui": {"rows": rows + [small]}}, "ns", focus=["GLY122-ASP118"])
+    labels = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+    assert any(l.startswith("GLY122-ASP118") for l in labels) and len(labels) == 15

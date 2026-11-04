@@ -95,7 +95,9 @@ def _pair_facts(res: dict, pair: str) -> dict:
         keys = ("freq_a", "freq_b", "delta", "ci_low", "ci_high", "q", "supported", "provisional", "n_blocks_a",
                 "n_blocks_b", "too_few_events", "too_few_blocks")
         return {k: r.get(k) for k in keys if k in r}
-    return dict(res["pairs"].get(pair, {}))
+    facts = {k: v for k, v in (res["pairs"].get(pair) or {}).items() if k not in ("key_a", "key_b")}
+    facts.update({name.split(".", 1)[1]: val["v"] for name, val in res["values"].items() if name.startswith(f"{pair}.")})
+    return facts
 
 
 def _round(x):
@@ -132,8 +134,11 @@ def verifier_input(run) -> dict:
             evidence.append(item)
         findings.append({"id": f["id"], "claim": f["claim"], "text": f["rendered"], "badge": f["badge_label"],
                          "robustness": [r["label"] for r in f.get("robustness", [])], "evidence": evidence})
+    from app.agent.report import format_value, plan_values
+    settings = {k: format_value(v["v"], v["kind"]) for k, v in plan_values(state.plan).items()}
     return {
         "question": run.question,
+        "approved_plan_settings": settings,
         "dataset": {"id": state.plan.dataset, "stats_valid": cfg["stats_valid"], "time": cfg["time_label"]},
         "plan": {k: v for k, v in state.plan.as_dict().items() if k != "steps"},
         "rules": {"supported": "BH q < 0.05 and CI excludes 0 and enough events and >= 10 chunks per window",
@@ -157,8 +162,9 @@ def figures(run) -> list[tuple[str, str]]:
             if pid in state.results and pid not in pids:
                 pids.append(pid)
     out = []
+    cited = [e.partition(".")[2] for f in state.report["findings"] for e in f["evidence_ids"] if "." in e]
     for pid in pids[:MAX_FIGURES]:
-        fig = plot_result(state.results[pid], tl)
+        fig = plot_result(state.results[pid], tl, focus=cited)
         if fig is not None:
             out.append((pid, png_b64(fig)))
     return out
